@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const archivo = Archivo({
-  variable: "--font-archivo",
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
   subsets: ["latin"],
-  axes: ["wdth"],
+  axes: ["opsz", "wdth"],
 });
 
 const geistMono = Geist_Mono({
@@ -20,16 +20,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0d0c0b",
-  colorScheme: "dark",
+  themeColor: "#fff7e8",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${archivo.variable} ${geistMono.variable} antialiased`}
-    >
+    <html lang="en" className={`${bricolage.variable} ${geistMono.variable} antialiased`}>
       <body className="min-h-dvh font-sans">{children}</body>
     </html>
   );

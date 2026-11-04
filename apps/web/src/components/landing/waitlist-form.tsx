@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createApiClient, type Discipline } from "@cavi/api-client";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_CAVI_API_URL;
@@ -22,7 +22,22 @@ type State =
   | { kind: "joined" }
   | { kind: "error"; message: string; field?: "email" | "discipline" };
 
-export function WaitlistForm({ tone = "default" }: { tone?: "default" | "large" }) {
+const confettiColors = ["var(--tomato)", "var(--sun)", "var(--cobalt)", "var(--mint)", "var(--pink)", "var(--sky)"];
+// Deterministic burst: 28 pieces spread around a circle.
+const confetti = Array.from({ length: 28 }, (_, i) => {
+  const angle = (i / 28) * Math.PI * 2 + (i % 3) * 0.2;
+  const dist = 90 + (i % 5) * 28;
+  return {
+    x: `${Math.round(Math.cos(angle) * dist)}px`,
+    y: `${Math.round(Math.sin(angle) * dist - 40)}px`,
+    spin: `${(i % 2 ? 1 : -1) * (180 + i * 23)}deg`,
+    delay: `${(i % 4) * 30}ms`,
+    color: confettiColors[i % confettiColors.length],
+    round: i % 3 === 0,
+  };
+});
+
+export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row" }) {
   const id = useId();
   const [state, setState] = useState<State>({ kind: "idle" });
 
@@ -56,9 +71,7 @@ export function WaitlistForm({ tone = "default" }: { tone?: "default" | "large" 
       const fieldError = error.error.fields?.[0];
       setState({
         kind: "error",
-        message: fieldError?.message
-          ? capitalise(fieldError.message) + "."
-          : error.error.message,
+        message: fieldError?.message ? capitalise(fieldError.message) + "." : error.error.message,
         field:
           fieldError?.field === "email" || fieldError?.field === "discipline"
             ? fieldError.field
@@ -74,11 +87,28 @@ export function WaitlistForm({ tone = "default" }: { tone?: "default" | "large" 
 
   if (state.kind === "joined") {
     return (
-      <div role="status" className="border-l-2 border-tally py-2 pl-4">
-        <p className="text-lg font-semibold">You&rsquo;re on the list.</p>
-        <p className="mt-1 text-muted">
-          We&rsquo;ll email you when early access opens.
-        </p>
+      <div role="status" className="relative">
+        <div aria-hidden="true" className="pointer-events-none absolute top-1/2 left-1/2 z-10">
+          {confetti.map((c, i) => (
+            <span
+              key={i}
+              className={`confetti-piece absolute size-3 border-2 border-ink ${c.round ? "rounded-full" : "rounded-[2px]"}`}
+              style={
+                {
+                  background: c.color,
+                  "--x": c.x,
+                  "--y": c.y,
+                  "--spin": c.spin,
+                  "--delay": c.delay,
+                } as CSSProperties
+              }
+            />
+          ))}
+        </div>
+        <div className="sticker -rotate-1 rounded-3xl bg-mint p-5 sm:p-6">
+          <p className="text-2xl font-extrabold">You&rsquo;re on the list! 🎬</p>
+          <p className="mt-1 font-medium">We&rsquo;ll email you when early access opens.</p>
+        </div>
       </div>
     );
   }
@@ -88,11 +118,14 @@ export function WaitlistForm({ tone = "default" }: { tone?: "default" | "large" 
   const errorId = `${id}-error`;
   const emailInvalid = state.kind === "error" && state.field === "email";
 
+  const field =
+    "min-h-13 w-full min-w-0 rounded-2xl border-[3px] border-ink bg-white px-4 text-base font-medium text-ink placeholder:text-ink-soft/70 focus:outline-none focus-visible:outline-none focus:ring-4 focus:ring-cobalt/40 disabled:opacity-60";
+
   return (
     <form onSubmit={onSubmit}>
       <div
-        className={`grid grid-cols-1 gap-2 ${
-          tone === "large"
+        className={`grid grid-cols-1 gap-3 ${
+          layout === "row"
             ? "md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]"
             : "sm:grid-cols-[minmax(0,1fr)_auto]"
         }`}
@@ -112,9 +145,7 @@ export function WaitlistForm({ tone = "default" }: { tone?: "default" | "large" 
           disabled={unavailable || submitting}
           aria-invalid={emailInvalid || undefined}
           aria-describedby={emailInvalid ? errorId : undefined}
-          className={`min-h-12 w-full min-w-0 border border-line-strong bg-ink-sunken px-4 text-base text-paper placeholder:text-faint focus:border-paper focus:outline-none disabled:opacity-50 aria-invalid:border-tally ${
-            tone === "large" ? "" : "sm:col-span-2"
-          }`}
+          className={`${field} aria-invalid:border-tomato ${layout === "row" ? "" : "sm:col-span-2"}`}
         />
 
         <label htmlFor={`${id}-discipline`} className="sr-only">
@@ -125,13 +156,13 @@ export function WaitlistForm({ tone = "default" }: { tone?: "default" | "large" 
           name="discipline"
           defaultValue=""
           disabled={unavailable || submitting}
-          className="min-h-12 w-full min-w-0 appearance-none border border-line-strong bg-ink-sunken bg-[length:10px] bg-[right_1rem_center] bg-no-repeat px-4 pr-10 text-base text-paper focus:border-paper focus:outline-none disabled:opacity-50"
+          className={`${field} appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10`}
           style={{
             backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%239a948b' stroke-width='1.5' fill='none'/%3E%3C/svg%3E\")",
+              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23141414' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
           }}
         >
-          <option value="">What do you make? (optional)</option>
+          <option value="">What do you make?</option>
           {disciplines.map((d) => (
             <option key={d.value} value={d.value}>
               {d.label}
@@ -142,33 +173,29 @@ export function WaitlistForm({ tone = "default" }: { tone?: "default" | "large" 
         {/* Honeypot: hidden from people and assistive tech; bots tend to fill it. */}
         <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
           <label htmlFor={`${id}-company-website`}>Company website</label>
-          <input
-            id={`${id}-company-website`}
-            name="company_website"
-            type="text"
-            tabIndex={-1}
-            autoComplete="off"
-          />
+          <input id={`${id}-company-website`} name="company_website" type="text" tabIndex={-1} autoComplete="off" />
         </div>
 
         <button
           type="submit"
           disabled={unavailable || submitting}
-          className="min-h-12 bg-paper px-6 text-base font-semibold text-ink transition-colors hover:bg-tally disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-paper"
+          className="btn-pop min-h-13 rounded-2xl bg-cobalt px-6 text-base font-extrabold whitespace-nowrap text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Joining…" : "Join the waitlist"}
+          {submitting ? "Joining…" : "Join the waitlist →"}
         </button>
       </div>
 
-      <p id={errorId} aria-live="polite" className="mt-3 min-h-5 text-sm">
-        {state.kind === "error" && <span className="text-tally">{state.message}</span>}
+      <p id={errorId} aria-live="polite" className="mt-3 min-h-5 text-sm font-bold">
+        {state.kind === "error" && (
+          <span className="inline-block rounded-lg bg-tomato px-2 py-0.5 text-white">{state.message}</span>
+        )}
         {unavailable && (
-          <span className="text-tally">
+          <span className="inline-block rounded-lg bg-tomato px-2 py-0.5 text-white">
             Signups are unavailable right now. Please check back soon.
           </span>
         )}
       </p>
-      <p className="text-sm text-faint">
+      <p className="text-sm font-medium text-ink-soft">
         We&rsquo;ll only use your email to contact you about CAVI early access.
       </p>
     </form>

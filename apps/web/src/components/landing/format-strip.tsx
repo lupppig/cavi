@@ -1,42 +1,39 @@
-const formats = [
-  "Podcasts",
-  "Music videos",
-  "Interviews",
-  "Livestreams",
-  "Product ads",
-  "Tutorials",
-  "Testimonials",
-  "Release teasers",
-  "Documentaries",
-  "Events",
-];
+const top = ["Podcasts", "Music videos", "Interviews", "Livestreams", "Product ads", "Tutorials"];
+const bottom = ["Testimonials", "Release teasers", "Documentaries", "Events", "Vlogs", "Reactions"];
 
-function Row({ hidden }: { hidden?: boolean }) {
+function Row({ items, hidden, star }: { items: string[]; hidden?: boolean; star: string }) {
   return (
     <ul aria-hidden={hidden || undefined} className="flex shrink-0 items-center">
-      {formats.map((f, i) => (
+      {items.map((f) => (
         <li key={f} className="flex items-center">
-          <span
-            className={`px-6 text-4xl font-extrabold tracking-tight uppercase font-stretch-[70%] sm:px-10 sm:text-6xl ${
-              i % 2 === 1 ? "text-outline" : "text-paper"
-            }`}
-          >
-            {f}
+          <span className="px-5 text-3xl font-extrabold tracking-tight whitespace-nowrap sm:px-8 sm:text-5xl">{f}</span>
+          <span aria-hidden className={`text-2xl sm:text-4xl ${star}`}>
+            ✦
           </span>
-          <span aria-hidden className="rec-dot size-2 shrink-0 rounded-full bg-tally" />
         </li>
       ))}
     </ul>
   );
 }
 
-/** A slow, continuously moving strip of the formats CAVI is built for. */
+/** Two crossing, continuously moving tapes of the formats CAVI is for. */
 export function FormatStrip() {
   return (
-    <section aria-label="Formats CAVI is built for" className="overflow-hidden border-y border-line py-6 sm:py-8">
-      <div className="marquee-track flex w-max">
-        <Row />
-        <Row hidden />
+    <section aria-label="Formats CAVI is built for" className="relative overflow-hidden py-14 sm:py-20">
+      <p className="sr-only">
+        CAVI is built for {[...top, ...bottom].join(", ").toLowerCase()}.
+      </p>
+      <div aria-hidden="true" className="tape relative z-10 -mx-4 -rotate-2 border-y-[3px] border-ink bg-cobalt py-3 text-white sm:py-4">
+        <div className="marquee-left flex w-max">
+          <Row items={top} star="text-sun" />
+          <Row items={top} hidden star="text-sun" />
+        </div>
+      </div>
+      <div aria-hidden="true" className="tape relative -mx-4 mt-6 rotate-2 sm:mt-8 border-y-[3px] border-ink bg-sun py-3 text-ink sm:py-4">
+        <div className="marquee-right flex w-max">
+          <Row items={bottom} star="text-tomato" />
+          <Row items={bottom} hidden star="text-tomato" />
+        </div>
       </div>
     </section>
   );
