@@ -43,7 +43,6 @@
 }
 
 html {
-  scroll-behavior: smooth;
   scroll-padding-top: 5rem;
 }
 
@@ -62,26 +61,242 @@ body {
   outline-offset: 3px;
 }
 
-/* Playhead sweep across the highlighted range in the drawn editor. */
-@keyframes playhead {
-  from {
-    left: var(--from);
-  }
-  to {
-    left: var(--to);
-  }
+/* ------------------------------------------------------------------
+   Motion
+   Every element below renders in its final, readable state by default.
+   Animations are layered on only for visitors who have not asked for
+   reduced motion, and scroll-driven reveals only where supported.
+   ------------------------------------------------------------------ */
+
+.text-outline {
+  color: transparent;
+  -webkit-text-stroke: 1px var(--muted);
 }
 
-.playhead {
-  animation: playhead 7s linear infinite;
+/* Headline word that carries a caption-style highlight. */
+.caption-hl {
+  position: relative;
+  isolation: isolate;
+  color: var(--ink);
+}
+.caption-hl::before {
+  content: "";
+  position: absolute;
+  inset: 0.04em -0.06em 0.02em;
+  background: var(--tally);
+  z-index: -1;
+  transform-origin: left center;
+}
+
+.reframe {
+  left: 39.875%;
+  width: 56.25%;
+}
+.reframe-label {
+  opacity: 0;
+}
+.reframe-label:nth-child(2) {
+  opacity: 1;
+}
+
+:root {
+  --reframe-step: 3.5s;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Headline: words arrive one by one, like captions. */
+  .word-rise {
+    animation: word-rise 0.9s cubic-bezier(0.2, 0.7, 0.1, 1) both;
+    animation-delay: calc(var(--i, 0) * 90ms + 120ms);
+  }
+  .caption-hl {
+    animation: caption-text 0.2s linear 1.25s both;
+  }
+  .caption-hl::before {
+    animation: caption-sweep 0.55s cubic-bezier(0.7, 0, 0.2, 1) 1s both;
+  }
+
+  /* Recording-light blink. */
+  .rec-dot {
+    animation: rec 1.6s ease-in-out infinite;
+  }
+
+  /* Continuous format strip; pauses while hovered. */
+  .marquee-track {
+    animation: marquee 60s linear infinite;
+  }
+  section:hover > .marquee-track {
+    animation-play-state: paused;
+  }
+
+  /* Reframing frame moves between aspect ratios. */
+  .reframe {
+    animation: reframe calc(var(--reframe-step) * 4) cubic-bezier(0.7, 0, 0.2, 1) infinite;
+  }
+  .reframe-label,
+  .reframe-label:nth-child(2) {
+    animation: reframe-label calc(var(--reframe-step) * 4) linear infinite;
+  }
+
+  /* Scroll-driven reveals, where the browser supports them. */
+  @supports (animation-timeline: view()) {
+    .reveal {
+      animation: reveal-up linear both;
+      animation-timeline: view();
+      animation-range: entry calc(var(--i, 0) * 6%) cover calc(22% + var(--i, 0) * 4%);
+    }
+    .reveal-word {
+      display: inline-block;
+      animation: reveal-word linear both;
+      animation-timeline: view();
+      animation-range: entry calc(10% + var(--i, 0) * 12%) cover calc(30% + var(--i, 0) * 5%);
+    }
+    .reveal-line {
+      animation: reveal-line linear both;
+      animation-timeline: view();
+      animation-range: entry calc(20% + var(--i, 0) * 10%) cover calc(40% + var(--i, 0) * 4%);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
-  .playhead {
-    animation: none;
-    left: var(--from);
+}
+
+@keyframes word-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.35em);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes caption-sweep {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes caption-text {
+  from {
+    color: var(--paper);
+  }
+  to {
+    color: var(--ink);
+  }
+}
+
+@keyframes rec {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  70%,
+  100% {
+    opacity: 0.2;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Positions are percentages of the 16:9 stage. Speakers stand at 32% (A)
+   and 68% (B); each crop is centred on the active speaker. */
+@keyframes reframe {
+  0%,
+  19% {
+    left: 0%;
+    width: 100%;
+  }
+  25%,
+  44% {
+    left: 39.875%;
+    width: 56.25%;
+  }
+  50%,
+  69% {
+    left: 45.5%;
+    width: 45%;
+  }
+  75%,
+  94% {
+    left: 16.18%;
+    width: 31.64%;
+  }
+  100% {
+    left: 0%;
+    width: 100%;
+  }
+}
+
+/* Visible for one step; each label is phase-shifted with a negative delay. */
+@keyframes reframe-label {
+  0%,
+  20% {
+    opacity: 1;
+    transform: none;
+  }
+  24%,
+  95% {
+    opacity: 0;
+    transform: translateY(-0.4rem);
+  }
+  96% {
+    opacity: 0;
+    transform: translateY(0.4rem);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(2.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes reveal-word {
+  from {
+    opacity: 0;
+    transform: translateY(0.5em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes reveal-line {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
   }
 }

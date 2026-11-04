@@ -1,5 +1,6 @@
 const links = [
   { href: "#workflow", label: "Workflow" },
+  { href: "#reframe", label: "Reframing" },
   { href: "#direction", label: "Direction" },
   { href: "#who", label: "Who it's for" },
 ];
