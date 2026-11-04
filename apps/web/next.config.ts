@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Workspace packages ship TypeScript source.
+  transpilePackages: ["@cavi/api-client"],
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

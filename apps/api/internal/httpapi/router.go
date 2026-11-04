@@ -3,8 +3,10 @@
 package httpapi
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,13 +15,23 @@ import (
 type Options struct {
 	Logger         *slog.Logger
 	DB             Pinger
+	Waitlist       WaitlistService
 	AllowedOrigins []string
+	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
+	// is trusted when determining the client IP. Empty trusts none.
+	TrustedProxies []string
 	// Debug enables Gin debug mode. Keep false outside local development.
 	Debug bool
 }
 
+// Waitlist rate limit: per client IP, per API instance.
+const (
+	waitlistRateLimit  = 10
+	waitlistRateWindow = time.Hour
+)
+
 // NewRouter builds the API's HTTP handler.
-func NewRouter(opts Options) *gin.Engine {
+func NewRouter(opts Options) (*gin.Engine, error) {
 	if opts.Debug {
 		gin.SetMode(gin.DebugMode)
 	} else {
@@ -27,6 +39,11 @@ func NewRouter(opts Options) *gin.Engine {
 	}
 
 	r := gin.New()
+	// Gin trusts every proxy by default, which lets any client spoof its IP
+	// through X-Forwarded-For. Trust only configured proxies.
+	if err := r.SetTrustedProxies(opts.TrustedProxies); err != nil {
+		return nil, fmt.Errorf("trusted proxies: %w", err)
+	}
 	r.HandleMethodNotAllowed = true
 	r.Use(
 		requestID(),
@@ -48,5 +65,11 @@ func NewRouter(opts Options) *gin.Engine {
 	v1.GET("/health", health.live)
 	v1.GET("/health/ready", health.ready)
 
-	return r
+	waitlistH := waitlistHandler{svc: opts.Waitlist, logger: opts.Logger}
+	v1.POST("/waitlist",
+		rateLimit(newFixedWindowLimiter(waitlistRateLimit, waitlistRateWindow)),
+		waitlistH.join,
+	)
+
+	return r, nil
 }

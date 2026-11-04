@@ -1,26 +1,87 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0d0c0b;
-  --foreground: #f2efe9;
-  --muted: #8f8a82;
-  --signal-ok: #6fbf73;
-  --signal-warn: #e0a83a;
-  --signal-error: #e05a47;
+  /* Surfaces */
+  --ink: #0d0c0b;
+  --ink-raised: #161412;
+  --ink-sunken: #090807;
+  --line: #2a2724;
+  --line-strong: #3d3935;
+
+  /* Text */
+  --paper: #f2efe9;
+  --muted: #9a948b;
+  --faint: #6b665f;
+
+  /* Accent: a tally-light red, used sparingly for "live" moments. */
+  --tally: #ff4a1c;
+
+  /* Drawn-UI track tones */
+  --track-video: #3a3631;
+  --track-video-alt: #4a443c;
+  --track-speaker-a: #c9a24a;
+  --track-speaker-b: #8fa3a6;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-ink-raised: var(--ink-raised);
+  --color-ink-sunken: var(--ink-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-paper: var(--paper);
   --color-muted: var(--muted);
-  --color-signal-ok: var(--signal-ok);
-  --color-signal-warn: var(--signal-warn);
-  --color-signal-error: var(--signal-error);
-  --font-sans: var(--font-geist-sans);
+  --color-faint: var(--faint);
+  --color-tally: var(--tally);
+  --color-track-video: var(--track-video);
+  --color-track-video-alt: var(--track-video-alt);
+  --color-speaker-a: var(--track-speaker-a);
+  --color-speaker-b: var(--track-speaker-b);
+
+  --font-sans: var(--font-archivo);
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+::selection {
+  background: var(--tally);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--tally);
+  outline-offset: 3px;
+}
+
+/* Playhead sweep across the highlighted range in the drawn editor. */
+@keyframes playhead {
+  from {
+    left: var(--from);
+  }
+  to {
+    left: var(--to);
+  }
+}
+
+.playhead {
+  animation: playhead 7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .playhead {
+    animation: none;
+    left: var(--from);
+  }
 }

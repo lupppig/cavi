@@ -18,11 +18,33 @@ type fakePinger struct{ err error }
 func (f fakePinger) PingContext(context.Context) error { return f.err }
 
 func newTestRouter(db Pinger) *gin.Engine {
-	return NewRouter(Options{
+	return newTestRouterWith(Options{DB: db})
+}
+
+func newTestRouterWith(opts Options) *gin.Engine {
+	opts.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	if opts.DB == nil {
+		opts.DB = fakePinger{}
+	}
+	if opts.AllowedOrigins == nil {
+		opts.AllowedOrigins = []string{"http://localhost:3000"}
+	}
+	r, err := NewRouter(opts)
+	if err != nil {
+		panic(err)
+	}
+	return r
+}
+
+func TestNewRouterRejectsInvalidTrustedProxy(t *testing.T) {
+	_, err := NewRouter(Options{
 		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
-		DB:             db,
-		AllowedOrigins: []string{"http://localhost:3000"},
+		DB:             fakePinger{},
+		TrustedProxies: []string{"not-an-ip"},
 	})
+	if err == nil {
+		t.Fatal("expected error for invalid trusted proxy")
+	}
 }
 
 func do(t *testing.T, h http.Handler, req *http.Request) *httptest.ResponseRecorder {

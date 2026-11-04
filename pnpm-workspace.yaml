@@ -1,5 +1,6 @@
 packages:
   - apps/web
+  - packages/*
 
 # Native build scripts are blocked unless explicitly allowed.
 allowBuilds:

@@ -1,0 +1,7 @@
+{
+  "name": "@cavi/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenAPI contract for the CAVI HTTP API.",
+  "files": ["openapi.yaml"]
+}

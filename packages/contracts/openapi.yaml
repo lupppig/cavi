@@ -1,0 +1,212 @@
+openapi: 3.1.0
+info:
+  title: CAVI API
+  version: 0.1.0
+  description: |
+    HTTP API for CAVI. This document is the source of truth for the
+    contract between the Go API and its clients. The TypeScript client in
+    packages/api-client is generated from it.
+
+    Every response carries an `X-Request-ID` header. A well-formed incoming
+    `X-Request-ID` (1-128 characters of `A-Z a-z 0-9 . _ -`) is preserved;
+    otherwise the API generates one.
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /api/v1/health:
+    get:
+      operationId: getHealth
+      summary: Liveness check
+      description: Reports that the API process is serving HTTP.
+      tags: [health]
+      responses:
+        "200":
+          description: The process is running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /api/v1/health/ready:
+    get:
+      operationId: getReadiness
+      summary: Readiness check
+      description: Reports whether the API's dependencies (PostgreSQL) are reachable.
+      tags: [health]
+      responses:
+        "200":
+          description: Dependencies are reachable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/waitlist:
+    post:
+      operationId: joinWaitlist
+      summary: Join the early-access waitlist
+      description: |
+        Adds an email address to the early-access waitlist. The response is
+        identical whether or not the address was already on the list.
+
+        Rate limited per client IP (10 requests per hour per API instance).
+      tags: [waitlist]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinWaitlistRequest"
+      responses:
+        "202":
+          description: The address is on the waitlist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinWaitlistResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+
+    ReadinessStatus:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ready
+
+    Discipline:
+      type: string
+      description: How the person describes their creative work.
+      enum: [clipper, creator, musician, studio, agency, brand, other]
+
+    JoinWaitlistRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 3
+          maxLength: 254
+        discipline:
+          $ref: "#/components/schemas/Discipline"
+        company_website:
+          type: string
+          description: Honeypot. Must be left empty by real clients.
+
+    JoinWaitlistResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: joined
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ErrorDetail"
+
+    ErrorDetail:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable, machine-readable error code.
+          enum:
+            - invalid_request
+            - validation_failed
+            - payload_too_large
+            - rate_limited
+            - not_found
+            - method_not_allowed
+            - internal_error
+            - service_unavailable
+        message:
+          type: string
+          description: Human-readable message safe to show to end users.
+        request_id:
+          type: string
+        fields:
+          type: array
+          description: Per-field problems, present on validation_failed.
+          items:
+            $ref: "#/components/schemas/FieldError"
+
+    FieldError:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+
+  responses:
+    InvalidRequest:
+      description: The request body is malformed.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: The request body exceeds the size limit.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationFailed:
+      description: One or more fields are invalid. See `error.fields`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Too many requests. Retry after the number of seconds in `Retry-After`.
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: An unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ServiceUnavailable:
+      description: A required dependency is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

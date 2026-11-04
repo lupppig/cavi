@@ -22,6 +22,7 @@ type Config struct {
 	HTTPAddr        string
 	DatabaseURL     string
 	AllowedOrigins  []string
+	TrustedProxies  []string
 	ShutdownTimeout time.Duration
 }
 
@@ -33,6 +34,7 @@ func Load(getenv func(string) string) (Config, error) {
 		HTTPAddr:        valueOr(getenv("CAVI_HTTP_ADDR"), ":8080"),
 		DatabaseURL:     getenv("CAVI_DATABASE_URL"),
 		AllowedOrigins:  splitList(getenv("CAVI_ALLOWED_ORIGINS")),
+		TrustedProxies:  splitList(getenv("CAVI_TRUSTED_PROXIES")),
 		ShutdownTimeout: 15 * time.Second,
 	}
 

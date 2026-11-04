@@ -15,6 +15,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/config"
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/httpapi"
+	"github.com/lupppig/cavi/apps/api/internal/waitlist"
 )
 
 func main() {
@@ -36,14 +37,21 @@ func run() error {
 	db := database.Open(cfg.DatabaseURL)
 	defer db.Close()
 
+	router, err := httpapi.NewRouter(httpapi.Options{
+		Logger:         logger,
+		DB:             db,
+		Waitlist:       waitlist.NewService(waitlist.NewPostgresStore(db)),
+		AllowedOrigins: cfg.AllowedOrigins,
+		TrustedProxies: cfg.TrustedProxies,
+		Debug:          cfg.Env == config.EnvDevelopment,
+	})
+	if err != nil {
+		return fmt.Errorf("build router: %w", err)
+	}
+
 	srv := &http.Server{
-		Addr: cfg.HTTPAddr,
-		Handler: httpapi.NewRouter(httpapi.Options{
-			Logger:         logger,
-			DB:             db,
-			AllowedOrigins: cfg.AllowedOrigins,
-			Debug:          cfg.Env == config.EnvDevelopment,
-		}),
+		Addr:              cfg.HTTPAddr,
+		Handler:           router,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,

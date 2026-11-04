@@ -1,0 +1,23 @@
+{
+  "name": "@cavi/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Typed client for the CAVI HTTP API, generated from packages/contracts/openapi.yaml.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "generate": "openapi-typescript ../contracts/openapi.yaml -o src/schema.ts",
+    "check:generated": "openapi-typescript ../contracts/openapi.yaml -o src/schema.ts && git diff --exit-code -- src/schema.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "@cavi/contracts": "workspace:*",
+    "openapi-typescript": "7.13.0",
+    "typescript": "^5"
+  }
+}
