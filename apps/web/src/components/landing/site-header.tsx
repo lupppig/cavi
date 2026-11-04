@@ -1,3 +1,5 @@
+import { signInHref } from "@/lib/api";
+
 const links = [
   { href: "#workflow", label: "How it works" },
   { href: "#reframe", label: "Reframing" },
@@ -35,12 +37,20 @@ export function SiteHeader() {
             ))}
           </ul>
         </nav>
+        <div className="flex items-center gap-1">
+        <a
+          href={signInHref()}
+          className="hidden min-h-11 items-center rounded-full px-4 text-[15px] font-bold transition-colors hover:bg-sun sm:flex"
+        >
+          Sign in
+        </a>
         <a
           href="#waitlist"
           className="btn-pop flex min-h-11 items-center rounded-full bg-tomato px-4 text-sm font-extrabold text-white sm:px-5 sm:text-base"
         >
           Join the waitlist
         </a>
+        </div>
       </div>
     </header>
   );

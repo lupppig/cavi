@@ -1,10 +1,8 @@
 "use client";
 
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
-import { createApiClient, type Discipline } from "@cavi/api-client";
-
-const apiBaseUrl = process.env.NEXT_PUBLIC_CAVI_API_URL;
-const api = apiBaseUrl ? createApiClient(apiBaseUrl) : null;
+import type { Discipline } from "@cavi/api-client";
+import { api } from "@/lib/api";
 
 const disciplines: { value: Discipline; label: string }[] = [
   { value: "clipper", label: "Clipping & short-form" },

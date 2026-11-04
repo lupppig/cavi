@@ -29,6 +29,8 @@ const (
 	CodeValidation       = "validation_failed"
 	CodePayloadTooLarge  = "payload_too_large"
 	CodeRateLimited      = "rate_limited"
+	CodeUnauthenticated  = "unauthenticated"
+	CodeForbidden        = "forbidden"
 	CodeNotFound         = "not_found"
 	CodeMethodNotAllowed = "method_not_allowed"
 	CodeInternal         = "internal_error"

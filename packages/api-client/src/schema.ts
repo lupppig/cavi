@@ -67,6 +67,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start sign-in
+         * @description Browser navigation, not an XHR. Sets a short-lived state cookie and
+         *     redirects to the hosted sign-in page.
+         */
+        get: operations["startSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Complete sign-in
+         * @description Browser navigation from the identity provider. On success sets the
+         *     `cavi_session` cookie (HttpOnly, SameSite=Lax) and redirects to
+         *     `{web}/account`. On failure redirects to
+         *     `{web}/account?auth_error=<code>` where code is one of `cancelled`,
+         *     `invalid_state` or `sign_in_failed`.
+         */
+        get: operations["completeSignIn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign out
+         * @description Ends the CAVI session and clears the cookie. The browser should then
+         *     navigate to `redirect_url`, which also ends the identity provider's
+         *     session. The request `Origin` must be an allowed web origin.
+         */
+        post: operations["signOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Current user
+         * @description The signed-in user and the organisations they belong to.
+         */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -95,6 +182,39 @@ export interface components {
             /** @constant */
             status: "joined";
         };
+        SignOutResponse: {
+            /** Format: uri */
+            redirect_url: string;
+        };
+        Me: {
+            user: components["schemas"]["User"];
+            organisations: components["schemas"]["OrganisationMembership"][];
+        };
+        User: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            first_name: string;
+            last_name: string;
+            /** @description Empty when the user has no picture. */
+            avatar_url: string;
+        };
+        OrganisationMembership: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description True for the user's own personal organisation. */
+            personal: boolean;
+            /** @enum {string} */
+            role: "owner" | "admin" | "manager" | "editor" | "creator" | "reviewer" | "viewer" | "client";
+            workspaces: components["schemas"]["Workspace"][];
+        };
+        Workspace: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
         };
@@ -103,7 +223,7 @@ export interface components {
              * @description Stable, machine-readable error code.
              * @enum {string}
              */
-            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
+            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
             /** @description Human-readable message safe to show to end users. */
             message: string;
             request_id?: string;
@@ -116,6 +236,24 @@ export interface components {
         };
     };
     responses: {
+        /** @description Not signed in, or the session has expired. */
+        Unauthenticated: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description The request is not allowed (for example, from a disallowed origin). */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description The request body is malformed. */
         InvalidRequest: {
             headers: {
@@ -247,6 +385,96 @@ export interface operations {
             422: components["responses"]["ValidationFailed"];
             429: components["responses"]["RateLimited"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    startSignIn: {
+        parameters: {
+            query?: {
+                screen?: "sign-in" | "sign-up";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the hosted sign-in page. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    completeSignIn: {
+        parameters: {
+            query?: {
+                code?: string;
+                state?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect back to the web app. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    signOut: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignOutResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The signed-in user. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Me"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
 }

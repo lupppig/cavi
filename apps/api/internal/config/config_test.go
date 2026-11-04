@@ -29,6 +29,54 @@ func TestLoadDefaults(t *testing.T) {
 	if len(cfg.AllowedOrigins) != 0 {
 		t.Errorf("AllowedOrigins = %v, want empty", cfg.AllowedOrigins)
 	}
+	if cfg.PublicAPIURL != "http://localhost:8080" || cfg.WebURL != "http://localhost:3000" {
+		t.Errorf("dev URLs = %q %q", cfg.PublicAPIURL, cfg.WebURL)
+	}
+	if cfg.AuthEnabled() || cfg.SecureCookies() {
+		t.Error("auth should be disabled and cookies insecure in bare development")
+	}
+}
+
+func TestLoadAuthSettings(t *testing.T) {
+	base := map[string]string{
+		"CAVI_ENV":             "production",
+		"CAVI_DATABASE_URL":    "postgres://db/cavi",
+		"CAVI_PUBLIC_API_URL":  "https://api.example.com/",
+		"CAVI_WEB_URL":         "https://app.example.com",
+		"WORKOS_API_KEY":       "sk_live_x",
+		"WORKOS_CLIENT_ID":     "client_x",
+		"CAVI_ALLOWED_ORIGINS": "https://app.example.com",
+	}
+	cfg, err := Load(env(base))
+	if err != nil {
+		t.Fatalf("valid production config rejected: %v", err)
+	}
+	if cfg.PublicAPIURL != "https://api.example.com" || !cfg.AuthEnabled() || !cfg.SecureCookies() {
+		t.Errorf("cfg = %+v", cfg)
+	}
+
+	bad := []struct {
+		name, key, value, fragment string
+	}{
+		{"missing workos in production", "WORKOS_API_KEY", "", "WORKOS_API_KEY"},
+		{"http web url in production", "CAVI_WEB_URL", "http://app.example.com", "https"},
+		{"web url with path", "CAVI_WEB_URL", "https://app.example.com/app", "CAVI_WEB_URL"},
+		{"missing api url in production", "CAVI_PUBLIC_API_URL", "", "CAVI_PUBLIC_API_URL"},
+		{"short session ttl", "CAVI_SESSION_TTL", "5m", "CAVI_SESSION_TTL"},
+	}
+	for _, tc := range bad {
+		t.Run(tc.name, func(t *testing.T) {
+			vals := map[string]string{}
+			for k, v := range base {
+				vals[k] = v
+			}
+			vals[tc.key] = tc.value
+			_, err := Load(env(vals))
+			if err == nil || !strings.Contains(err.Error(), tc.fragment) {
+				t.Errorf("err = %v, want mention of %s", err, tc.fragment)
+			}
+		})
+	}
 }
 
 func TestLoadParsesValues(t *testing.T) {
@@ -38,6 +86,10 @@ func TestLoadParsesValues(t *testing.T) {
 		"CAVI_DATABASE_URL":     "postgres://db/cavi",
 		"CAVI_ALLOWED_ORIGINS":  " http://localhost:3000/ , https://app.example.com ,,",
 		"CAVI_SHUTDOWN_TIMEOUT": "30s",
+		"CAVI_PUBLIC_API_URL":   "https://api.example.com",
+		"CAVI_WEB_URL":          "https://app.example.com",
+		"WORKOS_API_KEY":        "sk_test_x",
+		"WORKOS_CLIENT_ID":      "client_x",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

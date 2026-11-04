@@ -79,7 +79,100 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/auth/login:
+    get:
+      operationId: startSignIn
+      summary: Start sign-in
+      description: |
+        Browser navigation, not an XHR. Sets a short-lived state cookie and
+        redirects to the hosted sign-in page.
+      tags: [auth]
+      parameters:
+        - name: screen
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [sign-in, sign-up]
+      responses:
+        "302":
+          description: Redirect to the hosted sign-in page.
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/auth/callback:
+    get:
+      operationId: completeSignIn
+      summary: Complete sign-in
+      description: |
+        Browser navigation from the identity provider. On success sets the
+        `cavi_session` cookie (HttpOnly, SameSite=Lax) and redirects to
+        `{web}/account`. On failure redirects to
+        `{web}/account?auth_error=<code>` where code is one of `cancelled`,
+        `invalid_state` or `sign_in_failed`.
+      tags: [auth]
+      parameters:
+        - { name: code, in: query, required: false, schema: { type: string } }
+        - { name: state, in: query, required: false, schema: { type: string } }
+        - { name: error, in: query, required: false, schema: { type: string } }
+      responses:
+        "302":
+          description: Redirect back to the web app.
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/auth/logout:
+    post:
+      operationId: signOut
+      summary: Sign out
+      description: |
+        Ends the CAVI session and clears the cookie. The browser should then
+        navigate to `redirect_url`, which also ends the identity provider's
+        session. The request `Origin` must be an allowed web origin.
+      tags: [auth]
+      responses:
+        "200":
+          description: Signed out.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignOutResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/me:
+    get:
+      operationId: getMe
+      summary: Current user
+      description: The signed-in user and the organisations they belong to.
+      tags: [auth]
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The signed-in user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: cavi_session
+
   schemas:
     HealthStatus:
       type: object
@@ -126,6 +219,59 @@ components:
           type: string
           const: joined
 
+    SignOutResponse:
+      type: object
+      required: [redirect_url]
+      properties:
+        redirect_url:
+          type: string
+          format: uri
+
+    Me:
+      type: object
+      required: [user, organisations]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        organisations:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrganisationMembership"
+
+    User:
+      type: object
+      required: [id, email, first_name, last_name, avatar_url]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        first_name: { type: string }
+        last_name: { type: string }
+        avatar_url: { type: string, description: "Empty when the user has no picture." }
+
+    OrganisationMembership:
+      type: object
+      required: [id, name, personal, role, workspaces]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        personal:
+          type: boolean
+          description: True for the user's own personal organisation.
+        role:
+          type: string
+          enum: [owner, admin, manager, editor, creator, reviewer, viewer, client]
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/Workspace"
+
+    Workspace:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+
     ErrorResponse:
       type: object
       required: [error]
@@ -145,6 +291,8 @@ components:
             - validation_failed
             - payload_too_large
             - rate_limited
+            - unauthenticated
+            - forbidden
             - not_found
             - method_not_allowed
             - internal_error
@@ -170,6 +318,18 @@ components:
           type: string
 
   responses:
+    Unauthenticated:
+      description: Not signed in, or the session has expired.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: The request is not allowed (for example, from a disallowed origin).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     InvalidRequest:
       description: The request body is malformed.
       content:

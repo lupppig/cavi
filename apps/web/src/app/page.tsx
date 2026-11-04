@@ -14,6 +14,7 @@ import { HeroStickers } from "@/components/landing/hero-stickers";
 import { PlayWhenVisible } from "@/components/landing/play-when-visible";
 import { ReframeSketch } from "@/components/landing/reframe-sketch";
 import { SiteHeader } from "@/components/landing/site-header";
+import { signInHref } from "@/lib/api";
 import { WaitlistForm } from "@/components/landing/waitlist-form";
 import {
   DirectionArt,
@@ -387,6 +388,9 @@ export default function Home() {
           </p>
           <div className="flex flex-col gap-1 pb-3 text-sm font-bold sm:items-end">
             <span>Made for people who make things.</span>
+            <a href={signInHref()} className="flex min-h-11 items-center underline decoration-2 underline-offset-4 hover:text-tomato sm:justify-end">
+              Already have an account? Sign in
+            </a>
             <span className="text-ink-soft">© 2026 CAVI · In development</span>
           </div>
         </div>

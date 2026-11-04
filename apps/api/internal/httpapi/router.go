@@ -16,6 +16,7 @@ type Options struct {
 	Logger         *slog.Logger
 	DB             Pinger
 	Waitlist       WaitlistService
+	Auth           *AuthOptions
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
 	// is trusted when determining the client IP. Empty trusts none.
@@ -70,6 +71,12 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 		rateLimit(newFixedWindowLimiter(waitlistRateLimit, waitlistRateWindow)),
 		waitlistH.join,
 	)
+
+	auth := authHandler{opts: opts.Auth, logger: opts.Logger}
+	v1.GET("/auth/login", auth.login)
+	v1.GET("/auth/callback", auth.callback)
+	v1.POST("/auth/logout", requireAllowedOrigin(opts.AllowedOrigins), auth.logout)
+	v1.GET("/me", auth.requireSession, auth.me)
 
 	return r, nil
 }
