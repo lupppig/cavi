@@ -154,6 +154,202 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a team organisation
+         * @description Creates a team organisation with a `Main` workspace. The caller becomes its owner.
+         *     Requires an allowed `Origin`.
+         */
+        post: operations["createOrganisation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an organisation
+         * @description The organisation as seen by the caller, with their role and permissions.
+         *     Returns 404 if the caller is not a member.
+         */
+        get: operations["getOrganisation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Rename an organisation
+         * @description Requires `organisation.manage`.
+         */
+        patch: operations["renameOrganisation"];
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List members
+         * @description Requires `organisation.members.read`.
+         */
+        get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/members/{userID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member or leave
+         * @description Members can always remove themselves (leave). Removing others requires
+         *     `organisation.members.manage`; only owners can remove owners. The last owner
+         *     cannot leave or be removed.
+         */
+        delete: operations["removeMember"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a member's role
+         * @description Requires `organisation.members.manage`. Only owners can grant or remove the owner
+         *     role. The last owner cannot be demoted (`last_owner`).
+         */
+        patch: operations["changeMemberRole"];
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List pending invitations
+         * @description Requires `organisation.members.manage`.
+         */
+        get: operations["listInvitations"];
+        put?: never;
+        /**
+         * Invite someone
+         * @description Requires `organisation.members.manage`. Only owners can invite owners. The invitee
+         *     sees the invitation after signing in with a verified email matching `email`.
+         *     Personal organisations cannot invite (`personal_organisation`).
+         */
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/invitations/{invitationID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an invitation
+         * @description Requires `organisation.members.manage`.
+         */
+        delete: operations["revokeInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My pending invitations
+         * @description Pending invitations addressed to the caller's verified email.
+         */
+        get: operations["listMyInvitations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/{invitationID}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept an invitation
+         * @description Only the user whose verified email matches the invitation can accept it.
+         */
+        post: operations["acceptInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/{invitationID}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decline an invitation */
+        post: operations["declineInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -215,6 +411,61 @@ export interface components {
             id: string;
             name: string;
         };
+        /** @enum {string} */
+        Role: "owner" | "admin" | "manager" | "editor" | "creator" | "reviewer" | "viewer" | "client";
+        Organisation: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            personal: boolean;
+            role: components["schemas"]["Role"];
+            /** @description Capabilities the caller has in this organisation. */
+            permissions: string[];
+            /** Format: date-time */
+            created_at: string;
+        };
+        OrganisationNameRequest: {
+            name: string;
+        };
+        RoleRequest: {
+            role: components["schemas"]["Role"];
+        };
+        InvitationRequest: {
+            /** Format: email */
+            email: string;
+            role?: components["schemas"]["Role"];
+        };
+        Member: {
+            /** Format: uuid */
+            user_id: string;
+            email: string;
+            first_name: string;
+            last_name: string;
+            avatar_url: string;
+            role: components["schemas"]["Role"];
+            /** Format: date-time */
+            joined_at: string;
+        };
+        MemberList: {
+            data: components["schemas"]["Member"][];
+        };
+        Invitation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organisation_id: string;
+            organisation_name: string;
+            email: string;
+            role: components["schemas"]["Role"];
+            invited_by_name: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string;
+        };
+        InvitationList: {
+            data: components["schemas"]["Invitation"][];
+        };
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
         };
@@ -223,7 +474,7 @@ export interface components {
              * @description Stable, machine-readable error code.
              * @enum {string}
              */
-            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
+            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
             /** @description Human-readable message safe to show to end users. */
             message: string;
             request_id?: string;
@@ -236,6 +487,27 @@ export interface components {
         };
     };
     responses: {
+        /** @description Not found, or the caller is not a member of the organisation. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /**
+         * @description The change conflicts with an organisation rule. `error.code` is one of
+         *     `last_owner`, `personal_organisation`, `already_member` or `invitation_exists`.
+         */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Not signed in, or the session has expired. */
         Unauthenticated: {
             headers: {
@@ -310,7 +582,11 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        OrgID: string;
+        UserID: string;
+        InvitationID: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -475,6 +751,332 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createOrganisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganisationNameRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organisation"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getOrganisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organisation"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    renameOrganisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganisationNameRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organisation"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                userID: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    changeMemberRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                userID: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invitation"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    revokeInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                invitationID: components["parameters"]["InvitationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listMyInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitationID: components["parameters"]["InvitationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organisation"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    declineInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitationID: components["parameters"]["InvitationID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
         };
     };
 }

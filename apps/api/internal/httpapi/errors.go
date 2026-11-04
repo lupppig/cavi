@@ -31,10 +31,16 @@ const (
 	CodeRateLimited      = "rate_limited"
 	CodeUnauthenticated  = "unauthenticated"
 	CodeForbidden        = "forbidden"
-	CodeNotFound         = "not_found"
-	CodeMethodNotAllowed = "method_not_allowed"
-	CodeInternal         = "internal_error"
-	CodeUnavailable      = "service_unavailable"
+	CodeEmailNotVerified = "email_not_verified"
+	// Conflicts with organisation rules.
+	CodeLastOwner            = "last_owner"
+	CodePersonalOrganisation = "personal_organisation"
+	CodeAlreadyMember        = "already_member"
+	CodeInvitationExists     = "invitation_exists"
+	CodeNotFound             = "not_found"
+	CodeMethodNotAllowed     = "method_not_allowed"
+	CodeInternal             = "internal_error"
+	CodeUnavailable          = "service_unavailable"
 )
 
 func writeError(c *gin.Context, status int, code, message string) {

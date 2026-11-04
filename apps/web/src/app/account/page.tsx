@@ -1,36 +1,29 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useSyncExternalStore } from "react";
-import type { Me, OrganisationMembership } from "@cavi/api-client";
-import { api, signInHref } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { useEffect, useId, useState, useSyncExternalStore, type FormEvent } from "react";
+import { AccountHeader, Banner } from "@/components/account/account-header";
+import { signInHref } from "@/lib/api";
+import {
+  client,
+  displayName,
+  initials,
+  NotSignedIn,
+  raise,
+
+  useMe,
+  useMyInvitations,
+  type Invitation,
+  type Me,
+} from "@/lib/queries";
 
 const authErrors: Record<string, string> = {
   cancelled: "Sign-in was cancelled. You can try again whenever you’re ready.",
-  invalid_state:
-    "That sign-in link expired or was opened in a different browser. Please start again.",
+  invalid_state: "That sign-in link expired or was opened in a different browser. Please start again.",
   sign_in_failed: "We couldn’t sign you in. Please try again.",
 };
-
-class NotSignedIn extends Error {}
-
-async function fetchMe(): Promise<Me> {
-  if (!api) throw new Error("The CAVI API is not configured.");
-  const { data, error, response } = await api.GET("/api/v1/me");
-  if (response.status === 401) throw new NotSignedIn();
-  if (error || !data) throw new Error(error?.error.message ?? "Could not load your account.");
-  return data;
-}
-
-function Logo() {
-  return (
-    <svg viewBox="0 0 32 32" className="size-8" aria-hidden="true">
-      <rect x="2" y="2" width="28" height="28" rx="9" fill="var(--tomato)" stroke="var(--ink)" strokeWidth="3" />
-      <path d="M12 9.5 L23 16 L12 22.5 Z" fill="white" stroke="var(--ink)" strokeWidth="2.5" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 // The ?auth_error code captured when the page first loads. Cached so it
 // survives removing it from the URL, and cleared when the page unmounts.
@@ -46,8 +39,6 @@ const noSubscribe = () => () => {};
 export default function AccountPage() {
   const code = useSyncExternalStore(noSubscribe, readAuthError, () => null);
   const authError = code ? (authErrors[code] ?? authErrors.sign_in_failed) : null;
-
-  // Remove ?auth_error from the URL so a refresh doesn't repeat the message.
   useEffect(() => {
     if (code) window.history.replaceState(null, "", window.location.pathname);
     return () => {
@@ -55,49 +46,13 @@ export default function AccountPage() {
     };
   }, [code]);
 
-  const me = useQuery({ queryKey: ["me"], queryFn: fetchMe, retry: (n, e) => !(e instanceof NotSignedIn) && n < 2 });
-
-  const signOut = useMutation({
-    mutationFn: async () => {
-      if (!api) throw new Error("The CAVI API is not configured.");
-      const { data, error } = await api.POST("/api/v1/auth/logout");
-      if (error || !data) throw new Error(error?.error.message ?? "Could not sign out.");
-      return data.redirect_url;
-    },
-    onSuccess: (url) => window.location.assign(url),
-  });
+  const me = useMe();
 
   return (
     <main className="min-h-dvh px-4 py-6 sm:px-8">
-      <header className="sticker mx-auto flex h-16 max-w-4xl items-center justify-between gap-3 rounded-full bg-white pr-2 pl-3 sm:pl-4">
-        <Link href="/" className="flex min-h-11 items-center gap-2 text-2xl font-extrabold tracking-tight">
-          <Logo />
-          CAVI
-        </Link>
-        {me.data && (
-          <button
-            type="button"
-            onClick={() => signOut.mutate()}
-            disabled={signOut.isPending}
-            className="btn-pop min-h-11 rounded-full bg-white px-4 text-sm font-extrabold disabled:opacity-60 sm:px-5 sm:text-base"
-          >
-            {signOut.isPending ? "Signing out…" : "Sign out"}
-          </button>
-        )}
-      </header>
-
-      <div className="mx-auto mt-10 max-w-4xl sm:mt-14">
-        {authError && (
-          <p role="alert" className="sticker mb-8 rounded-2xl bg-tomato px-4 py-3 font-bold text-white">
-            {authError}
-          </p>
-        )}
-        {signOut.isError && (
-          <p role="alert" className="sticker mb-8 rounded-2xl bg-tomato px-4 py-3 font-bold text-white">
-            {signOut.error.message}
-          </p>
-        )}
-
+      <AccountHeader />
+      <div className="mx-auto mt-10 max-w-4xl space-y-8 sm:mt-14">
+        {authError && <Banner>{authError}</Banner>}
         {me.isPending && <Loading />}
         {me.isError && me.error instanceof NotSignedIn && <SignedOut />}
         {me.isError && !(me.error instanceof NotSignedIn) && (
@@ -121,7 +76,7 @@ export default function AccountPage() {
 
 function Loading() {
   return (
-    <div aria-busy="true" aria-live="polite" className="space-y-6">
+    <div aria-busy="true" className="space-y-6">
       <span className="sr-only">Loading your account…</span>
       <div className="h-24 w-2/3 animate-pulse rounded-3xl bg-paper-deep" />
       <div className="h-48 animate-pulse rounded-3xl bg-paper-deep" />
@@ -137,16 +92,10 @@ function SignedOut() {
         Sign in to see your account and workspaces. New here? Creating an account takes a few seconds.
       </p>
       <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-        <a
-          href={signInHref("sign-in")}
-          className="btn-pop flex min-h-12 items-center justify-center rounded-2xl bg-cobalt px-6 font-extrabold text-white"
-        >
+        <a href={signInHref("sign-in")} className="btn-pop flex min-h-12 items-center justify-center rounded-2xl bg-cobalt px-6 font-extrabold text-white">
           Sign in
         </a>
-        <a
-          href={signInHref("sign-up")}
-          className="btn-pop flex min-h-12 items-center justify-center rounded-2xl bg-white px-6 font-extrabold"
-        >
+        <a href={signInHref("sign-up")} className="btn-pop flex min-h-12 items-center justify-center rounded-2xl bg-white px-6 font-extrabold">
           Create an account
         </a>
       </div>
@@ -154,14 +103,8 @@ function SignedOut() {
   );
 }
 
-function initials(me: Me) {
-  const a = me.user.first_name.trim()[0] ?? me.user.email[0] ?? "?";
-  const b = me.user.last_name.trim()[0] ?? "";
-  return (a + b).toUpperCase();
-}
-
 function SignedIn({ me }: { me: Me }) {
-  const name = [me.user.first_name, me.user.last_name].filter(Boolean).join(" ");
+  const name = displayName(me.user);
   return (
     <>
       <section className="flex flex-col gap-5 sm:flex-row sm:items-center">
@@ -169,15 +112,10 @@ function SignedIn({ me }: { me: Me }) {
           // Avatars come from the identity provider's CDN; a plain img avoids
           // configuring every possible remote host for next/image.
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={me.user.avatar_url}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="sticker size-20 shrink-0 rounded-full object-cover"
-          />
+          <img src={me.user.avatar_url} alt="" referrerPolicy="no-referrer" className="sticker size-20 shrink-0 rounded-full object-cover" />
         ) : (
           <span aria-hidden="true" className="sticker grid size-20 shrink-0 place-items-center rounded-full bg-pink text-2xl font-extrabold">
-            {initials(me)}
+            {initials(me.user)}
           </span>
         )}
         <div className="min-w-0">
@@ -185,58 +123,166 @@ function SignedIn({ me }: { me: Me }) {
             Hey{me.user.first_name ? `, ${me.user.first_name}` : ""}!
           </h1>
           <p className="mt-1 font-semibold break-all text-ink-soft">
-            {name ? `${name} · ` : ""}
+            {name !== me.user.email ? `${name} · ` : ""}
             {me.user.email}
           </p>
         </div>
       </section>
 
-      <section className="mt-12" aria-labelledby="orgs-heading">
+      <PendingInvitations />
+
+      <section aria-labelledby="orgs-heading">
         <h2 id="orgs-heading" className="text-2xl font-extrabold tracking-tight">
           Your organisations
         </h2>
-        {me.organisations.length === 0 ? (
-          <p className="mt-3 font-medium">You don’t belong to any organisations yet.</p>
-        ) : (
-          <ul className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2">
-            {me.organisations.map((o) => (
-              <Organisation key={o.id} org={o} />
-            ))}
-          </ul>
-        )}
+        <ul className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {me.organisations.map((o) => (
+            <li key={o.id}>
+              <Link
+                href={`/account/organisations/${o.id}`}
+                className="tilt-hover sticker-lg block rounded-[28px] bg-mint p-2 focus-visible:outline-offset-4"
+              >
+                <span className="block rounded-[20px] border-[3px] border-ink bg-white p-5">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="mr-auto text-xl font-extrabold tracking-tight break-words">{o.name}</span>
+                    {o.personal && <span className="rounded-full border-2 border-ink bg-sun px-2.5 py-0.5 text-xs font-extrabold">Personal</span>}
+                    <span className="rounded-full border-2 border-ink bg-sky px-2.5 py-0.5 text-xs font-extrabold capitalize">{o.role}</span>
+                  </span>
+                  <span className="mt-3 block text-sm font-semibold text-ink-soft">
+                    {o.workspaces.length} workspace{o.workspaces.length === 1 ? "" : "s"} · {o.workspaces.map((w) => w.name).join(", ")}
+                  </span>
+                  <span className="mt-4 block font-extrabold">Open →</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       </section>
 
-      <p className="mt-12 rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
-        CAVI is still being built. Projects, uploads and editing will show up here as they’re
-        ready, and we’ll email you when early access opens.
+      <CreateTeam />
+
+      <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
+        CAVI is still being built. Projects, uploads and editing will show up here as they’re ready, and we’ll
+        email you when early access opens.
       </p>
     </>
   );
 }
 
-function Organisation({ org }: { org: OrganisationMembership }) {
+function PendingInvitations() {
+  const invitations = useMyInvitations(true);
+  const qc = useQueryClient();
+  const router = useRouter();
+  const respond = useMutation({
+    mutationFn: async ({ inv, accept }: { inv: Invitation; accept: boolean }) => {
+      const path = accept ? "/api/v1/invitations/{invitationID}/accept" : "/api/v1/invitations/{invitationID}/decline";
+      const { error, response } = await client().POST(path, { params: { path: { invitationID: inv.id } } });
+      if (!response.ok) raise(error, response.status, "Could not respond to the invitation.");
+      return { inv, accept };
+    },
+    onSuccess: async ({ inv, accept }) => {
+      await qc.invalidateQueries({ queryKey: ["invitations"] });
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      if (accept) router.push(`/account/organisations/${inv.organisation_id}`);
+    },
+  });
+
+  if (!invitations.data?.length) return null;
   return (
-    <li className="sticker-lg rounded-[28px] bg-mint p-2">
-      <div className="rounded-[20px] border-[3px] border-ink bg-white p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="mr-auto text-xl font-extrabold tracking-tight break-words">{org.name}</h3>
-          {org.personal && (
-            <span className="rounded-full border-2 border-ink bg-sun px-2.5 py-0.5 text-xs font-extrabold">Personal</span>
-          )}
-          <span className="rounded-full border-2 border-ink bg-sky px-2.5 py-0.5 text-xs font-extrabold capitalize">
-            {org.role}
-          </span>
-        </div>
-        <p className="mt-4 text-sm font-extrabold tracking-wide text-ink-soft uppercase">Workspaces</p>
-        <ul className="mt-2 flex flex-wrap gap-2">
-          {org.workspaces.map((w) => (
-            <li key={w.id} className="rounded-xl border-2 border-ink bg-paper px-3 py-1.5 font-bold">
-              {w.name}
+    <section aria-labelledby="inv-heading" className="sticker-lg rounded-[28px] bg-sun p-5 sm:p-7">
+      <h2 id="inv-heading" className="text-2xl font-extrabold tracking-tight">
+        You’ve been invited 🎉
+      </h2>
+      {respond.isError && <div className="mt-4"><Banner>{respond.error.message}</Banner></div>}
+      <ul className="mt-4 space-y-3">
+        {invitations.data.map((inv) => {
+          const busy = respond.isPending && respond.variables?.inv.id === inv.id;
+          return (
+            <li key={inv.id} className="flex flex-col gap-3 rounded-2xl border-[3px] border-ink bg-white p-4 sm:flex-row sm:items-center">
+              <p className="min-w-0 flex-1 font-semibold">
+                <span className="font-extrabold">{inv.invited_by_name || "Someone"}</span> invited you to{" "}
+                <span className="font-extrabold">{inv.organisation_name}</span> as{" "}
+                <span className="capitalize">{inv.role}</span>.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => respond.mutate({ inv, accept: true })}
+                  className="btn-pop min-h-11 flex-1 rounded-xl bg-cobalt px-4 font-extrabold text-white disabled:opacity-60 sm:flex-none"
+                >
+                  Join
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => respond.mutate({ inv, accept: false })}
+                  className="btn-pop min-h-11 flex-1 rounded-xl bg-white px-4 font-extrabold disabled:opacity-60 sm:flex-none"
+                >
+                  Decline
+                </button>
+              </div>
             </li>
-          ))}
-          {org.workspaces.length === 0 && <li className="font-medium">No workspaces yet.</li>}
-        </ul>
-      </div>
-    </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function CreateTeam() {
+  const id = useId();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const [name, setName] = useState("");
+  const create = useMutation({
+    mutationFn: async (teamName: string) => {
+      const { data, error, response } = await client().POST("/api/v1/organisations", { body: { name: teamName } });
+      if (!data) raise(error, response.status, "Could not create the team.");
+      return data;
+    },
+    onSuccess: async (org) => {
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      router.push(`/account/organisations/${org.id}`);
+    },
+  });
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (name.trim()) create.mutate(name.trim());
+  }
+
+  return (
+    <section aria-labelledby={`${id}-h`} className="sticker-lg rounded-[28px] bg-white p-5 sm:p-7">
+      <h2 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">
+        Start a team
+      </h2>
+      <p className="mt-1 font-medium text-ink-soft">
+        Teams let you invite collaborators and clients. Your personal studio stays just yours.
+      </p>
+      <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <label htmlFor={`${id}-name`} className="sr-only">
+          Team name
+        </label>
+        <input
+          id={`${id}-name`}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={120}
+          required
+          placeholder="e.g. Night Shift Studio"
+          disabled={create.isPending}
+          className="min-h-12 w-full min-w-0 flex-1 rounded-2xl border-[3px] border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-cobalt/40 focus:outline-none"
+        />
+        <button
+          type="submit"
+          disabled={create.isPending || !name.trim()}
+          className="btn-pop min-h-12 rounded-2xl bg-tomato px-6 font-extrabold whitespace-nowrap text-white disabled:opacity-60"
+        >
+          {create.isPending ? "Creating…" : "Create team"}
+        </button>
+      </form>
+      {create.isError && <div className="mt-3"><Banner>{create.error.message}</Banner></div>}
+    </section>
   );
 }

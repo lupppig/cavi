@@ -76,6 +76,7 @@ func (w *WorkOS) Authenticate(ctx context.Context, code, ipAddress, userAgent st
 	return Profile{
 		ProviderUserID:    res.User.ID,
 		Email:             res.User.Email,
+		EmailVerified:     res.User.EmailVerified,
 		FirstName:         res.User.FirstName,
 		LastName:          res.User.LastName,
 		AvatarURL:         res.User.ProfilePictureURL,

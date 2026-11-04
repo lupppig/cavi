@@ -12,16 +12,15 @@ import (
 
 	"github.com/uptrace/bun"
 
+	"github.com/lupppig/cavi/apps/api/internal/authz"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
 )
 
 // ErrUserNotFound is returned when a user ID has no matching user.
 var ErrUserNotFound = errors.New("account: user not found")
 
-// Role names. Permissions are derived from roles in code, not stored.
-const (
-	RoleOwner = "owner"
-)
+// RoleOwner is the role given to an organisation's creator.
+const RoleOwner = authz.RoleOwner
 
 // User is a person with a CAVI account.
 type User struct {
@@ -69,17 +68,18 @@ func (s *Service) SignIn(ctx context.Context, p identity.Profile) (User, error) 
 	var u User
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		row := tx.QueryRowContext(ctx, `
-			INSERT INTO users (workos_user_id, email, first_name, last_name, avatar_url, last_sign_in_at)
-			VALUES (?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), now())
+			INSERT INTO users (workos_user_id, email, email_verified, first_name, last_name, avatar_url, last_sign_in_at)
+			VALUES (?, ?, ?, NULLIF(?, ''), NULLIF(?, ''), NULLIF(?, ''), now())
 			ON CONFLICT (workos_user_id) DO UPDATE SET
 				email = EXCLUDED.email,
+				email_verified = EXCLUDED.email_verified,
 				first_name = EXCLUDED.first_name,
 				last_name = EXCLUDED.last_name,
 				avatar_url = EXCLUDED.avatar_url,
 				last_sign_in_at = now(),
 				updated_at = now()
 			RETURNING id, email, coalesce(first_name, ''), coalesce(last_name, ''), coalesce(avatar_url, ''), created_at`,
-			p.ProviderUserID, p.Email, p.FirstName, p.LastName, p.AvatarURL)
+			p.ProviderUserID, p.Email, p.EmailVerified, p.FirstName, p.LastName, p.AvatarURL)
 		if err := row.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.AvatarURL, &u.CreatedAt); err != nil {
 			return fmt.Errorf("upsert user: %w", err)
 		}

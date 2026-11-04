@@ -12,6 +12,7 @@ import (
 const specPath = "../../../../packages/contracts/openapi.yaml"
 
 var (
+	ginParam       = regexp.MustCompile(`:(\w+)`)
 	specPathLine   = regexp.MustCompile(`^  (/\S*):\s*$`)
 	specMethodLine = regexp.MustCompile(`^    (get|put|post|delete|patch|head|options|trace):\s*$`)
 )
@@ -64,7 +65,7 @@ func TestRoutesMatchOpenAPIContract(t *testing.T) {
 
 	var routes []string
 	for _, r := range newTestRouter(fakePinger{}).Routes() {
-		routes = append(routes, r.Method+" "+r.Path)
+		routes = append(routes, r.Method+" "+ginParam.ReplaceAllString(r.Path, "{$1}"))
 	}
 
 	slices.Sort(spec)

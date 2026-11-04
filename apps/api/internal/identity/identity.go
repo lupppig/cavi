@@ -24,6 +24,7 @@ var ErrAuthenticationFailed = errors.New("identity: authentication failed")
 type Profile struct {
 	ProviderUserID    string
 	Email             string
+	EmailVerified     bool
 	FirstName         string
 	LastName          string
 	AvatarURL         string

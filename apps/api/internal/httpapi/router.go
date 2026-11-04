@@ -17,6 +17,7 @@ type Options struct {
 	DB             Pinger
 	Waitlist       WaitlistService
 	Auth           *AuthOptions
+	Organisations  OrganisationService
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
 	// is trusted when determining the client IP. Empty trusts none.
@@ -30,6 +31,16 @@ const (
 	waitlistRateLimit  = 10
 	waitlistRateWindow = time.Hour
 )
+
+func requireService(ok bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !ok {
+			writeError(c, http.StatusServiceUnavailable, CodeUnavailable, "This service is not configured.")
+			return
+		}
+		c.Next()
+	}
+}
 
 // NewRouter builds the API's HTTP handler.
 func NewRouter(opts Options) (*gin.Engine, error) {
@@ -77,6 +88,23 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	v1.GET("/auth/callback", auth.callback)
 	v1.POST("/auth/logout", requireAllowedOrigin(opts.AllowedOrigins), auth.logout)
 	v1.GET("/me", auth.requireSession, auth.me)
+
+	// Signed-in routes. Each service call authorises the actor against the
+	// organisation itself; writes must come from an allowed origin.
+	orgs := orgHandler{svc: opts.Organisations, logger: opts.Logger}
+	signedIn := v1.Group("", auth.requireSession, requireSameOriginWrites(opts.AllowedOrigins), requireService(opts.Organisations != nil))
+	signedIn.POST("/organisations", orgs.create)
+	signedIn.GET("/organisations/:orgID", orgs.get)
+	signedIn.PATCH("/organisations/:orgID", orgs.rename)
+	signedIn.GET("/organisations/:orgID/members", orgs.members)
+	signedIn.PATCH("/organisations/:orgID/members/:userID", orgs.changeRole)
+	signedIn.DELETE("/organisations/:orgID/members/:userID", orgs.removeMember)
+	signedIn.GET("/organisations/:orgID/invitations", orgs.invitations)
+	signedIn.POST("/organisations/:orgID/invitations", orgs.invite)
+	signedIn.DELETE("/organisations/:orgID/invitations/:invitationID", orgs.revoke)
+	signedIn.GET("/invitations", orgs.myInvitations)
+	signedIn.POST("/invitations/:invitationID/accept", orgs.accept)
+	signedIn.POST("/invitations/:invitationID/decline", orgs.decline)
 
 	return r, nil
 }

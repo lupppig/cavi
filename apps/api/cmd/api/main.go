@@ -43,6 +43,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	accounts := account.NewService(db)
 	var auth *httpapi.AuthOptions
 	if cfg.AuthEnabled() {
 		sessions := session.NewStore(db, cfg.SessionTTL)
@@ -54,7 +55,7 @@ func run() error {
 				cfg.PublicAPIURL+"/api/v1/auth/callback",
 				cfg.WebURL+"/",
 			),
-			Accounts:      account.NewService(db),
+			Accounts:      accounts,
 			Sessions:      sessions,
 			WebURL:        cfg.WebURL,
 			SecureCookies: cfg.SecureCookies(),
@@ -68,6 +69,7 @@ func run() error {
 		DB:             db,
 		Waitlist:       waitlist.NewService(waitlist.NewPostgresStore(db)),
 		Auth:           auth,
+		Organisations:  accounts,
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,
 		Debug:          cfg.Env == config.EnvDevelopment,

@@ -6,14 +6,14 @@ CAVI is a creative production and content distribution platform. See [`AGENTS.md
 
 Foundation phase. What exists today:
 
-- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, and sign-in with WorkOS AuthKit (server-side sessions, users, personal organisations, workspaces and memberships).
-- `apps/web`: Next.js landing page with a working waitlist signup, and an `/account` page showing the signed-in user and their organisations. Product visuals on the landing page are labelled illustrations, not screenshots.
+- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, sign-in with WorkOS AuthKit (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, and an audit log.
+- `apps/web`: Next.js landing page with a working waitlist signup, an `/account` page (profile, invitations, organisations, team creation) and an organisation page (rename, members and roles, invitations). Product visuals on the landing page are labelled illustrations, not screenshots.
 - `packages/contracts`: OpenAPI contract, the source of truth for the HTTP API.
 - `packages/api-client`: typed TypeScript client generated from the contract.
 - `migrations/`: versioned SQL migrations, applied with `make migrate-up`.
 - `infrastructure/docker`: local PostgreSQL.
 
-Not built yet: organisation management (invites, roles beyond owner, team organisations), projects, media, jobs, AI, the editor, and publishing.
+Not built yet: invitation emails, client-level access restrictions, projects, media, jobs, AI, the editor, and publishing.
 
 ## Repository layout
 
@@ -26,7 +26,8 @@ apps/
     internal/database/ PostgreSQL connection (Bun)
     internal/httpapi/  Gin routing, middleware, handlers
     internal/identity/ Identity provider boundary (WorkOS)
-    internal/account/  Users, organisations, workspaces, memberships
+    internal/account/  Users, organisations, workspaces, members, invitations
+    internal/authz/    Roles and permissions
     internal/session/  Server-side browser sessions
     internal/waitlist/ Waitlist service and Postgres store
   web/                 Next.js frontend
@@ -100,6 +101,14 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `GET` | `/api/v1/auth/callback` | Browser navigation from WorkOS: creates the session cookie and redirects to `{web}/account` (or `{web}/account?auth_error=…`). |
 | `POST` | `/api/v1/auth/logout` | Ends the session; returns `redirect_url` to also end the WorkOS session. Origin must be allowed. |
 | `GET` | `/api/v1/me` | The signed-in user and their organisations. `401` when signed out. |
+| `POST` | `/api/v1/organisations` | Create a team organisation (caller becomes owner). |
+| `GET`, `PATCH` | `/api/v1/organisations/{orgID}` | View or rename an organisation. |
+| `GET` | `/api/v1/organisations/{orgID}/members` | List members. |
+| `PATCH`, `DELETE` | `/api/v1/organisations/{orgID}/members/{userID}` | Change a role; remove a member or leave. |
+| `GET`, `POST` | `/api/v1/organisations/{orgID}/invitations` | List or create invitations. |
+| `DELETE` | `/api/v1/organisations/{orgID}/invitations/{invitationID}` | Revoke an invitation. |
+| `GET` | `/api/v1/invitations` | The caller's pending invitations. |
+| `POST` | `/api/v1/invitations/{invitationID}/accept`, `/decline` | Respond to an invitation. |
 | `POST` | `/api/v1/waitlist` | Join the early-access waitlist. Same `202` response for new and existing addresses. Rate limited to 10 requests per IP per hour. |
 
 The full contract is in `packages/contracts/openapi.yaml`.
@@ -126,3 +135,13 @@ WorkOS AuthKit verifies who someone is; CAVI's database decides what they can ac
 - The frontend and API must be on the same site (for example `app.example.com` and `api.example.com`) so the Lax session cookie is sent. Locally, `localhost:3001` and `localhost:8080` are the same site.
 
 WorkOS dashboard (Applications → your app → Redirects) needs the callback URI `{CAVI_PUBLIC_API_URL}/api/v1/auth/callback`, the sign-in endpoint `{CAVI_PUBLIC_API_URL}/api/v1/auth/login` and the sign-out URI `{CAVI_WEB_URL}/`.
+
+## Organisations, roles and permissions
+
+- Every user has a **personal organisation** (just them) and can create **team organisations**.
+- Roles: `owner`, `admin`, `manager`, `editor`, `creator`, `reviewer`, `viewer`, `client`. Each maps to a set of permissions in `internal/authz`; handlers and future workers check permissions, not role names.
+- Authorisation happens in the account service for every operation, from the caller's membership in the database. Non-members get `404`, never `403`, so organisation IDs can't be probed.
+- Only owners can grant, remove or invite owners. An organisation always keeps at least one owner (enforced with row locks, so concurrent changes can't remove the last one).
+- Invitations are matched to email: only a signed-in user whose **verified** email matches can see or accept one. CAVI doesn't send invitation emails yet; the inviter shares the sign-in link.
+- Organisation changes, role changes, removals and invitation events are written to `audit_events`.
+- Signed-in requests that change data must carry an allowed `Origin`.

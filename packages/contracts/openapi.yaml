@@ -166,7 +166,368 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations:
+    post:
+      operationId: createOrganisation
+      summary: Create a team organisation
+      description: |
+        Creates a team organisation with a `Main` workspace. The caller becomes its owner.
+        Requires an allowed `Origin`.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganisationNameRequest"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}:
+    get:
+      operationId: getOrganisation
+      summary: Get an organisation
+      description: |
+        The organisation as seen by the caller, with their role and permissions.
+        Returns 404 if the caller is not a member.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      operationId: renameOrganisation
+      summary: Rename an organisation
+      description: |
+        Requires `organisation.manage`.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganisationNameRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}/members:
+    get:
+      operationId: listMembers
+      summary: List members
+      description: |
+        Requires `organisation.members.read`.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberList"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}/members/{userID}:
+    patch:
+      operationId: changeMemberRole
+      summary: Change a member's role
+      description: |
+        Requires `organisation.members.manage`. Only owners can grant or remove the owner
+        role. The last owner cannot be demoted (`last_owner`).
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/UserID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleRequest"
+      responses:
+        "204":
+          description: Done.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: removeMember
+      summary: Remove a member or leave
+      description: |
+        Members can always remove themselves (leave). Removing others requires
+        `organisation.members.manage`; only owners can remove owners. The last owner
+        cannot leave or be removed.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "204":
+          description: Done.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}/invitations:
+    get:
+      operationId: listInvitations
+      summary: List pending invitations
+      description: |
+        Requires `organisation.members.manage`.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationList"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createInvitation
+      summary: Invite someone
+      description: |
+        Requires `organisation.members.manage`. Only owners can invite owners. The invitee
+        sees the invitation after signing in with a verified email matching `email`.
+        Personal organisations cannot invite (`personal_organisation`).
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvitationRequest"
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}/invitations/{invitationID}:
+    delete:
+      operationId: revokeInvitation
+      summary: Revoke an invitation
+      description: |
+        Requires `organisation.members.manage`.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/InvitationID"
+      responses:
+        "204":
+          description: Done.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invitations:
+    get:
+      operationId: listMyInvitations
+      summary: My pending invitations
+      description: |
+        Pending invitations addressed to the caller's verified email.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationList"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invitations/{invitationID}/accept:
+    post:
+      operationId: acceptInvitation
+      summary: Accept an invitation
+      description: |
+        Only the user whose verified email matches the invitation can accept it.
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/InvitationID"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organisation"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/invitations/{invitationID}/decline:
+    post:
+      operationId: declineInvitation
+      summary: Decline an invitation
+      tags: [organisations]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/InvitationID"
+      responses:
+        "204":
+          description: Done.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
 components:
+  parameters:
+    OrgID:
+      name: orgID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserID:
+      name: userID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvitationID:
+      name: invitationID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
   securitySchemes:
     sessionCookie:
       type: apiKey
@@ -272,6 +633,88 @@ components:
         id: { type: string, format: uuid }
         name: { type: string }
 
+    Role:
+      type: string
+      enum: [owner, admin, manager, editor, creator, reviewer, viewer, client]
+
+    Organisation:
+      type: object
+      required: [id, name, personal, role, permissions, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        personal: { type: boolean }
+        role: { $ref: "#/components/schemas/Role" }
+        permissions:
+          type: array
+          description: Capabilities the caller has in this organisation.
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+
+    OrganisationNameRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+
+    RoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+
+    InvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        role:
+          $ref: "#/components/schemas/Role"
+
+    Member:
+      type: object
+      required: [user_id, email, first_name, last_name, avatar_url, role, joined_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        avatar_url: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        joined_at: { type: string, format: date-time }
+
+    MemberList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Member" }
+
+    Invitation:
+      type: object
+      required: [id, organisation_id, organisation_name, email, role, invited_by_name, created_at, expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        organisation_name: { type: string }
+        email: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        invited_by_name: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+
+    InvitationList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Invitation" }
+
     ErrorResponse:
       type: object
       required: [error]
@@ -293,6 +736,11 @@ components:
             - rate_limited
             - unauthenticated
             - forbidden
+            - email_not_verified
+            - last_owner
+            - personal_organisation
+            - already_member
+            - invitation_exists
             - not_found
             - method_not_allowed
             - internal_error
@@ -318,6 +766,20 @@ components:
           type: string
 
   responses:
+    NotFound:
+      description: Not found, or the caller is not a member of the organisation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: |
+        The change conflicts with an organisation rule. `error.code` is one of
+        `last_owner`, `personal_organisation`, `already_member` or `invitation_exists`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     Unauthenticated:
       description: Not signed in, or the session has expired.
       content:

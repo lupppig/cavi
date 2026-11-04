@@ -67,4 +67,4 @@ web-typecheck: ## Type-check the web app and API client
 	pnpm --filter @cavi/api-client typecheck
 	pnpm --filter @cavi/web typecheck
 
-check: api-vet api-test contracts-check web-lint web-typecheck ## Run all static checks and tests
+check: api-vet api-test contracts-check web-lint web-typecheck web-build ## Run all static checks, tests and the production web build
