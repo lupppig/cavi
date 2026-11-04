@@ -300,3 +300,408 @@ body {
     clip-path: inset(0 0 0 0);
   }
 }
+
+/* ------------------------------------------------------------------
+   Workflow artwork (workflow-art.tsx). One shared 8s loop.
+   Un-animated styles are the finished frame.
+   ------------------------------------------------------------------ */
+
+.wf * {
+  transform-box: fill-box;
+}
+.wf [class*="wf-draw-"] {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+}
+.wf-until-5 { opacity: 0; }
+.wf-until-10 { opacity: 0; }
+.wf-until-15 { opacity: 0; }
+.wf-until-20 { opacity: 0; }
+.wf-until-25 { opacity: 0; }
+.wf-until-30 { opacity: 0; }
+.wf-until-35 { opacity: 0; }
+.wf-until-40 { opacity: 0; }
+.wf-until-45 { opacity: 0; }
+.wf-until-50 { opacity: 0; }
+.wf-until-55 { opacity: 0; }
+.wf-until-60 { opacity: 0; }
+.wf-until-65 { opacity: 0; }
+.wf-until-70 { opacity: 0; }
+.wf-until-75 { opacity: 0; }
+.wf-until-80 { opacity: 0; }
+.wf-until-85 { opacity: 0; }
+.wf-type { transform: translateX(226px); }
+.wf-scan { opacity: 0; }
+.wf-trim { transform-origin: left center; transform: scaleX(0.72); }
+.wf-handle { transform: translateX(-28px); }
+.wf-ripple { transform: translateX(-28px); }
+.wf-split { transform: translateX(6px); }
+.wf-playhead { transform: translateX(130px); }
+.wf-version { transform: translateY(44px); }
+.wf-stamp { transform-origin: center; transform: rotate(-8deg); }
+.wf-progress { transform-origin: left center; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .wf-in-5 { animation: wf-in-5 8s ease-out infinite; }
+  .wf-until-5 { animation: wf-until-5 8s linear infinite; }
+  .wf-draw-5 { animation: wf-draw-5 8s ease-in-out infinite; }
+  .wf-in-10 { animation: wf-in-10 8s ease-out infinite; }
+  .wf-until-10 { animation: wf-until-10 8s linear infinite; }
+  .wf-draw-10 { animation: wf-draw-10 8s ease-in-out infinite; }
+  .wf-in-15 { animation: wf-in-15 8s ease-out infinite; }
+  .wf-until-15 { animation: wf-until-15 8s linear infinite; }
+  .wf-draw-15 { animation: wf-draw-15 8s ease-in-out infinite; }
+  .wf-in-20 { animation: wf-in-20 8s ease-out infinite; }
+  .wf-until-20 { animation: wf-until-20 8s linear infinite; }
+  .wf-draw-20 { animation: wf-draw-20 8s ease-in-out infinite; }
+  .wf-in-25 { animation: wf-in-25 8s ease-out infinite; }
+  .wf-until-25 { animation: wf-until-25 8s linear infinite; }
+  .wf-draw-25 { animation: wf-draw-25 8s ease-in-out infinite; }
+  .wf-in-30 { animation: wf-in-30 8s ease-out infinite; }
+  .wf-until-30 { animation: wf-until-30 8s linear infinite; }
+  .wf-draw-30 { animation: wf-draw-30 8s ease-in-out infinite; }
+  .wf-in-35 { animation: wf-in-35 8s ease-out infinite; }
+  .wf-until-35 { animation: wf-until-35 8s linear infinite; }
+  .wf-draw-35 { animation: wf-draw-35 8s ease-in-out infinite; }
+  .wf-in-40 { animation: wf-in-40 8s ease-out infinite; }
+  .wf-until-40 { animation: wf-until-40 8s linear infinite; }
+  .wf-draw-40 { animation: wf-draw-40 8s ease-in-out infinite; }
+  .wf-in-45 { animation: wf-in-45 8s ease-out infinite; }
+  .wf-until-45 { animation: wf-until-45 8s linear infinite; }
+  .wf-draw-45 { animation: wf-draw-45 8s ease-in-out infinite; }
+  .wf-in-50 { animation: wf-in-50 8s ease-out infinite; }
+  .wf-until-50 { animation: wf-until-50 8s linear infinite; }
+  .wf-draw-50 { animation: wf-draw-50 8s ease-in-out infinite; }
+  .wf-in-55 { animation: wf-in-55 8s ease-out infinite; }
+  .wf-until-55 { animation: wf-until-55 8s linear infinite; }
+  .wf-draw-55 { animation: wf-draw-55 8s ease-in-out infinite; }
+  .wf-in-60 { animation: wf-in-60 8s ease-out infinite; }
+  .wf-until-60 { animation: wf-until-60 8s linear infinite; }
+  .wf-draw-60 { animation: wf-draw-60 8s ease-in-out infinite; }
+  .wf-in-65 { animation: wf-in-65 8s ease-out infinite; }
+  .wf-until-65 { animation: wf-until-65 8s linear infinite; }
+  .wf-draw-65 { animation: wf-draw-65 8s ease-in-out infinite; }
+  .wf-in-70 { animation: wf-in-70 8s ease-out infinite; }
+  .wf-until-70 { animation: wf-until-70 8s linear infinite; }
+  .wf-draw-70 { animation: wf-draw-70 8s ease-in-out infinite; }
+  .wf-in-75 { animation: wf-in-75 8s ease-out infinite; }
+  .wf-until-75 { animation: wf-until-75 8s linear infinite; }
+  .wf-draw-75 { animation: wf-draw-75 8s ease-in-out infinite; }
+  .wf-in-80 { animation: wf-in-80 8s ease-out infinite; }
+  .wf-until-80 { animation: wf-until-80 8s linear infinite; }
+  .wf-draw-80 { animation: wf-draw-80 8s ease-in-out infinite; }
+  .wf-in-85 { animation: wf-in-85 8s ease-out infinite; }
+  .wf-until-85 { animation: wf-until-85 8s linear infinite; }
+  .wf-draw-85 { animation: wf-draw-85 8s ease-in-out infinite; }
+  .wf-draw-28 { animation: wf-draw-28 8s ease-in-out infinite; }
+  .wf-draw-62 { animation: wf-draw-62 8s ease-in-out infinite; }
+  .wf-type { animation: wf-type 8s steps(35, end) infinite; }
+  .wf-scan { animation: wf-scan 8s ease-in-out infinite; }
+  .wf-trim { animation: wf-trim 8s cubic-bezier(0.7, 0, 0.2, 1) infinite; }
+  .wf-handle { animation: wf-handle 8s cubic-bezier(0.7, 0, 0.2, 1) infinite; }
+  .wf-ripple { animation: wf-ripple 8s cubic-bezier(0.7, 0, 0.2, 1) infinite; }
+  .wf-split { animation: wf-split 8s cubic-bezier(0.7, 0, 0.2, 1) infinite; }
+  .wf-playhead { animation: wf-playhead 8s linear infinite; }
+  .wf-version { animation: wf-version 8s cubic-bezier(0.7, 0, 0.2, 1) infinite; }
+  .wf-stamp { animation: wf-stamp 8s cubic-bezier(0.2, 0.8, 0.2, 1.2) infinite; }
+  .wf-progress { animation: wf-progress 8s linear infinite; }
+}
+
+@keyframes wf-in-5 {
+  0%, 5% { opacity: 0; transform: translateY(6px); }
+  9%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-5 {
+  0%, 5% { opacity: 1; }
+  8%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-5 {
+  0%, 5% { stroke-dashoffset: 100; opacity: 1; }
+  15%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-10 {
+  0%, 10% { opacity: 0; transform: translateY(6px); }
+  14%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-10 {
+  0%, 10% { opacity: 1; }
+  13%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-10 {
+  0%, 10% { stroke-dashoffset: 100; opacity: 1; }
+  20%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-15 {
+  0%, 15% { opacity: 0; transform: translateY(6px); }
+  19%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-15 {
+  0%, 15% { opacity: 1; }
+  18%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-15 {
+  0%, 15% { stroke-dashoffset: 100; opacity: 1; }
+  25%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-20 {
+  0%, 20% { opacity: 0; transform: translateY(6px); }
+  24%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-20 {
+  0%, 20% { opacity: 1; }
+  23%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-20 {
+  0%, 20% { stroke-dashoffset: 100; opacity: 1; }
+  30%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-25 {
+  0%, 25% { opacity: 0; transform: translateY(6px); }
+  29%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-25 {
+  0%, 25% { opacity: 1; }
+  28%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-25 {
+  0%, 25% { stroke-dashoffset: 100; opacity: 1; }
+  35%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-30 {
+  0%, 30% { opacity: 0; transform: translateY(6px); }
+  34%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-30 {
+  0%, 30% { opacity: 1; }
+  33%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-30 {
+  0%, 30% { stroke-dashoffset: 100; opacity: 1; }
+  40%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-35 {
+  0%, 35% { opacity: 0; transform: translateY(6px); }
+  39%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-35 {
+  0%, 35% { opacity: 1; }
+  38%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-35 {
+  0%, 35% { stroke-dashoffset: 100; opacity: 1; }
+  45%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-40 {
+  0%, 40% { opacity: 0; transform: translateY(6px); }
+  44%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-40 {
+  0%, 40% { opacity: 1; }
+  43%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-40 {
+  0%, 40% { stroke-dashoffset: 100; opacity: 1; }
+  50%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-45 {
+  0%, 45% { opacity: 0; transform: translateY(6px); }
+  49%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-45 {
+  0%, 45% { opacity: 1; }
+  48%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-45 {
+  0%, 45% { stroke-dashoffset: 100; opacity: 1; }
+  55%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-50 {
+  0%, 50% { opacity: 0; transform: translateY(6px); }
+  54%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-50 {
+  0%, 50% { opacity: 1; }
+  53%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-50 {
+  0%, 50% { stroke-dashoffset: 100; opacity: 1; }
+  60%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-55 {
+  0%, 55% { opacity: 0; transform: translateY(6px); }
+  59%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-55 {
+  0%, 55% { opacity: 1; }
+  58%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-55 {
+  0%, 55% { stroke-dashoffset: 100; opacity: 1; }
+  65%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-60 {
+  0%, 60% { opacity: 0; transform: translateY(6px); }
+  64%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-60 {
+  0%, 60% { opacity: 1; }
+  63%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-60 {
+  0%, 60% { stroke-dashoffset: 100; opacity: 1; }
+  70%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-65 {
+  0%, 65% { opacity: 0; transform: translateY(6px); }
+  69%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-65 {
+  0%, 65% { opacity: 1; }
+  68%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-65 {
+  0%, 65% { stroke-dashoffset: 100; opacity: 1; }
+  75%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-70 {
+  0%, 70% { opacity: 0; transform: translateY(6px); }
+  74%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-70 {
+  0%, 70% { opacity: 1; }
+  73%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-70 {
+  0%, 70% { stroke-dashoffset: 100; opacity: 1; }
+  80%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-75 {
+  0%, 75% { opacity: 0; transform: translateY(6px); }
+  79%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-75 {
+  0%, 75% { opacity: 1; }
+  78%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-75 {
+  0%, 75% { stroke-dashoffset: 100; opacity: 1; }
+  85%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-80 {
+  0%, 80% { opacity: 0; transform: translateY(6px); }
+  84%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-80 {
+  0%, 80% { opacity: 1; }
+  83%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-80 {
+  0%, 80% { stroke-dashoffset: 100; opacity: 1; }
+  90%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-in-85 {
+  0%, 85% { opacity: 0; transform: translateY(6px); }
+  89%, 92% { opacity: 1; transform: none; }
+  97%, 100% { opacity: 0; transform: none; }
+}
+@keyframes wf-until-85 {
+  0%, 85% { opacity: 1; }
+  88%, 100% { opacity: 0; }
+}
+@keyframes wf-draw-85 {
+  0%, 85% { stroke-dashoffset: 100; opacity: 1; }
+  90%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-draw-28 {
+  0%, 28% { stroke-dashoffset: 100; opacity: 1; }
+  36%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-draw-62 {
+  0%, 62% { stroke-dashoffset: 100; opacity: 1; }
+  70%, 92% { stroke-dashoffset: 0; opacity: 1; }
+  97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes wf-type {
+  0%, 3% { transform: translateX(0); }
+  28%, 100% { transform: translateX(226px); }
+}
+@keyframes wf-scan {
+  0%, 4% { opacity: 0; transform: translateX(0); }
+  6% { opacity: 1; transform: translateX(0); }
+  58% { opacity: 1; transform: translateX(254px); }
+  64%, 100% { opacity: 0; transform: translateX(254px); }
+}
+@keyframes wf-trim {
+  0%, 10% { transform: scaleX(1); }
+  24%, 95% { transform: scaleX(0.72); }
+  100% { transform: scaleX(1); }
+}
+@keyframes wf-handle {
+  0%, 10% { transform: translateX(0); }
+  24%, 95% { transform: translateX(-28px); }
+  100% { transform: translateX(0); }
+}
+@keyframes wf-ripple {
+  0%, 28% { transform: translateX(0); }
+  38%, 95% { transform: translateX(-28px); }
+  100% { transform: translateX(0); }
+}
+@keyframes wf-split {
+  0%, 49% { transform: translateX(0); }
+  55%, 95% { transform: translateX(6px); }
+  100% { transform: translateX(0); }
+}
+@keyframes wf-playhead {
+  from { transform: translateX(0); }
+  to { transform: translateX(256px); }
+}
+@keyframes wf-version {
+  0%, 30% { transform: translateY(0); }
+  36%, 58% { transform: translateY(22px); }
+  64%, 95% { transform: translateY(44px); }
+  100% { transform: translateY(0); }
+}
+@keyframes wf-stamp {
+  0%, 70% { opacity: 0; transform: rotate(-8deg) scale(1.6); }
+  76%, 92% { opacity: 1; transform: rotate(-8deg) scale(1); }
+  97%, 100% { opacity: 0; transform: rotate(-8deg) scale(1); }
+}
+@keyframes wf-progress {
+  0%, 8% { transform: scaleX(0); }
+  84%, 95% { transform: scaleX(1); }
+  100% { transform: scaleX(0); }
+}

@@ -1,6 +1,15 @@
 import { DirectionSpec } from "@/components/landing/direction-spec";
 import { EditorSketch } from "@/components/landing/editor-sketch";
 import { FormatStrip } from "@/components/landing/format-strip";
+import { PlayWhenVisible } from "@/components/landing/play-when-visible";
+import {
+  DirectionArt,
+  DistributeArt,
+  EditArt,
+  RenderArt,
+  ReviewArt,
+  SelectionArt,
+} from "@/components/landing/workflow-art";
 import { ReframeSketch } from "@/components/landing/reframe-sketch";
 import { SiteHeader } from "@/components/landing/site-header";
 import { WaitlistForm } from "@/components/landing/waitlist-form";
@@ -8,26 +17,32 @@ import { WaitlistForm } from "@/components/landing/waitlist-form";
 const stages = [
   {
     title: "Direction",
+    Art: DirectionArt,
     body: "Describe the piece you want in plain language. CAVI turns it into a creative brief you can read, question and change.",
   },
   {
     title: "Selection",
+    Art: SelectionArt,
     body: "Long recordings searched for moments worth cutting, with the setup kept, sentences whole and every timestamp shown.",
   },
   {
     title: "Edit",
+    Art: EditArt,
     body: "A real multi-track timeline. Trim to the frame, reframe for any aspect ratio, caption, layer and undo.",
   },
   {
     title: "Review",
+    Art: ReviewArt,
     body: "Share cuts with collaborators and clients, collect approvals, and keep every revision.",
   },
   {
     title: "Render",
+    Art: RenderArt,
     body: "What you see in preview is what renders, and every output is checked before it is delivered.",
   },
   {
     title: "Distribute",
+    Art: DistributeArt,
     body: "Platform-ready exports, scheduling and publishing, marked as published only once the platform confirms it.",
   },
 ];
@@ -145,25 +160,31 @@ export default function Home() {
             </h2>
             <p className="mt-6 max-w-2xl text-lg text-muted">
               Six stages in one project, so nothing gets lost between the idea
-              and the post. This is what we&rsquo;re building.
+              and the post. This is what we&rsquo;re building; the artwork
+              shows how each stage is meant to work.
             </p>
 
             <ol className="mt-14 grid grid-cols-1 gap-px border border-line bg-line sm:grid-cols-2 lg:grid-cols-3">
               {stages.map((s, i) => (
                 <li
                   key={s.title}
-                  className="reveal group relative overflow-hidden bg-ink p-6 transition-colors duration-300 hover:bg-ink-raised sm:p-8"
+                  className="reveal group relative flex flex-col overflow-hidden bg-ink transition-colors duration-300 hover:bg-ink-raised"
                   style={{ "--i": i % 3 } as React.CSSProperties}
                 >
                   <span
                     aria-hidden
-                    className="absolute inset-x-0 top-0 h-0.5 origin-left scale-x-0 bg-tally transition-transform duration-700 ease-out group-hover:scale-x-100"
+                    className="absolute inset-x-0 top-0 z-10 h-0.5 origin-left scale-x-0 bg-tally transition-transform duration-700 ease-out group-hover:scale-x-100"
                   />
-                  <p className="font-mono text-xs text-faint transition-colors group-hover:text-tally">
-                    {String(i + 1).padStart(2, "0")}:00:00:00
-                  </p>
-                  <h3 className="mt-3 text-2xl font-bold tracking-tight">{s.title}</h3>
-                  <p className="mt-3 leading-relaxed text-muted">{s.body}</p>
+                  <PlayWhenVisible className="aspect-[4/3] border-b border-line bg-ink-sunken p-2 sm:p-3">
+                    <s.Art />
+                  </PlayWhenVisible>
+                  <div className="p-6 sm:p-8">
+                    <p className="font-mono text-xs text-faint transition-colors group-hover:text-tally">
+                      {String(i + 1).padStart(2, "0")}:00:00:00
+                    </p>
+                    <h3 className="mt-3 text-2xl font-bold tracking-tight">{s.title}</h3>
+                    <p className="mt-3 leading-relaxed text-muted">{s.body}</p>
+                  </div>
                 </li>
               ))}
             </ol>
