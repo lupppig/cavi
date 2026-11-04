@@ -1,0 +1,8 @@
+{
+  "name": "cavi",
+  "private": true,
+  "packageManager": "pnpm@12.10.1",
+  "engines": {
+    "node": ">=24"
+  }
+}

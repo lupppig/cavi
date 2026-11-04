@@ -1,0 +1,22 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+.pnpm-store/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Go
+/apps/api/bin/
+coverage.out
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp

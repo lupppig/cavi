@@ -1,0 +1,22 @@
+# Local development dependencies. Not used for staging or production.
+name: cavi
+
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: cavi
+      POSTGRES_PASSWORD: cavi_local_dev
+      POSTGRES_DB: cavi
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cavi -d cavi"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:

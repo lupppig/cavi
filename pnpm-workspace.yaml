@@ -1,0 +1,7 @@
+packages:
+  - apps/web
+
+# Native build scripts are blocked unless explicitly allowed.
+allowBuilds:
+  sharp: false
+  unrs-resolver: false
