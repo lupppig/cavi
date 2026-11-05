@@ -6,14 +6,14 @@ CAVI is a creative production and content distribution platform. See [`AGENTS.md
 
 Foundation phase. What exists today:
 
-- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, and an audit log.
-- `apps/web`: Next.js landing page with a working waitlist signup, an `/account` page (profile, invitations, organisations, team creation) and an organisation page (rename, members and roles, invitations). Product visuals on the landing page are labelled illustrations, not screenshots.
+- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, an audit log, and projects (with client sharing).
+- `apps/web`: Next.js landing page with a working waitlist signup, an `/account` page (profile, invitations, organisations, team creation) and an organisation page (projects, rename, members and roles, invitations) and a project page (details, editing, client sharing, deletion). Product visuals on the landing page are labelled illustrations, not screenshots.
 - `packages/contracts`: OpenAPI contract, the source of truth for the HTTP API.
 - `packages/api-client`: typed TypeScript client generated from the contract.
 - `migrations/`: versioned SQL migrations, applied with `make migrate-up`.
 - `infrastructure/docker`: local PostgreSQL.
 
-Not built yet: invitation emails, client-level access restrictions, projects, media, jobs, AI, the editor, and publishing.
+Not built yet: invitation emails, workspace management, client workspaces (restricting team members to particular clients), media, jobs, AI, the editor, and publishing.
 
 ## Repository layout
 
@@ -109,6 +109,10 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `DELETE` | `/api/v1/organisations/{orgID}/invitations/{invitationID}` | Revoke an invitation. |
 | `GET` | `/api/v1/invitations` | The caller's pending invitations. |
 | `POST` | `/api/v1/invitations/{invitationID}/accept`, `/decline` | Respond to an invitation. |
+| `GET`, `POST` | `/api/v1/organisations/{orgID}/projects` | List projects (newest first, cursor-paged, optional `workspace_id`) or create one. |
+| `GET`, `PATCH`, `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}` | View, update or delete a project. |
+| `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/access` | List or add the clients a project is shared with. |
+| `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}/access/{userID}` | Stop sharing a project with a client. |
 | `POST` | `/api/v1/waitlist` | Join the early-access waitlist. Same `202` response for new and existing addresses. Rate limited to 10 requests per IP per hour. |
 
 The full contract is in `packages/contracts/openapi.yaml`.
@@ -146,3 +150,13 @@ WorkOS dashboard (Applications → your app → Redirects) needs the callback UR
 - Invitations are matched to email: only a signed-in user whose **verified** email matches can see or accept one. CAVI doesn't send invitation emails yet; the inviter shares the sign-in link.
 - Organisation changes, role changes, removals and invitation events are written to `audit_events`.
 - Signed-in requests that change data must carry an allowed `Origin`.
+
+## Projects
+
+- A project belongs to an organisation and is filed in one of its workspaces (the first workspace by default). A composite foreign key makes it impossible to file a project in another organisation's workspace.
+- Team members with `project.read` see every project in the organisation. **Clients see only projects explicitly shared with them**; everything else is `404` to them, as are projects in organisations the caller doesn't belong to.
+- `project.update` lets editors and above change any project; **creators can change only projects they created**. Deleting needs `project.delete` (owner, admin, manager).
+- Sharing with clients needs `project.access.manage` (owner, admin, manager), and only members with the `client` role can be granted access. Grants hang off the membership, so removing someone from the organisation also removes their project access.
+- Each project response lists the caller's project-level `permissions`, so the UI shows only actions that will succeed. The API enforces them regardless.
+- Project creation, updates, deletion and sharing changes are written to `audit_events`.
+- Deleting a project is permanent. Once media exists, deletion will also need to clean up stored files.

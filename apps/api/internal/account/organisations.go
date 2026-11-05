@@ -74,6 +74,7 @@ type Invitation struct {
 }
 
 type membership struct {
+	id       string
 	role     string
 	personal bool
 	name     string
@@ -86,14 +87,14 @@ func member(ctx context.Context, db bun.IDB, userID, orgID string, forUpdate boo
 	if !uuidPattern.MatchString(orgID) {
 		return membership{}, ErrNotFound
 	}
-	q := `SELECT m.role, o.personal_owner_user_id IS NOT NULL, o.name, o.created_at
+	q := `SELECT m.id, m.role, o.personal_owner_user_id IS NOT NULL, o.name, o.created_at
 		FROM memberships m JOIN organisations o ON o.id = m.organisation_id
 		WHERE m.organisation_id = ? AND m.user_id = ?`
 	if forUpdate {
 		q += " FOR UPDATE OF m"
 	}
 	var m membership
-	err := db.QueryRowContext(ctx, q, orgID, userID).Scan(&m.role, &m.personal, &m.name, &m.created)
+	err := db.QueryRowContext(ctx, q, orgID, userID).Scan(&m.id, &m.role, &m.personal, &m.name, &m.created)
 	if errors.Is(err, sql.ErrNoRows) {
 		return membership{}, ErrNotFound
 	}
@@ -102,6 +103,34 @@ func member(ctx context.Context, db bun.IDB, userID, orgID string, forUpdate boo
 	}
 	return m, nil
 }
+
+// Access is a user's standing in one organisation, for packages that own
+// organisation resources (projects, media) and authorise against it.
+type Access struct {
+	MembershipID string
+	Role         string
+	Personal     bool
+}
+
+// ResolveAccess returns the user's membership in the organisation. Missing
+// organisations, malformed IDs and non-members all return ErrNotFound.
+// Pass forUpdate inside a transaction to lock the membership row.
+func ResolveAccess(ctx context.Context, db bun.IDB, userID, orgID string, forUpdate bool) (Access, error) {
+	m, err := member(ctx, db, userID, orgID, forUpdate)
+	if err != nil {
+		return Access{}, err
+	}
+	return Access{MembershipID: m.id, Role: m.role, Personal: m.personal}, nil
+}
+
+// Audit records an organisation-level action. Never put secrets or private
+// content in meta.
+func Audit(ctx context.Context, db bun.IDB, orgID, actorID, action, targetType, targetID string, meta map[string]any) error {
+	return audit(ctx, db, orgID, actorID, action, targetType, targetID, meta)
+}
+
+// ValidUUID reports whether s is a well-formed UUID.
+func ValidUUID(s string) bool { return uuidPattern.MatchString(s) }
 
 func require(m membership, p authz.Permission) error {
 	if !authz.Can(m.role, p) {

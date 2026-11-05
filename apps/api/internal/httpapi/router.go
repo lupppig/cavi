@@ -18,6 +18,7 @@ type Options struct {
 	Waitlist       WaitlistService
 	Auth           *AuthOptions
 	Organisations  OrganisationService
+	Projects       ProjectService
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
 	// is trusted when determining the client IP. Empty trusts none.
@@ -105,6 +106,17 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	signedIn.GET("/invitations", orgs.myInvitations)
 	signedIn.POST("/invitations/:invitationID/accept", orgs.accept)
 	signedIn.POST("/invitations/:invitationID/decline", orgs.decline)
+
+	projects := projectHandler{svc: opts.Projects, orgHandler: orgs}
+	proj := signedIn.Group("/organisations/:orgID/projects", requireService(opts.Projects != nil))
+	proj.GET("", projects.list)
+	proj.POST("", projects.create)
+	proj.GET("/:projectID", projects.get)
+	proj.PATCH("/:projectID", projects.update)
+	proj.DELETE("/:projectID", projects.delete)
+	proj.GET("/:projectID/access", projects.access)
+	proj.POST("/:projectID/access", projects.grant)
+	proj.DELETE("/:projectID/access/:userID", projects.revoke)
 
 	return r, nil
 }

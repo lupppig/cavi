@@ -35,6 +35,9 @@ func TestPermissionMatrix(t *testing.T) {
 		{RoleViewer, MediaUpload, false},
 		{RoleClient, OrganisationMembersRead, false},
 		{RoleClient, ApprovalReview, true},
+		{RoleManager, ProjectAccessManage, true},
+		{RoleEditor, ProjectAccessManage, false},
+		{RoleClient, ProjectAccessManage, false},
 		{"unknown", ProjectRead, false},
 	}
 	for _, tc := range cases {

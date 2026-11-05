@@ -17,6 +17,7 @@ import (
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
+	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/session"
 	"github.com/lupppig/cavi/apps/api/internal/testdb"
 )
@@ -39,6 +40,7 @@ func newOrgWorld(t *testing.T) *orgWorld {
 		AllowedOrigins: []string{webURL},
 		Auth:           &AuthOptions{Provider: &fakeProvider{}, Accounts: accounts, Sessions: sessions, WebURL: webURL},
 		Organisations:  accounts,
+		Projects:       project.NewService(db),
 	})
 	if err != nil {
 		t.Fatal(err)

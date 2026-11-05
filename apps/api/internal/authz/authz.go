@@ -21,14 +21,16 @@ const (
 	ProjectRead               Permission = "project.read"
 	ProjectUpdate             Permission = "project.update"
 	ProjectDelete             Permission = "project.delete"
-	MediaUpload               Permission = "media.upload"
-	MediaDelete               Permission = "media.delete"
-	EditingManage             Permission = "editing.manage"
-	RenderExecute             Permission = "render.execute"
-	PublishingManage          Permission = "publishing.manage"
-	BrandManage               Permission = "brand.manage"
-	BillingManage             Permission = "billing.manage"
-	ApprovalReview            Permission = "approval.review"
+	// ProjectAccessManage shares individual projects with clients.
+	ProjectAccessManage Permission = "project.access.manage"
+	MediaUpload         Permission = "media.upload"
+	MediaDelete         Permission = "media.delete"
+	EditingManage       Permission = "editing.manage"
+	RenderExecute       Permission = "render.execute"
+	PublishingManage    Permission = "publishing.manage"
+	BrandManage         Permission = "brand.manage"
+	BillingManage       Permission = "billing.manage"
+	ApprovalReview      Permission = "approval.review"
 )
 
 // Role names, from most to least privileged.
@@ -49,7 +51,7 @@ var Roles = []string{RoleOwner, RoleAdmin, RoleManager, RoleEditor, RoleCreator,
 var all = []Permission{
 	OrganisationManage, OrganisationMembersRead, OrganisationMembersManage,
 	WorkspaceCreate, WorkspaceManage,
-	ProjectCreate, ProjectRead, ProjectUpdate, ProjectDelete,
+	ProjectCreate, ProjectRead, ProjectUpdate, ProjectDelete, ProjectAccessManage,
 	MediaUpload, MediaDelete, EditingManage, RenderExecute,
 	PublishingManage, BrandManage, BillingManage, ApprovalReview,
 }
@@ -59,7 +61,7 @@ var grants = map[string][]Permission{
 	RoleAdmin: without(all, BillingManage),
 	RoleManager: {
 		OrganisationMembersRead, WorkspaceCreate, WorkspaceManage,
-		ProjectCreate, ProjectRead, ProjectUpdate, ProjectDelete,
+		ProjectCreate, ProjectRead, ProjectUpdate, ProjectDelete, ProjectAccessManage,
 		MediaUpload, MediaDelete, EditingManage, RenderExecute,
 		PublishingManage, BrandManage, ApprovalReview,
 	},
@@ -67,14 +69,15 @@ var grants = map[string][]Permission{
 		OrganisationMembersRead, ProjectCreate, ProjectRead, ProjectUpdate,
 		MediaUpload, EditingManage, RenderExecute, ApprovalReview,
 	},
+	// Creators may update only projects they created (enforced per project).
 	RoleCreator: {
 		OrganisationMembersRead, ProjectCreate, ProjectRead, ProjectUpdate,
 		MediaUpload, EditingManage, RenderExecute,
 	},
 	RoleReviewer: {OrganisationMembersRead, ProjectRead, ApprovalReview},
 	RoleViewer:   {OrganisationMembersRead, ProjectRead},
-	// Clients are external: they see only what they are explicitly given
-	// and cannot list the organisation's members.
+	// Clients are external: they see only projects explicitly shared with
+	// them (enforced per project) and cannot list the organisation's members.
 	RoleClient: {ProjectRead, ApprovalReview},
 }
 

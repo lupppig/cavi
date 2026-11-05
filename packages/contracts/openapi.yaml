@@ -437,6 +437,257 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/organisations/{orgID}/projects:
+    get:
+      operationId: listProjects
+      summary: List projects
+      description: |
+        Projects the caller can see, newest first. Requires `project.read`.
+        Clients see only projects explicitly shared with them. Paged with an
+        opaque cursor: pass `next_cursor` from one page to get the next;
+        it is null on the last page.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - name: workspace_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+      responses:
+        "200":
+          description: A page of projects.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectPage"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createProject
+      summary: Create a project
+      description: |
+        Requires `project.create`. `workspace_id` defaults to the
+        organisation's first workspace; a workspace outside the organisation
+        is a validation error on `workspace_id`.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}:
+    get:
+      operationId: getProject
+      summary: Get a project
+      description: Projects the caller can't see return 404.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: The project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      operationId: updateProject
+      summary: Update a project
+      description: |
+        Requires `project.update`. Creators can update only projects they
+        created. Omitted fields are left unchanged.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+      responses:
+        "200":
+          description: The updated project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      operationId: deleteProject
+      summary: Delete a project
+      description: Requires `project.delete`. Permanent.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/access:
+    get:
+      operationId: listProjectAccess
+      summary: List who a project is shared with
+      description: Requires `project.access.manage`.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: People with explicit access.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAccessList"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: grantProjectAccess
+      summary: Share a project with a client
+      description: |
+        Requires `project.access.manage`. The person must be a member of the
+        organisation with the `client` role; other roles already see every
+        project. Sharing twice is a no-op.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantProjectAccessRequest"
+      responses:
+        "204":
+          description: Shared.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/access/{userID}:
+    delete:
+      operationId: revokeProjectAccess
+      summary: Stop sharing a project with someone
+      description: Requires `project.access.manage`.
+      tags: [projects]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/UserID"
+      responses:
+        "204":
+          description: Access removed.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/v1/invitations:
     get:
       operationId: listMyInvitations
@@ -520,6 +771,11 @@ components:
       schema: { type: string, format: uuid }
     InvitationID:
       name: invitationID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProjectID:
+      name: projectID
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -710,6 +966,89 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/Invitation" }
+
+    Project:
+      type: object
+      required: [id, organisation_id, workspace, name, description, created_by, created_at, updated_at, permissions]
+      properties:
+        id: { type: string, format: uuid }
+        organisation_id: { type: string, format: uuid }
+        workspace: { $ref: "#/components/schemas/Workspace" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+        created_by:
+          description: Null when the creator's account no longer exists.
+          oneOf:
+            - $ref: "#/components/schemas/UserRef"
+            - type: "null"
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        permissions:
+          type: array
+          description: |
+            Project-level actions the caller may take: any of `project.read`,
+            `project.update`, `project.delete`, `project.access.manage`.
+          items: { type: string }
+
+    UserRef:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+
+    ProjectPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Project" }
+        next_cursor:
+          type: [string, "null"]
+
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+        workspace_id: { type: string, format: uuid }
+
+    UpdateProjectRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 2000 }
+
+    GrantProjectAccessRequest:
+      type: object
+      required: [user_id]
+      additionalProperties: false
+      properties:
+        user_id: { type: string, format: uuid }
+
+    ProjectAccess:
+      type: object
+      required: [user_id, email, first_name, last_name, avatar_url, granted_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        first_name: { type: string }
+        last_name: { type: string }
+        avatar_url: { type: string }
+        granted_at: { type: string, format: date-time }
+
+    ProjectAccessList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ProjectAccess" }
 
     ErrorResponse:
       type: object

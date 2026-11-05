@@ -17,6 +17,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/httpapi"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
+	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/session"
 	"github.com/lupppig/cavi/apps/api/internal/waitlist"
 )
@@ -70,6 +71,7 @@ func run() error {
 		Waitlist:       waitlist.NewService(waitlist.NewPostgresStore(db)),
 		Auth:           auth,
 		Organisations:  accounts,
+		Projects:       project.NewService(db),
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,
 		Debug:          cfg.Env == config.EnvDevelopment,

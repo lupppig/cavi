@@ -296,6 +296,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List projects
+         * @description Projects the caller can see, newest first. Requires `project.read`.
+         *     Clients see only projects explicitly shared with them. Paged with an
+         *     opaque cursor: pass `next_cursor` from one page to get the next;
+         *     it is null on the last page.
+         */
+        get: operations["listProjects"];
+        put?: never;
+        /**
+         * Create a project
+         * @description Requires `project.create`. `workspace_id` defaults to the
+         *     organisation's first workspace; a workspace outside the organisation
+         *     is a validation error on `workspace_id`.
+         */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a project
+         * @description Projects the caller can't see return 404.
+         */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a project
+         * @description Requires `project.delete`. Permanent.
+         */
+        delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        /**
+         * Update a project
+         * @description Requires `project.update`. Creators can update only projects they
+         *     created. Omitted fields are left unchanged.
+         */
+        patch: operations["updateProject"];
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List who a project is shared with
+         * @description Requires `project.access.manage`.
+         */
+        get: operations["listProjectAccess"];
+        put?: never;
+        /**
+         * Share a project with a client
+         * @description Requires `project.access.manage`. The person must be a member of the
+         *     organisation with the `client` role; other roles already see every
+         *     project. Sharing twice is a no-op.
+         */
+        post: operations["grantProjectAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/access/{userID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Stop sharing a project with someone
+         * @description Requires `project.access.manage`.
+         */
+        delete: operations["revokeProjectAccess"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations": {
         parameters: {
             query?: never;
@@ -469,6 +573,63 @@ export interface components {
         InvitationList: {
             data: components["schemas"]["Invitation"][];
         };
+        Project: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            organisation_id: string;
+            workspace: components["schemas"]["Workspace"];
+            name: string;
+            description: string;
+            /** @description Null when the creator's account no longer exists. */
+            created_by: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /**
+             * @description Project-level actions the caller may take: any of `project.read`,
+             *     `project.update`, `project.delete`, `project.access.manage`.
+             */
+            permissions: string[];
+        };
+        UserRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+        };
+        ProjectPage: {
+            data: components["schemas"]["Project"][];
+            next_cursor: string | null;
+        };
+        CreateProjectRequest: {
+            name: string;
+            description?: string;
+            /** Format: uuid */
+            workspace_id?: string;
+        };
+        UpdateProjectRequest: {
+            name?: string;
+            description?: string;
+        };
+        GrantProjectAccessRequest: {
+            /** Format: uuid */
+            user_id: string;
+        };
+        ProjectAccess: {
+            /** Format: uuid */
+            user_id: string;
+            /** Format: email */
+            email: string;
+            first_name: string;
+            last_name: string;
+            avatar_url: string;
+            /** Format: date-time */
+            granted_at: string;
+        };
+        ProjectAccessList: {
+            data: components["schemas"]["ProjectAccess"][];
+        };
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
         };
@@ -589,6 +750,7 @@ export interface components {
         OrgID: string;
         UserID: string;
         InvitationID: string;
+        ProjectID: string;
     };
     requestBodies: never;
     headers: never;
@@ -996,6 +1158,238 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listProjects: {
+        parameters: {
+            query?: {
+                workspace_id?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of projects. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    updateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated project. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    listProjectAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description People with explicit access. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectAccessList"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    grantProjectAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantProjectAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Shared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+        };
+    };
+    revokeProjectAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                userID: components["parameters"]["UserID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Access removed. */
             204: {
                 headers: {
                     [name: string]: unknown;

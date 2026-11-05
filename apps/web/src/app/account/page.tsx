@@ -155,8 +155,8 @@ function SignedIn({ me }: { me: Me }) {
       <CreateTeam />
 
       <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
-        CAVI is still being built. Projects, uploads and editing will show up here as they’re ready, and we’ll
-        email you when early access opens.
+        Open an organisation to see its projects. CAVI is still being built: uploads, editing and renders will
+        arrive in projects as they’re ready.
       </p>
     </>
   );

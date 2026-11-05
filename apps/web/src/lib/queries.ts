@@ -9,6 +9,8 @@ export type Organisation = components["schemas"]["Organisation"];
 export type Member = components["schemas"]["Member"];
 export type Invitation = components["schemas"]["Invitation"];
 export type Role = components["schemas"]["Role"];
+export type Project = components["schemas"]["Project"];
+export type ProjectAccess = components["schemas"]["ProjectAccess"];
 
 export class NotSignedIn extends Error {}
 export class NotFound extends Error {}
@@ -49,6 +51,39 @@ export function useMe() {
     },
     retry: (n, e) => !(e instanceof NotSignedIn) && n < 2,
   });
+}
+
+export function useOrganisation(orgID: string) {
+  return useQuery({
+    queryKey: ["organisation", orgID],
+    queryFn: async (): Promise<Organisation> => {
+      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}", {
+        params: { path: { orgID } },
+      });
+      if (!data) raise(error, response.status, "Could not load this organisation.");
+      return data;
+    },
+    retry: (n, e) => !(e instanceof NotFound) && !(e instanceof NotSignedIn) && n < 2,
+  });
+}
+
+export function useMembers(orgID: string, enabled = true) {
+  return useQuery({
+    queryKey: ["organisation", orgID, "members"],
+    enabled,
+    queryFn: async (): Promise<Member[]> => {
+      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/members", {
+        params: { path: { orgID } },
+      });
+      if (!data) raise(error, response.status, "Could not load members.");
+      return data.data;
+    },
+  });
+}
+
+/** Whether a permission list (organisation or project) includes p. */
+export function can(subject: { permissions: string[] }, p: string) {
+  return subject.permissions.includes(p);
 }
 
 export function useMyInvitations(enabled: boolean) {

@@ -7,6 +7,7 @@ import { useId, useState, type FormEvent } from "react";
 import { AccountHeader, Banner } from "@/components/account/account-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
 import {
+  can,
   client,
   displayName,
   initials,
@@ -15,28 +16,16 @@ import {
   raise,
   roles,
   useMe,
+  useMembers,
+  useOrganisation,
   type Invitation,
-  type Member,
   type Organisation,
   type Role,
 } from "@/lib/queries";
+import { Projects } from "./projects-section";
 
 const field =
   "min-h-12 w-full min-w-0 rounded-2xl border-[3px] border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-cobalt/40 focus:outline-none disabled:opacity-60";
-
-function useOrganisation(orgID: string) {
-  return useQuery({
-    queryKey: ["organisation", orgID],
-    queryFn: async (): Promise<Organisation> => {
-      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}", {
-        params: { path: { orgID } },
-      });
-      if (!data) raise(error, response.status, "Could not load this organisation.");
-      return data;
-    },
-    retry: (n, e) => !(e instanceof NotFound) && !(e instanceof NotSignedIn) && n < 2,
-  });
-}
 
 export function OrganisationScreen() {
   const { orgID } = useParams<{ orgID: string }>();
@@ -85,10 +74,6 @@ export function OrganisationScreen() {
   );
 }
 
-function can(org: Organisation, permission: string) {
-  return org.permissions.includes(permission);
-}
-
 function OrganisationView({ org }: { org: Organisation }) {
   return (
     <>
@@ -102,6 +87,7 @@ function OrganisationView({ org }: { org: Organisation }) {
           .
         </p>
       )}
+      <Projects org={org} />
       {can(org, "organisation.members.read") && <Members org={org} />}
       {!org.personal && can(org, "organisation.members.manage") && <Invite org={org} />}
     </>
@@ -174,16 +160,7 @@ function Members({ org }: { org: Organisation }) {
   const qc = useQueryClient();
   const router = useRouter();
   const me = useMe();
-  const members = useQuery({
-    queryKey: ["organisation", org.id, "members"],
-    queryFn: async (): Promise<Member[]> => {
-      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/members", {
-        params: { path: { orgID: org.id } },
-      });
-      if (!data) raise(error, response.status, "Could not load members.");
-      return data.data;
-    },
-  });
+  const members = useMembers(org.id);
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["organisation", org.id] });
 
