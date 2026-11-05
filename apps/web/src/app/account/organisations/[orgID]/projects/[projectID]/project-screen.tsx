@@ -7,6 +7,7 @@ import { useId, useState, type FormEvent } from "react";
 import { AccountHeader, Banner } from "@/components/account/account-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
 import { projectColour } from "@/lib/projects";
+import { MediaSection } from "./media-section";
 import {
   can,
   client,
@@ -95,9 +96,9 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
   return (
     <>
       <Details project={project} />
+      <MediaSection project={project} canUpload={!!org && can(org, "media.upload")} />
       <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
-        Uploads, editing and renders for projects aren’t available yet. They’re the next things we’re building, and
-        they’ll appear here.
+        Editing and renders aren’t available yet. They’re next, and they’ll work from the media in this project.
       </p>
       {org && !org.personal && can(project, "project.access.manage") && <ClientAccess project={project} />}
       {can(project, "project.delete") && <DeleteProject project={project} />}

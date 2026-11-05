@@ -11,6 +11,7 @@ export type Invitation = components["schemas"]["Invitation"];
 export type Role = components["schemas"]["Role"];
 export type Project = components["schemas"]["Project"];
 export type ProjectAccess = components["schemas"]["ProjectAccess"];
+export type MediaAsset = components["schemas"]["MediaAsset"];
 
 export class NotSignedIn extends Error {}
 export class NotFound extends Error {}
