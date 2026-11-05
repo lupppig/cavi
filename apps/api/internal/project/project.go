@@ -191,6 +191,18 @@ func load(ctx context.Context, db bun.IDB, a account.Access, actorID, orgID, pro
 	return p, nil
 }
 
+// Resolve returns the caller's access and a project they can see, for
+// packages that own project resources (media, edits). Projects the caller
+// can't see are ErrNotFound. Pass forUpdate inside a transaction to lock it.
+func Resolve(ctx context.Context, db bun.IDB, actorID, orgID, projectID string, forUpdate bool) (account.Access, Project, error) {
+	a, err := access(ctx, db, actorID, orgID)
+	if err != nil {
+		return account.Access{}, Project{}, err
+	}
+	p, err := load(ctx, db, a, actorID, orgID, projectID, forUpdate)
+	return a, p, err
+}
+
 // Create makes a project (project.create). workspaceID may be empty, in
 // which case the organisation's first workspace is used.
 func (s *Service) Create(ctx context.Context, actorID, orgID, workspaceID, name, description string) (Project, error) {
