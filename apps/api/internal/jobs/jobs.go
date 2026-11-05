@@ -29,7 +29,8 @@ import (
 
 // Kinds of job.
 const (
-	KindMediaProcess = "media.process"
+	KindMediaProcess    = "media.process"
+	KindMediaTranscribe = "media.transcribe"
 )
 
 // Message is what travels over NATS. It is versioned so workers can
