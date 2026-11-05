@@ -14,7 +14,8 @@ import (
 )
 
 // openTestStore connects to the local S3-compatible store, or skips.
-// Set CAVI_TEST_STORAGE_ENDPOINT (make api-test-integration does).
+// Set CAVI_TEST_STORAGE_ENDPOINT (make api-test-integration does). It uses
+// its own bucket so the test's CORS rules don't replace the dev bucket's.
 func openTestStore(t *testing.T) *S3 {
 	t.Helper()
 	endpoint := os.Getenv("CAVI_TEST_STORAGE_ENDPOINT")
@@ -24,7 +25,7 @@ func openTestStore(t *testing.T) *S3 {
 	s := NewS3(S3Config{
 		Endpoint:        endpoint,
 		Region:          "us-east-1",
-		Bucket:          os.Getenv("CAVI_STORAGE_BUCKET"),
+		Bucket:          "cavi-integration-test",
 		AccessKeyID:     os.Getenv("CAVI_STORAGE_ACCESS_KEY_ID"),
 		SecretAccessKey: os.Getenv("CAVI_STORAGE_SECRET_ACCESS_KEY"),
 		PathStyle:       true,
