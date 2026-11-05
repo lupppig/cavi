@@ -17,23 +17,27 @@ import (
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
+	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/session"
 	"github.com/lupppig/cavi/apps/api/internal/testdb"
 )
 
-// orgWorld is a real router backed by real services and Postgres.
+// orgWorld is a real router backed by real services and Postgres. Object
+// storage is an in-memory fake (see media_test.go).
 type orgWorld struct {
 	t        *testing.T
 	router   *gin.Engine
 	accounts *account.Service
 	sessions *session.Store
+	store    *fakeStore
 }
 
 func newOrgWorld(t *testing.T) *orgWorld {
 	db := testdb.Open(t)
 	accounts := account.NewService(db)
 	sessions := session.NewStore(db, time.Hour)
+	store := newFakeStore()
 	r, err := NewRouter(Options{
 		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		DB:             fakePinger{},
@@ -41,6 +45,7 @@ func newOrgWorld(t *testing.T) *orgWorld {
 		Auth:           &AuthOptions{Provider: &fakeProvider{}, Accounts: accounts, Sessions: sessions, WebURL: webURL},
 		Organisations:  accounts,
 		Projects:       project.NewService(db),
+		Media:          media.NewService(db, store, slog.New(slog.NewTextHandler(io.Discard, nil))),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +53,7 @@ func newOrgWorld(t *testing.T) *orgWorld {
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), `DELETE FROM organisations WHERE name LIKE 'httptest-%'`)
 	})
-	return &orgWorld{t: t, router: r, accounts: accounts, sessions: sessions}
+	return &orgWorld{t: t, router: r, accounts: accounts, sessions: sessions, store: store}
 }
 
 type person struct {
