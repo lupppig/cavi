@@ -149,3 +149,42 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadWorker(t *testing.T) {
+	base := map[string]string{
+		"CAVI_ENV":                       "production",
+		"CAVI_DATABASE_URL":              "postgres://db/cavi",
+		"CAVI_NATS_URL":                  "tls://nats:4222",
+		"CAVI_STORAGE_ENDPOINT":          "https://acct.r2.cloudflarestorage.com",
+		"CAVI_STORAGE_BUCKET":            "cavi-media",
+		"CAVI_STORAGE_ACCESS_KEY_ID":     "key",
+		"CAVI_STORAGE_SECRET_ACCESS_KEY": "secret",
+		"CAVI_WORKER_CONCURRENCY":        "4",
+	}
+	w, err := LoadWorker(env(base))
+	if err != nil {
+		t.Fatalf("valid worker config rejected: %v", err)
+	}
+	if w.Concurrency != 4 || w.Storage.Bucket != "cavi-media" || w.Storage.Region != "auto" {
+		t.Errorf("worker = %+v", w)
+	}
+	for key, fragment := range map[string]string{
+		"CAVI_NATS_URL":           "CAVI_NATS_URL",
+		"CAVI_STORAGE_ENDPOINT":   "CAVI_STORAGE_ENDPOINT",
+		"CAVI_DATABASE_URL":       "CAVI_DATABASE_URL",
+		"CAVI_STORAGE_BUCKET":     "CAVI_STORAGE_BUCKET",
+		"CAVI_WORKER_CONCURRENCY": "CAVI_WORKER_CONCURRENCY",
+	} {
+		vals := map[string]string{}
+		for k, v := range base {
+			vals[k] = v
+		}
+		vals[key] = ""
+		if key == "CAVI_WORKER_CONCURRENCY" {
+			vals[key] = "0"
+		}
+		if _, err := LoadWorker(env(vals)); err == nil || !strings.Contains(err.Error(), fragment) {
+			t.Errorf("without %s: err = %v", key, err)
+		}
+	}
+}

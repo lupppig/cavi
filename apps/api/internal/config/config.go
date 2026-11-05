@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -82,15 +83,7 @@ func Load(getenv func(string) string) (Config, error) {
 		WorkOSClientID:  getenv("WORKOS_CLIENT_ID"),
 		SessionTTL:      30 * 24 * time.Hour,
 		NATSURL:         getenv("CAVI_NATS_URL"),
-		Storage: Storage{
-			Endpoint:        strings.TrimRight(getenv("CAVI_STORAGE_ENDPOINT"), "/"),
-			PublicEndpoint:  strings.TrimRight(getenv("CAVI_STORAGE_PUBLIC_ENDPOINT"), "/"),
-			Region:          valueOr(getenv("CAVI_STORAGE_REGION"), "auto"),
-			Bucket:          getenv("CAVI_STORAGE_BUCKET"),
-			AccessKeyID:     getenv("CAVI_STORAGE_ACCESS_KEY_ID"),
-			SecretAccessKey: getenv("CAVI_STORAGE_SECRET_ACCESS_KEY"),
-			PathStyle:       getenv("CAVI_STORAGE_PATH_STYLE") == "true",
-		},
+		Storage:         loadStorage(getenv),
 	}
 	if cfg.Env == EnvDevelopment {
 		cfg.PublicAPIURL = valueOr(cfg.PublicAPIURL, "http://localhost:8080")
@@ -163,6 +156,71 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, errors.Join(errs...)
 	}
 	return cfg, nil
+}
+
+// Worker is configuration for background workers. Workers need the
+// database, object storage and NATS, but not sign-in or HTTP settings.
+type Worker struct {
+	Env         string
+	DatabaseURL string
+	NATSURL     string
+	Storage     Storage
+	// Concurrency is how many jobs run at once (CAVI_WORKER_CONCURRENCY,
+	// default 2).
+	Concurrency int
+}
+
+// LoadWorker reads worker configuration. Storage and NATS are required in
+// every environment: a worker without them can't do anything.
+func LoadWorker(getenv func(string) string) (Worker, error) {
+	w := Worker{
+		Env:         valueOr(getenv("CAVI_ENV"), EnvDevelopment),
+		DatabaseURL: getenv("CAVI_DATABASE_URL"),
+		NATSURL:     getenv("CAVI_NATS_URL"),
+		Storage:     loadStorage(getenv),
+		Concurrency: 2,
+	}
+	var errs []error
+	switch w.Env {
+	case EnvDevelopment, EnvPreview, EnvStaging, EnvProduction:
+	default:
+		errs = append(errs, fmt.Errorf("CAVI_ENV must be one of development, preview, staging, production; got %q", w.Env))
+	}
+	if w.DatabaseURL == "" {
+		errs = append(errs, errors.New("CAVI_DATABASE_URL is required"))
+	}
+	if w.NATSURL == "" {
+		errs = append(errs, errors.New("CAVI_NATS_URL is required"))
+	}
+	if w.Storage.Endpoint == "" {
+		errs = append(errs, errors.New("CAVI_STORAGE_ENDPOINT is required"))
+	} else {
+		errs = append(errs, validateStorage(Config{Env: w.Env, Storage: w.Storage})...)
+	}
+	if raw := getenv("CAVI_WORKER_CONCURRENCY"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 64 {
+			errs = append(errs, fmt.Errorf("CAVI_WORKER_CONCURRENCY must be between 1 and 64; got %q", raw))
+		} else {
+			w.Concurrency = n
+		}
+	}
+	if len(errs) > 0 {
+		return Worker{}, errors.Join(errs...)
+	}
+	return w, nil
+}
+
+func loadStorage(getenv func(string) string) Storage {
+	return Storage{
+		Endpoint:        strings.TrimRight(getenv("CAVI_STORAGE_ENDPOINT"), "/"),
+		PublicEndpoint:  strings.TrimRight(getenv("CAVI_STORAGE_PUBLIC_ENDPOINT"), "/"),
+		Region:          valueOr(getenv("CAVI_STORAGE_REGION"), "auto"),
+		Bucket:          getenv("CAVI_STORAGE_BUCKET"),
+		AccessKeyID:     getenv("CAVI_STORAGE_ACCESS_KEY_ID"),
+		SecretAccessKey: getenv("CAVI_STORAGE_SECRET_ACCESS_KEY"),
+		PathStyle:       getenv("CAVI_STORAGE_PATH_STYLE") == "true",
+	}
 }
 
 func validateStorage(cfg Config) []error {

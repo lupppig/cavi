@@ -52,6 +52,29 @@ services:
       timeout: 3s
       retries: 30
 
+  # Media worker (FFmpeg). Local development runs it in Docker so FFmpeg
+  # doesn't need installing; start it with `make media-worker`.
+  media-worker:
+    profiles: ["workers"]
+    build:
+      context: ../../apps/api
+      dockerfile: Dockerfile.media-worker
+    environment:
+      CAVI_ENV: development
+      CAVI_DATABASE_URL: postgres://cavi:cavi_local_dev@postgres:5432/cavi?sslmode=disable
+      CAVI_NATS_URL: nats://nats:4222
+      CAVI_STORAGE_ENDPOINT: http://storage:8333
+      CAVI_STORAGE_REGION: us-east-1
+      CAVI_STORAGE_BUCKET: cavi-media
+      CAVI_STORAGE_ACCESS_KEY_ID: cavi_local_access
+      CAVI_STORAGE_SECRET_ACCESS_KEY: cavi_local_secret_dev_only
+      CAVI_STORAGE_PATH_STYLE: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      storage: { condition: service_healthy }
+      nats: { condition: service_healthy }
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   storage-data:

@@ -1,0 +1,15 @@
+# Media worker: Go binary plus FFmpeg. Build from apps/api:
+#   docker build -f Dockerfile.media-worker -t cavi-media-worker .
+FROM golang:1.26.8-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/media-worker ./cmd/media-worker
+
+FROM alpine:3.22
+RUN apk add --no-cache ffmpeg ca-certificates \
+    && adduser -D -H -u 10001 worker
+USER worker
+COPY --from=build /out/media-worker /usr/local/bin/media-worker
+ENTRYPOINT ["media-worker"]

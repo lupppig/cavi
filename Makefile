@@ -4,7 +4,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infrastructure/docker/docker-compose.yml
 API_DIR := apps/api
 
-.PHONY: help setup db-up db-down db-reset storage-setup migrate-up migrate-down migrate-status api api-build api-test api-test-integration api-vet contracts contracts-check web web-build web-lint web-typecheck check
+.PHONY: help setup db-up db-down db-reset storage-setup media-worker media-worker-logs migrate-up migrate-down migrate-status api api-build api-test api-test-integration api-vet contracts contracts-check web web-build web-lint web-typecheck check
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
@@ -19,10 +19,16 @@ db-up: ## Start local Postgres, object storage and NATS and wait until healthy
 	$(COMPOSE) up -d --wait postgres storage nats
 
 db-down: ## Stop local services (keeps data)
-	$(COMPOSE) down
+	$(COMPOSE) --profile workers down
 
 db-reset: ## Stop local services and delete their data
-	$(COMPOSE) down -v
+	$(COMPOSE) --profile workers down -v
+
+media-worker: ## Build and start the media worker (FFmpeg) in Docker (needs db-up)
+	$(COMPOSE) --profile workers up -d --build media-worker
+
+media-worker-logs: ## Follow the media worker's logs
+	$(COMPOSE) --profile workers logs -f media-worker
 
 storage-setup: ## Create the media bucket and allow browser uploads (needs db-up)
 	cd $(API_DIR) && set -a && source .env && set +a && go run ./cmd/storage-setup
