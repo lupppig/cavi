@@ -165,20 +165,24 @@ type Worker struct {
 	DatabaseURL string
 	NATSURL     string
 	Storage     Storage
-	// Concurrency is how many jobs run at once (CAVI_WORKER_CONCURRENCY,
-	// default 2).
+	// Concurrency is how many jobs of each kind run at once
+	// (CAVI_WORKER_CONCURRENCY, default 2).
 	Concurrency int
+	// GeminiAPIKey enables transcription. Without it the worker only does
+	// media processing and transcription jobs wait.
+	GeminiAPIKey string
 }
 
 // LoadWorker reads worker configuration. Storage and NATS are required in
 // every environment: a worker without them can't do anything.
 func LoadWorker(getenv func(string) string) (Worker, error) {
 	w := Worker{
-		Env:         valueOr(getenv("CAVI_ENV"), EnvDevelopment),
-		DatabaseURL: getenv("CAVI_DATABASE_URL"),
-		NATSURL:     getenv("CAVI_NATS_URL"),
-		Storage:     loadStorage(getenv),
-		Concurrency: 2,
+		Env:          valueOr(getenv("CAVI_ENV"), EnvDevelopment),
+		DatabaseURL:  getenv("CAVI_DATABASE_URL"),
+		NATSURL:      getenv("CAVI_NATS_URL"),
+		Storage:      loadStorage(getenv),
+		Concurrency:  2,
+		GeminiAPIKey: getenv("GEMINI_API_KEY"),
 	}
 	var errs []error
 	switch w.Env {

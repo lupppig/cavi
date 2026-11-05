@@ -69,6 +69,8 @@ services:
       CAVI_STORAGE_ACCESS_KEY_ID: cavi_local_access
       CAVI_STORAGE_SECRET_ACCESS_KEY: cavi_local_secret_dev_only
       CAVI_STORAGE_PATH_STYLE: "true"
+      # From apps/api/.env via make media-worker; empty disables transcription.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     depends_on:
       postgres: { condition: service_healthy }
       storage: { condition: service_healthy }

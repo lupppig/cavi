@@ -24,8 +24,8 @@ db-down: ## Stop local services (keeps data)
 db-reset: ## Stop local services and delete their data
 	$(COMPOSE) --profile workers down -v
 
-media-worker: ## Build and start the media worker (FFmpeg) in Docker (needs db-up)
-	$(COMPOSE) --profile workers up -d --build media-worker
+media-worker: ## Build and start the media worker (FFmpeg, transcription) in Docker (needs db-up)
+	set -a && source $(API_DIR)/.env && set +a && $(COMPOSE) --profile workers up -d --build media-worker
 
 media-worker-logs: ## Follow the media worker's logs
 	$(COMPOSE) --profile workers logs -f media-worker
