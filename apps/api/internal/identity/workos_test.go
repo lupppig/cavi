@@ -2,8 +2,11 @@ package identity
 
 import (
 	"encoding/base64"
+	"errors"
 	"net/url"
 	"testing"
+
+	"github.com/workos/workos-go/v6/pkg/usermanagement"
 )
 
 func jwt(payload string) string {
@@ -33,7 +36,7 @@ func TestSessionIDFromAccessToken(t *testing.T) {
 
 func TestAuthorizationURL(t *testing.T) {
 	w := NewWorkOS("sk_test_x", "client_abc", "http://localhost:8080/api/v1/auth/callback", "http://localhost:3001/")
-	raw, err := w.AuthorizationURL("state-xyz", ScreenSignUp)
+	raw, err := w.AuthorizationURL("state-xyz")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,9 +48,8 @@ func TestAuthorizationURL(t *testing.T) {
 	for k, want := range map[string]string{
 		"client_id":     "client_abc",
 		"redirect_uri":  "http://localhost:8080/api/v1/auth/callback",
-		"provider":      "authkit",
+		"provider":      "GoogleOAuth",
 		"state":         "state-xyz",
-		"screen_hint":   "sign-up",
 		"response_type": "code",
 	} {
 		if got := q.Get(k); got != want {
@@ -56,6 +58,25 @@ func TestAuthorizationURL(t *testing.T) {
 	}
 	if q.Get("client_secret") != "" || q.Get("api_key") != "" {
 		t.Error("secret leaked into authorization URL")
+	}
+}
+
+func TestProfileFromAcceptsOnlyGoogle(t *testing.T) {
+	user := usermanagement.User{ID: "user_1", Email: "a@example.com", EmailVerified: true, FirstName: "Ana"}
+	p, err := profileFrom(usermanagement.AuthenticateResponse{User: user, AuthenticationMethod: usermanagement.GoogleOAuth})
+	if err != nil || p.ProviderUserID != "user_1" || !p.EmailVerified || p.FirstName != "Ana" {
+		t.Fatalf("google: %+v, %v", p, err)
+	}
+	for _, m := range []usermanagement.AuthenticationMethod{
+		usermanagement.Password, usermanagement.MagicAuthAuthenticationMethod, usermanagement.GitHubOAuth,
+		usermanagement.SSO, usermanagement.Impersonation, "",
+	} {
+		if _, err := profileFrom(usermanagement.AuthenticateResponse{User: user, AuthenticationMethod: m}); !errors.Is(err, ErrAuthenticationFailed) {
+			t.Errorf("method %q: err = %v, want ErrAuthenticationFailed", m, err)
+		}
+	}
+	if _, err := profileFrom(usermanagement.AuthenticateResponse{AuthenticationMethod: usermanagement.GoogleOAuth}); !errors.Is(err, ErrAuthenticationFailed) {
+		t.Errorf("missing user: err = %v", err)
 	}
 }
 

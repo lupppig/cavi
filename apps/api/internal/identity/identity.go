@@ -10,14 +10,9 @@ import (
 	"errors"
 )
 
-// Screen hints for the hosted sign-in page.
-const (
-	ScreenSignIn = "sign-in"
-	ScreenSignUp = "sign-up"
-)
-
 // ErrAuthenticationFailed means the provider rejected the authorization
-// code (expired, reused, or forged).
+// code (expired, reused, or forged), or the person signed in with a method
+// CAVI does not accept.
 var ErrAuthenticationFailed = errors.New("identity: authentication failed")
 
 // Profile is a verified identity returned after sign-in.
@@ -33,9 +28,9 @@ type Profile struct {
 
 // Provider is the identity provider used for sign-in and sign-out.
 type Provider interface {
-	// AuthorizationURL returns the hosted sign-in URL. state is echoed back
-	// to the callback and must be verified there.
-	AuthorizationURL(state, screenHint string) (string, error)
+	// AuthorizationURL returns the URL that starts sign-in. state is echoed
+	// back to the callback and must be verified there.
+	AuthorizationURL(state string) (string, error)
 	// Authenticate exchanges an authorization code for a verified profile.
 	Authenticate(ctx context.Context, code, ipAddress, userAgent string) (Profile, error)
 	// LogoutURL ends the provider's session and then returns the user to CAVI.

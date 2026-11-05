@@ -77,7 +77,10 @@ export interface paths {
         /**
          * Start sign-in
          * @description Browser navigation, not an XHR. Sets a short-lived state cookie and
-         *     redirects to the hosted sign-in page.
+         *     redirects to Google sign-in (via WorkOS). Google is the only
+         *     supported sign-in method; sign-in and sign-up are the same flow, and
+         *     the first sign-in creates the account. Callbacks from any other
+         *     method are refused with `auth_error=sign_in_failed`.
          */
         get: operations["startSignIn"];
         put?: never;
@@ -665,16 +668,14 @@ export interface operations {
     };
     startSignIn: {
         parameters: {
-            query?: {
-                screen?: "sign-in" | "sign-up";
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Redirect to the hosted sign-in page. */
+            /** @description Redirect to Google sign-in. */
             302: {
                 headers: {
                     [name: string]: unknown;

@@ -85,18 +85,14 @@ paths:
       summary: Start sign-in
       description: |
         Browser navigation, not an XHR. Sets a short-lived state cookie and
-        redirects to the hosted sign-in page.
+        redirects to Google sign-in (via WorkOS). Google is the only
+        supported sign-in method; sign-in and sign-up are the same flow, and
+        the first sign-in creates the account. Callbacks from any other
+        method are refused with `auth_error=sign_in_failed`.
       tags: [auth]
-      parameters:
-        - name: screen
-          in: query
-          required: false
-          schema:
-            type: string
-            enum: [sign-in, sign-up]
       responses:
         "302":
-          description: Redirect to the hosted sign-in page.
+          description: Redirect to Google sign-in.
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 

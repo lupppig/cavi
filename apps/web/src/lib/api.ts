@@ -6,6 +6,7 @@ export const apiBaseUrl = process.env.NEXT_PUBLIC_CAVI_API_URL ?? "";
 /** Typed API client, or null when the API URL is not configured. */
 export const api = apiBaseUrl ? createApiClient(apiBaseUrl) : null;
 
-export function signInHref(screen: "sign-in" | "sign-up" = "sign-in") {
-  return apiBaseUrl ? signInUrl(apiBaseUrl, screen) : "#";
+/** Starts Google sign-in, the only supported method. */
+export function signInHref() {
+  return apiBaseUrl ? signInUrl(apiBaseUrl) : "#";
 }

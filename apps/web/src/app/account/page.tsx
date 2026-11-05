@@ -5,14 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useState, useSyncExternalStore, type FormEvent } from "react";
 import { AccountHeader, Banner } from "@/components/account/account-header";
-import { signInHref } from "@/lib/api";
+import { GoogleSignIn } from "@/components/account/google-sign-in";
 import {
   client,
   displayName,
   initials,
   NotSignedIn,
   raise,
-
   useMe,
   useMyInvitations,
   type Invitation,
@@ -22,7 +21,7 @@ import {
 const authErrors: Record<string, string> = {
   cancelled: "Sign-in was cancelled. You can try again whenever you’re ready.",
   invalid_state: "That sign-in link expired or was opened in a different browser. Please start again.",
-  sign_in_failed: "We couldn’t sign you in. Please try again.",
+  sign_in_failed: "We couldn’t sign you in with Google. Please try again.",
 };
 
 // The ?auth_error code captured when the page first loads. Cached so it
@@ -89,16 +88,10 @@ function SignedOut() {
     <div className="sticker-lg rounded-[28px] bg-sun p-6 sm:p-10">
       <h1 className="text-4xl leading-tight font-extrabold tracking-tight sm:text-5xl">You’re not signed in</h1>
       <p className="mt-3 max-w-xl text-lg font-medium">
-        Sign in to see your account and workspaces. New here? Creating an account takes a few seconds.
+        Sign in with your Google account to see your account and workspaces. New here? Your account is
+        created the first time you sign in.
       </p>
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-        <a href={signInHref("sign-in")} className="btn-pop flex min-h-12 items-center justify-center rounded-2xl bg-cobalt px-6 font-extrabold text-white">
-          Sign in
-        </a>
-        <a href={signInHref("sign-up")} className="btn-pop flex min-h-12 items-center justify-center rounded-2xl bg-white px-6 font-extrabold">
-          Create an account
-        </a>
-      </div>
+      <GoogleSignIn className="mt-8 w-full sm:w-auto" />
     </div>
   );
 }

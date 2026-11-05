@@ -34,21 +34,19 @@ func NewWorkOS(apiKey, clientID, redirectURI, returnTo string) *WorkOS {
 	}
 }
 
-// AuthorizationURL implements Provider.
-func (w *WorkOS) AuthorizationURL(state, screenHint string) (string, error) {
-	opts := usermanagement.GetAuthorizationURLOpts{
+// CAVI accepts Google sign-in only. Sign-in and sign-up are the same flow:
+// the first Google sign-in creates the account.
+const signInMethod = usermanagement.GoogleOAuth
+
+// AuthorizationURL implements Provider. It sends the browser straight to
+// Google (through WorkOS) rather than to the AuthKit hosted page.
+func (w *WorkOS) AuthorizationURL(state string) (string, error) {
+	u, err := w.client.GetAuthorizationURL(usermanagement.GetAuthorizationURLOpts{
 		ClientID:    w.clientID,
 		RedirectURI: w.redirectURI,
-		Provider:    "authkit",
+		Provider:    string(signInMethod),
 		State:       state,
-	}
-	switch screenHint {
-	case ScreenSignUp:
-		opts.ScreenHint = usermanagement.SignUp
-	case ScreenSignIn:
-		opts.ScreenHint = usermanagement.SignIn
-	}
-	u, err := w.client.GetAuthorizationURL(opts)
+	})
 	if err != nil {
 		return "", fmt.Errorf("workos authorization url: %w", err)
 	}
@@ -69,6 +67,16 @@ func (w *WorkOS) Authenticate(ctx context.Context, code, ipAddress, userAgent st
 			return Profile{}, fmt.Errorf("%w: %s", ErrAuthenticationFailed, httpErr.Message)
 		}
 		return Profile{}, fmt.Errorf("workos authenticate: %w", err)
+	}
+	return profileFrom(res)
+}
+
+// profileFrom validates an authenticate response. The AuthKit hosted page
+// can be reached without going through CAVI's login URL, so the method is
+// checked here too: anything other than Google is refused.
+func profileFrom(res usermanagement.AuthenticateResponse) (Profile, error) {
+	if res.AuthenticationMethod != signInMethod {
+		return Profile{}, fmt.Errorf("%w: unsupported sign-in method %q", ErrAuthenticationFailed, res.AuthenticationMethod)
 	}
 	if res.User.ID == "" || res.User.Email == "" {
 		return Profile{}, fmt.Errorf("%w: response missing user", ErrAuthenticationFailed)

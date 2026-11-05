@@ -92,7 +92,7 @@ func (h authHandler) webRedirect(c *gin.Context, path, authError string) {
 }
 
 // login starts sign-in: it sets a one-time state cookie and redirects to
-// the hosted sign-in page.
+// Google (via the identity provider). Sign-in and sign-up are one flow.
 func (h authHandler) login(c *gin.Context) {
 	if !h.configured(c) {
 		return
@@ -102,11 +102,7 @@ func (h authHandler) login(c *gin.Context) {
 		writeError(c, http.StatusInternalServerError, CodeInternal, "Could not start sign-in.")
 		return
 	}
-	screen := c.Query("screen")
-	if screen != identity.ScreenSignUp {
-		screen = identity.ScreenSignIn
-	}
-	target, err := h.opts.Provider.AuthorizationURL(state, screen)
+	target, err := h.opts.Provider.AuthorizationURL(state)
 	if err != nil {
 		h.logger.ErrorContext(c.Request.Context(), "authorization url failed",
 			slog.String("request_id", requestIDFrom(c)), slog.String("error", err.Error()))

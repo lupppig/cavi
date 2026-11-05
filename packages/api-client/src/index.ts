@@ -16,9 +16,9 @@ export function createApiClient(baseUrl: string) {
   return createFetchClient<paths>({ baseUrl, credentials: "include" });
 }
 
-/** URL that starts browser sign-in (a navigation, not a fetch). */
-export function signInUrl(baseUrl: string, screen: "sign-in" | "sign-up" = "sign-in") {
-  return `${baseUrl.replace(/\/$/, "")}/api/v1/auth/login?screen=${screen}`;
+/** URL that starts Google sign-in (a navigation, not a fetch). */
+export function signInUrl(baseUrl: string) {
+  return `${baseUrl.replace(/\/$/, "")}/api/v1/auth/login`;
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;

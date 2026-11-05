@@ -21,14 +21,13 @@ import (
 const webURL = "http://localhost:3001"
 
 type fakeProvider struct {
-	lastState  string
-	lastScreen string
-	authErr    error
-	profile    identity.Profile
+	lastState string
+	authErr   error
+	profile   identity.Profile
 }
 
-func (f *fakeProvider) AuthorizationURL(state, screen string) (string, error) {
-	f.lastState, f.lastScreen = state, screen
+func (f *fakeProvider) AuthorizationURL(state string) (string, error) {
+	f.lastState = state
 	return "https://auth.example.com/authorize?state=" + url.QueryEscape(state), nil
 }
 
@@ -158,7 +157,7 @@ func (f *authFixture) signIn(t *testing.T) *http.Cookie {
 
 func TestLoginRedirectsWithStateCookie(t *testing.T) {
 	f := newAuthFixture()
-	rec := do(t, f.router, httptest.NewRequest(http.MethodGet, "/api/v1/auth/login?screen=sign-up", nil))
+	rec := do(t, f.router, httptest.NewRequest(http.MethodGet, "/api/v1/auth/login", nil))
 	if rec.Code != http.StatusFound {
 		t.Fatalf("status = %d", rec.Code)
 	}
@@ -169,16 +168,8 @@ func TestLoginRedirectsWithStateCookie(t *testing.T) {
 	if !c.HttpOnly || !c.Secure || c.SameSite != http.SameSiteLaxMode || c.Path != "/api/v1/auth" {
 		t.Errorf("state cookie flags = %+v", c)
 	}
-	if f.provider.lastScreen != identity.ScreenSignUp {
-		t.Errorf("screen = %q", f.provider.lastScreen)
-	}
 	if !strings.HasPrefix(rec.Header().Get("Location"), "https://auth.example.com/authorize") {
 		t.Errorf("location = %s", rec.Header().Get("Location"))
-	}
-
-	do(t, f.router, httptest.NewRequest(http.MethodGet, "/api/v1/auth/login?screen=evil", nil))
-	if f.provider.lastScreen != identity.ScreenSignIn {
-		t.Errorf("unknown screen hint passed through: %q", f.provider.lastScreen)
 	}
 }
 

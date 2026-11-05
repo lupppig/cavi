@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 import { AccountHeader, Banner } from "@/components/account/account-header";
-import { signInHref } from "@/lib/api";
+import { GoogleSignIn } from "@/components/account/google-sign-in";
 import {
   client,
   displayName,
@@ -61,9 +61,7 @@ export function OrganisationScreen() {
         {org.isError && org.error instanceof NotSignedIn && (
           <div className="sticker-lg rounded-[28px] bg-sun p-6 sm:p-8">
             <h1 className="text-3xl font-extrabold">Sign in to see this organisation</h1>
-            <a href={signInHref()} className="btn-pop mt-6 inline-flex min-h-12 items-center rounded-2xl bg-cobalt px-6 font-extrabold text-white">
-              Sign in
-            </a>
+            <GoogleSignIn className="mt-6 w-full sm:w-auto" />
           </div>
         )}
         {org.isError && org.error instanceof NotFound && (
