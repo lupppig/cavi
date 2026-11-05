@@ -905,6 +905,145 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript:
+    get:
+      operationId: getTranscript
+      summary: Get a file's transcript
+      description: |
+        Anyone who can see the project can read it. 404 when the file has
+        never been transcribed. Segments are present once `status` is `ready`.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      responses:
+        "200":
+          description: The transcript.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcript"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      operationId: requestTranscript
+      summary: Transcribe a file's speech
+      description: |
+        Requires `editing.manage`. The file must be processed, have audio
+        and be at most 3 hours long (`validation_failed` on `media`
+        otherwise). The audio is sent to the organisation's chosen AI
+        provider and model (see `ai-models`); the choice is fixed on the
+        transcript and recorded in the audit log. Requesting again after a
+        transcript is ready or failed replaces it;
+        `transcription_in_progress` (409) while one is queued or running.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      responses:
+        "202":
+          description: Transcription queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcript"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/ai-models:
+    get:
+      operationId: listAIModelSettings
+      summary: List the organisation's AI model per task
+      description: |
+        Any member can read them. Each task shows the model in use, whether
+        the organisation chose it (`custom`) or it's the platform default,
+        and the supported options.
+      tags: [ai]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: Settings per task.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIModelSettingList"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/ai-models/{task}:
+    put:
+      operationId: setAIModel
+      summary: Choose the organisation's model for a task
+      description: |
+        Requires `organisation.manage`. Only supported models are accepted;
+        an empty `model` returns to the platform default. Work already
+        requested keeps the model it was requested with.
+      tags: [ai]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - name: task
+          in: path
+          required: true
+          schema: { type: string, enum: [transcription] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetAIModelRequest"
+      responses:
+        "204":
+          description: Saved.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/invitations:
     get:
       operationId: listMyInvitations
@@ -1365,6 +1504,69 @@ components:
               additionalProperties: { type: string }
             expires_at: { type: string, format: date-time }
 
+    Transcript:
+      type: object
+      required: [id, media_asset_id, status, provider, model, model_label, prompt_version, language, error, requested_at, completed_at, segments]
+      properties:
+        id: { type: string, format: uuid }
+        media_asset_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, running, ready, failed] }
+        provider: { type: string, description: AI provider the audio was sent to. }
+        model: { type: string }
+        model_label: { type: string }
+        prompt_version: { type: string }
+        language: { type: [string, "null"], description: BCP-47 code of the main spoken language. }
+        error: { type: [string, "null"], description: User-facing reason when failed. }
+        requested_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        segments:
+          type: array
+          description: |
+            Speech in order. Speaker labels are per transcript; for media over
+            10 minutes they may not match across 10-minute sections.
+          items:
+            type: object
+            required: [start_ms, end_ms, speaker, text]
+            properties:
+              start_ms: { type: integer, format: int64 }
+              end_ms: { type: integer, format: int64 }
+              speaker: { type: string }
+              text: { type: string }
+
+    AIModel:
+      type: object
+      required: [provider, id, label, default]
+      properties:
+        provider: { type: string }
+        id: { type: string }
+        label: { type: string }
+        default: { type: boolean, description: The platform default for the task. }
+
+    AIModelSettingList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [task, model, custom, options]
+            properties:
+              task: { type: string, enum: [transcription] }
+              model: { $ref: "#/components/schemas/AIModel" }
+              custom: { type: boolean }
+              options:
+                type: array
+                items: { $ref: "#/components/schemas/AIModel" }
+
+    SetAIModelRequest:
+      type: object
+      required: [provider, model]
+      additionalProperties: false
+      properties:
+        provider: { type: string }
+        model: { type: string, description: Empty to use the platform default. }
+
     ErrorResponse:
       type: object
       required: [error]
@@ -1394,6 +1596,7 @@ components:
             - upload_incomplete
             - upload_rejected
             - processing_in_progress
+            - transcription_in_progress
             - not_found
             - method_not_allowed
             - internal_error
@@ -1429,7 +1632,7 @@ components:
       description: |
         The request conflicts with the resource's state. `error.code` is one of
         `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
-        `upload_incomplete` or `processing_in_progress`.
+        `upload_incomplete`, `processing_in_progress` or `transcription_in_progress`.
       content:
         application/json:
           schema:

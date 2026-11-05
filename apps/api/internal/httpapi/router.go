@@ -20,6 +20,7 @@ type Options struct {
 	Organisations  OrganisationService
 	Projects       ProjectService
 	Media          MediaService
+	AISettings     AISettingsService
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
 	// is trusted when determining the client IP. Empty trusts none.
@@ -127,6 +128,13 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	med.DELETE("/:assetID", mediaH.delete)
 	med.POST("/:assetID/complete", mediaH.complete)
 	med.POST("/:assetID/process", mediaH.reprocess)
+	med.GET("/:assetID/transcript", mediaH.transcript)
+	med.POST("/:assetID/transcript", mediaH.requestTranscript)
+
+	aiH := aiHandler{svc: opts.AISettings, orgHandler: orgs}
+	aiGroup := signedIn.Group("/organisations/:orgID/ai-models", requireService(opts.AISettings != nil))
+	aiGroup.GET("", aiH.settings)
+	aiGroup.PUT("/:task", aiH.setModel)
 
 	return r, nil
 }

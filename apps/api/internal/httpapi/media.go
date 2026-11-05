@@ -21,6 +21,8 @@ type MediaService interface {
 	Get(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, assetID string) error
 	Reprocess(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
+	RequestTranscript(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Transcript, error)
+	Transcript(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Transcript, error)
 }
 
 type mediaHandler struct {
@@ -128,6 +130,8 @@ func (h mediaHandler) fail(c *gin.Context, err error) {
 	switch {
 	case errors.As(err, &rejected):
 		writeError(c, http.StatusUnprocessableEntity, CodeUploadRejected, rejected.Reason)
+	case errors.Is(err, media.ErrTranscriptionInProgress):
+		writeError(c, http.StatusConflict, CodeTranscriptionInProgress, "This file is already being transcribed.")
 	case errors.Is(err, media.ErrProcessingInProgress):
 		writeError(c, http.StatusConflict, CodeProcessingInProgress, "This file is already being processed.")
 	case errors.Is(err, media.ErrNotReceived):
@@ -222,4 +226,62 @@ func (h mediaHandler) reprocess(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusAccepted, toAssetResponse(a))
+}
+
+type segmentResponse struct {
+	StartMS int64  `json:"start_ms"`
+	EndMS   int64  `json:"end_ms"`
+	Speaker string `json:"speaker"`
+	Text    string `json:"text"`
+}
+
+type transcriptResponse struct {
+	ID            string            `json:"id"`
+	MediaAssetID  string            `json:"media_asset_id"`
+	Status        string            `json:"status"`
+	Provider      string            `json:"provider"`
+	Model         string            `json:"model"`
+	ModelLabel    string            `json:"model_label"`
+	PromptVersion string            `json:"prompt_version"`
+	Language      *string           `json:"language"`
+	Error         *string           `json:"error"`
+	RequestedAt   string            `json:"requested_at"`
+	CompletedAt   *string           `json:"completed_at"`
+	Segments      []segmentResponse `json:"segments"`
+}
+
+func toTranscriptResponse(t media.Transcript) transcriptResponse {
+	r := transcriptResponse{
+		ID: t.ID, MediaAssetID: t.MediaAssetID, Status: t.Status, Provider: t.Provider, Model: t.Model,
+		ModelLabel: t.ModelLabel, PromptVersion: t.PromptVersion, Language: ptr(t.Language), Error: ptr(t.Error),
+		RequestedAt: ts(t.CreatedAt), Segments: make([]segmentResponse, len(t.Segments)),
+	}
+	if !t.CompletedAt.IsZero() && t.Status == media.TranscriptReady {
+		c := ts(t.CompletedAt)
+		r.CompletedAt = &c
+	}
+	for i, s := range t.Segments {
+		r.Segments[i] = segmentResponse{StartMS: s.StartMS, EndMS: s.EndMS, Speaker: s.Speaker, Text: s.Text}
+	}
+	return r
+}
+
+func (h mediaHandler) requestTranscript(c *gin.Context) {
+	t, err := h.svc.RequestTranscript(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusAccepted, toTranscriptResponse(t))
+}
+
+func (h mediaHandler) transcript(c *gin.Context) {
+	t, err := h.svc.Transcript(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, toTranscriptResponse(t))
 }

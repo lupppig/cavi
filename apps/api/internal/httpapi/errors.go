@@ -42,10 +42,12 @@ const (
 	CodeUploadRejected   = "upload_rejected"
 	// CodeProcessingInProgress: the file is already queued or processing.
 	CodeProcessingInProgress = "processing_in_progress"
-	CodeNotFound             = "not_found"
-	CodeMethodNotAllowed     = "method_not_allowed"
-	CodeInternal             = "internal_error"
-	CodeUnavailable          = "service_unavailable"
+	// CodeTranscriptionInProgress: a transcript is already queued or running.
+	CodeTranscriptionInProgress = "transcription_in_progress"
+	CodeNotFound                = "not_found"
+	CodeMethodNotAllowed        = "method_not_allowed"
+	CodeInternal                = "internal_error"
+	CodeUnavailable             = "service_unavailable"
 )
 
 func writeError(c *gin.Context, status int, code, message string) {

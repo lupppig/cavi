@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
+	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/config"
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/httpapi"
@@ -105,6 +106,7 @@ func run() error {
 		Organisations:  accounts,
 		Projects:       project.NewService(db),
 		Media:          mediaService,
+		AISettings:     ai.NewSettingsService(db),
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,
 		Debug:          cfg.Env == config.EnvDevelopment,

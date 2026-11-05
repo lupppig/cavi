@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
+	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
 	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
@@ -46,6 +47,7 @@ func newOrgWorld(t *testing.T) *orgWorld {
 		Organisations:  accounts,
 		Projects:       project.NewService(db),
 		Media:          media.NewService(db, store, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		AISettings:     ai.NewSettingsService(db),
 	})
 	if err != nil {
 		t.Fatal(err)

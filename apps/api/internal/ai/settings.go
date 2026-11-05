@@ -104,3 +104,19 @@ func SetModel(ctx context.Context, db *bun.DB, actorID, orgID, task, provider, m
 			map[string]any{"task": task, "provider": provider, "model": modelID})
 	})
 }
+
+// SettingsService exposes model settings to the HTTP layer.
+type SettingsService struct{ db *bun.DB }
+
+// NewSettingsService returns a SettingsService.
+func NewSettingsService(db *bun.DB) *SettingsService { return &SettingsService{db: db} }
+
+// Settings implements reading an organisation's model settings.
+func (s *SettingsService) Settings(ctx context.Context, actorID, orgID string) ([]TaskSetting, error) {
+	return Settings(ctx, s.db, actorID, orgID)
+}
+
+// SetModel implements changing an organisation's model for a task.
+func (s *SettingsService) SetModel(ctx context.Context, actorID, orgID, task, provider, modelID string) error {
+	return SetModel(ctx, s.db, actorID, orgID, task, provider, modelID)
+}

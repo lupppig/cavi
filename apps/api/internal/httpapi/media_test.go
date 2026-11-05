@@ -121,6 +121,37 @@ func TestMediaOverHTTP(t *testing.T) {
 	expect(t, w.call(ana, "POST", base+"/"+bad.Asset.ID+"/complete", ""), http.StatusUnprocessableEntity, CodeUploadRejected)
 	expect(t, w.call(ana, "GET", base+"/"+bad.Asset.ID, ""), http.StatusNotFound, CodeNotFound)
 
+	// Transcription waits for processing, and nothing exists yet.
+	expect(t, w.call(ana, "GET", one+"/transcript", ""), http.StatusNotFound, CodeNotFound)
+	rec = w.call(ana, "POST", one+"/transcript", "")
+	expect(t, rec, http.StatusUnprocessableEntity, CodeValidation)
+	if f := decodeError(t, rec).Fields; len(f) != 1 || f[0].Field != "media" {
+		t.Fatalf("fields = %+v", f)
+	}
+	expect(t, w.call(eve, "POST", one+"/transcript", ""), http.StatusNotFound, CodeNotFound)
+
 	expect(t, w.call(ana, "DELETE", one, ""), http.StatusNoContent, "")
 	expect(t, w.call(ana, "GET", one, ""), http.StatusNotFound, CodeNotFound)
+}
+
+func TestAIModelSettingsOverHTTP(t *testing.T) {
+	w := newOrgWorld(t)
+	ana, eve := w.person("ana"), w.person("eve")
+	org := decode[organisationResponse](t, w.call(ana, "POST", "/api/v1/organisations", `{"name":"httptest-ai"}`))
+	base := "/api/v1/organisations/" + org.ID + "/ai-models"
+
+	list := decode[listResponse[aiTaskSettingResponse]](t, w.call(ana, "GET", base, ""))
+	if len(list.Data) != 1 || list.Data[0].Task != "transcription" || list.Data[0].Custom || !list.Data[0].Model.Default || len(list.Data[0].Options) < 2 {
+		t.Fatalf("settings = %+v", list)
+	}
+	expect(t, w.call(eve, "GET", base, ""), http.StatusNotFound, CodeNotFound)
+	expect(t, w.call(eve, "PUT", base+"/transcription", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`), http.StatusNotFound, CodeNotFound)
+	expect(t, w.call(ana, "PUT", base+"/transcription", `{"provider":"gemini","model":"gpt-9"}`), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(ana, "PUT", base+"/telepathy", `{"provider":"gemini","model":"gemini-3.5-flash"}`), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(ana, "PUT", base+"/transcription", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`, "https://evil.example"), http.StatusForbidden, CodeForbidden)
+	expect(t, w.call(ana, "PUT", base+"/transcription", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`), http.StatusNoContent, "")
+	list = decode[listResponse[aiTaskSettingResponse]](t, w.call(ana, "GET", base, ""))
+	if !list.Data[0].Custom || list.Data[0].Model.ID != "gemini-3.5-flash-lite" {
+		t.Fatalf("after set = %+v", list.Data[0])
+	}
 }
