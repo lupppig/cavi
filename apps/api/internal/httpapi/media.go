@@ -132,7 +132,7 @@ func (h mediaHandler) list(c *gin.Context) {
 	limit := 0
 	if l := c.Query("limit"); l != "" {
 		n, err := strconv.Atoi(l)
-		if err != nil {
+		if err != nil || n < 1 {
 			n = -1 // rejected by the service with a field error
 		}
 		limit = n

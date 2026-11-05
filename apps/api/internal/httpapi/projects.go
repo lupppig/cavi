@@ -104,7 +104,7 @@ func (h projectHandler) list(c *gin.Context) {
 	opts := project.ListOptions{WorkspaceID: c.Query("workspace_id"), Cursor: c.Query("cursor")}
 	if l := c.Query("limit"); l != "" {
 		n, err := strconv.Atoi(l)
-		if err != nil {
+		if err != nil || n < 1 {
 			n = -1 // rejected by the service with a field error
 		}
 		opts.Limit = n

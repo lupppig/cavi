@@ -37,6 +37,7 @@ func TestProjectLifecycleOverHTTP(t *testing.T) {
 		t.Fatalf("page 2 = %+v", page2)
 	}
 	expect(t, w.call(ana, "GET", base+"?limit=abc", ""), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(ana, "GET", base+"?limit=0", ""), http.StatusUnprocessableEntity, CodeValidation)
 
 	// Partial update keeps the other field.
 	one := base + "/" + p.ID
