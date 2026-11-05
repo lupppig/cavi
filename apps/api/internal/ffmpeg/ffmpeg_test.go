@@ -93,6 +93,20 @@ func TestRealFFmpeg(t *testing.T) {
 		t.Fatalf("thumbnail is %d bytes", len(jpg))
 	}
 
+	// Audio from the second half, ready for transcription.
+	mp3, err := r.Audio(ctx, srv.URL+"/clip.mp4", time.Second, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "part.mp3"), mp3, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ap, err := r.Probe(ctx, srv.URL+"/part.mp3")
+	if err != nil || ap.HasVideo || ap.AudioCodec != "mp3" || ap.AudioChannels != 1 || ap.SampleRate != 16000 ||
+		ap.Duration < 900*time.Millisecond || ap.Duration > 1200*time.Millisecond {
+		t.Fatalf("extracted audio = %+v, %v", ap, err)
+	}
+
 	if _, err := r.Probe(ctx, srv.URL+"/fake.mp4"); !errors.Is(err, ErrUnreadable) {
 		t.Fatalf("fake: err = %v", err)
 	}

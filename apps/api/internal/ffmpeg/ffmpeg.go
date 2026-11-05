@@ -100,6 +100,25 @@ func (r *Runner) Frame(ctx context.Context, input string, offset time.Duration, 
 	return out, nil
 }
 
+// Audio extracts length of audio starting at offset as mono 16 kHz MP3
+// (32 kbps), the compact form sent for transcription.
+func (r *Runner) Audio(ctx context.Context, input string, offset, length time.Duration) ([]byte, error) {
+	out, err := r.run(ctx, input, r.FFmpeg,
+		"-v", "error", "-nostdin", "-protocol_whitelist", protocols,
+		"-ss", strconv.FormatFloat(offset.Seconds(), 'f', 3, 64),
+		"-t", strconv.FormatFloat(length.Seconds(), 'f', 3, 64),
+		"-i", input,
+		"-vn", "-ac", "1", "-ar", "16000", "-c:a", "libmp3lame", "-b:a", "32k",
+		"-f", "mp3", "pipe:1")
+	if err != nil {
+		return nil, err
+	}
+	if len(out) < 100 {
+		return nil, fmt.Errorf("%w: no audio could be extracted", ErrUnreadable)
+	}
+	return out, nil
+}
+
 var urlPattern = regexp.MustCompile(`https?://\S+`)
 
 // scrub removes URLs (which carry signatures) from FFmpeg output.
