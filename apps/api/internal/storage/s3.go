@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -155,6 +156,21 @@ func (s *S3) ReadHead(ctx context.Context, key string, n int64) ([]byte, error) 
 		return nil, fmt.Errorf("read object: %w", err)
 	}
 	return b, nil
+}
+
+// Put implements Store.
+func (s *S3) Put(ctx context.Context, key, contentType string, body []byte) error {
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(key),
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(int64(len(body))),
+		Body:          bytes.NewReader(body),
+	})
+	if err != nil {
+		return fmt.Errorf("put object: %w", err)
+	}
+	return nil
 }
 
 // Delete implements Store.

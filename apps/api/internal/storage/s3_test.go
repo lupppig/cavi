@@ -126,6 +126,15 @@ func TestS3RoundTrip(t *testing.T) {
 		t.Errorf("preflight: %d, allow-origin %q", res.StatusCode, res.Header.Get("Access-Control-Allow-Origin"))
 	}
 
+	thumb := key + "-thumb"
+	if err := s.Put(ctx, thumb, "image/jpeg", []byte("\xff\xd8\xffthumb")); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := s.Stat(ctx, thumb); err != nil || info.Size != 8 {
+		t.Fatalf("put then stat = %+v, %v", info, err)
+	}
+	_ = s.Delete(ctx, thumb)
+
 	if err := s.Delete(ctx, key); err != nil {
 		t.Fatal(err)
 	}

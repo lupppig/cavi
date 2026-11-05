@@ -47,6 +47,12 @@ func (f *fakeStore) ReadHead(_ context.Context, key string, n int64) ([]byte, er
 	}
 	return b[:min(int64(len(b)), n)], nil
 }
+func (f *fakeStore) Put(_ context.Context, key, _ string, body []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.objects[key] = body
+	return nil
+}
 func (f *fakeStore) Delete(_ context.Context, key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
