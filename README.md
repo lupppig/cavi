@@ -6,14 +6,14 @@ CAVI is a creative production and content distribution platform. See [`AGENTS.md
 
 Foundation phase. What exists today:
 
-- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, an audit log, and projects (with client sharing).
-- `apps/web`: Next.js landing page with a working waitlist signup, an `/account` page (profile, invitations, organisations, team creation) and an organisation page (projects, rename, members and roles, invitations) and a project page (details, editing, client sharing, deletion). Product visuals on the landing page are labelled illustrations, not screenshots.
+- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, an audit log, projects (with client sharing), and media uploads to S3-compatible object storage.
+- `apps/web`: Next.js landing page with a working waitlist signup, an `/account` page (profile, invitations, organisations, team creation) and an organisation page (projects, rename, members and roles, invitations) and a project page (details, editing, media upload and playback, client sharing, deletion). Product visuals on the landing page are labelled illustrations, not screenshots.
 - `packages/contracts`: OpenAPI contract, the source of truth for the HTTP API.
 - `packages/api-client`: typed TypeScript client generated from the contract.
 - `migrations/`: versioned SQL migrations, applied with `make migrate-up`.
-- `infrastructure/docker`: local PostgreSQL.
+- `infrastructure/docker`: local PostgreSQL and SeaweedFS object storage.
 
-Not built yet: invitation emails, workspace management, client workspaces (restricting team members to particular clients), media, jobs, AI, the editor, and publishing.
+Not built yet: invitation emails, workspace management, client workspaces (restricting team members to particular clients), media processing (probing, thumbnails, transcription), resumable uploads over 5 GB, storage quotas, jobs, AI, the editor, and publishing.
 
 ## Repository layout
 
@@ -22,12 +22,16 @@ apps/
   api/                 Go HTTP API
     cmd/api/           API entry point
     cmd/migrate/       Migration command (up, down, status)
+    cmd/storage-setup/ Creates the media bucket and its CORS rules
     internal/config/   Environment configuration
     internal/database/ PostgreSQL connection (Bun)
     internal/httpapi/  Gin routing, middleware, handlers
     internal/identity/ Identity provider boundary (WorkOS)
     internal/account/  Users, organisations, workspaces, members, invitations
     internal/authz/    Roles and permissions
+    internal/project/  Projects and client sharing
+    internal/media/    Media uploads, file-type checks, storage cleanup
+    internal/storage/  Object storage boundary (S3 API: R2, SeaweedFS)
     internal/session/  Server-side browser sessions
     internal/waitlist/ Waitlist service and Postgres store
   web/                 Next.js frontend
@@ -49,13 +53,14 @@ infrastructure/
 
 ```bash
 make setup       # install dependencies, create apps/api/.env and apps/web/.env.local
-make db-up       # start PostgreSQL on 127.0.0.1:5432
-make migrate-up  # apply database migrations
+make db-up          # start PostgreSQL (127.0.0.1:5432) and object storage (127.0.0.1:8333)
+make migrate-up     # apply database migrations
+make storage-setup  # once: create the media bucket and allow browser uploads
 make api         # API on http://localhost:8080
 make web         # web on http://localhost:3000 (separate terminal)
 ```
 
-Run `make help` for every target. `make check` runs vet, tests, the contract check, lint and type-checking. `make api-test-integration` also runs tests against the local database.
+Run `make help` for every target. `make check` runs vet, tests, the contract check, lint and type-checking. `make api-test-integration` also runs tests against the local database and object storage.
 
 ### Changing the API contract
 
@@ -84,6 +89,13 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `WORKOS_API_KEY` | outside dev | | WorkOS secret key. Secret: never commit. |
 | `WORKOS_CLIENT_ID` | outside dev | | WorkOS client ID. With both WorkOS values empty, sign-in is disabled (development only). |
 | `CAVI_SESSION_TTL` | no | `720h` | Session lifetime (minimum 1h). |
+| `CAVI_STORAGE_ENDPOINT` | outside dev | | S3 API endpoint for media. Locally `http://localhost:8333`; for R2 `https://<account-id>.r2.cloudflarestorage.com`. Empty disables media (development only). |
+| `CAVI_STORAGE_PUBLIC_ENDPOINT` | no | the endpoint | How browsers reach storage, if different from the API. Signed URLs use it. |
+| `CAVI_STORAGE_REGION` | no | `auto` | `auto` for R2; `us-east-1` locally. |
+| `CAVI_STORAGE_BUCKET` | with storage | | Bucket name. |
+| `CAVI_STORAGE_ACCESS_KEY_ID` | with storage | | Storage access key. Secret outside local development. |
+| `CAVI_STORAGE_SECRET_ACCESS_KEY` | with storage | | Storage secret key. Secret: never commit (the local SeaweedFS ones in `.env.example` are dev-only). |
+| `CAVI_STORAGE_PATH_STYLE` | no | `false` | `true` for SeaweedFS; `false` for R2. |
 
 ### Web (`apps/web/.env.local`)
 
@@ -113,6 +125,10 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `GET`, `PATCH`, `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}` | View, update or delete a project. |
 | `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/access` | List or add the clients a project is shared with. |
 | `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}/access/{userID}` | Stop sharing a project with a client. |
+| `GET` | `/api/v1/organisations/{orgID}/projects/{projectID}/media` | List uploaded media with short-lived signed URLs. |
+| `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/uploads` | Start an upload; returns a signed instruction for the browser. |
+| `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/complete` | Check the uploaded file and make it available. |
+| `GET`, `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}` | Get one file (fresh signed URL) or delete it. |
 | `POST` | `/api/v1/waitlist` | Join the early-access waitlist. Same `202` response for new and existing addresses. Rate limited to 10 requests per IP per hour. |
 
 The full contract is in `packages/contracts/openapi.yaml`.
@@ -159,4 +175,22 @@ WorkOS dashboard (Applications → your app → Redirects) needs the callback UR
 - Sharing with clients needs `project.access.manage` (owner, admin, manager), and only members with the `client` role can be granted access. Grants hang off the membership, so removing someone from the organisation also removes their project access.
 - Each project response lists the caller's project-level `permissions`, so the UI shows only actions that will succeed. The API enforces them regardless.
 - Project creation, updates, deletion and sharing changes are written to `audit_events`.
-- Deleting a project is permanent. Once media exists, deletion will also need to clean up stored files.
+- Deleting a project is permanent and removes its media, including the stored files (see below).
+
+## Media
+
+Files never pass through the API:
+
+1. The browser asks to start an upload (`media.upload` permission, file name, type and size up to 5 GB).
+2. The API records the file as `uploading` and returns a signed `PUT` URL valid for 15 minutes. The signature pins the content type and the download filename.
+3. The browser uploads straight to object storage, showing progress.
+4. The browser calls `complete`. The API checks the stored file: its size must match, and its first bytes must be a supported format (MP4/MOV/WebM/MKV/AVI video; MP3/M4A/WAV/AAC/FLAC/Ogg audio; PNG/JPEG/WebP images). File names and the browser's claimed type are never trusted. Files that fail are deleted and the user is told why.
+
+Access and storage:
+
+- Media follows project visibility: anyone who can see a project can see and download its media, including clients it's shared with. Uploading needs `media.upload`; deleting needs `media.delete`, but people can always delete their own uploads.
+- Objects are private. Browsers get signed URLs that expire after an hour; storage refuses unsigned requests. Object keys are `organisations/{org}/projects/{project}/assets/{asset}/original`, which makes ownership explicit but is never used for authorisation.
+- Deleting media, a project or an organisation queues the stored objects (a database trigger on `media_assets`), and a sweep in the API deletes them every minute, retrying failures with backoff. Uploads never completed are removed after 24 hours.
+- Uploads and deletions are written to `audit_events`, and each file's size is recorded for future usage accounting.
+
+Locally, `make db-up` runs SeaweedFS, which speaks the same S3 API as Cloudflare R2. For staging and production, create an R2 bucket and an API token with object read/write, set the `CAVI_STORAGE_*` variables, and run `go run ./cmd/storage-setup` once with credentials that can manage the bucket (or set the bucket's CORS rules in the Cloudflare dashboard: allow `PUT`, `GET` and `HEAD` from the web origin with headers `content-type` and `content-disposition`).
