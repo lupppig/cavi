@@ -34,6 +34,7 @@ import (
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
+	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 )
@@ -93,6 +94,22 @@ type Asset struct {
 	// URL is a signed, short-lived link to the file (uploaded assets only).
 	URL          string
 	URLExpiresAt time.Time
+
+	// Processing state and what it learned (zero until ready).
+	ProcessingStatus string
+	ProcessingError  string
+	Container        string
+	DurationMS       int64
+	Width, Height    int
+	FrameRate        float64
+	VideoCodec       string
+	AudioCodec       string
+	AudioChannels    int
+	SampleRate       int
+	// ThumbnailURL is a signed link to a JPEG preview, when there is one.
+	ThumbnailURL string
+
+	thumbnailKey string
 }
 
 // Page is one page of assets, newest first.
@@ -106,6 +123,19 @@ type Service struct {
 	db     *bun.DB
 	store  storage.Store
 	logger *slog.Logger
+	// onJob is told when a job was queued, to publish it promptly.
+	onJob func()
+}
+
+// OnJobQueued registers fn to run after a transaction queues a job
+// (typically jobs.Relay.Wake). Without it, the relay's own polling picks
+// jobs up.
+func (s *Service) OnJobQueued(fn func()) { s.onJob = fn }
+
+func (s *Service) jobQueued() {
+	if s.onJob != nil {
+		s.onJob()
+	}
 }
 
 // NewService returns a media service.
@@ -214,7 +244,10 @@ const assetColumns = `
 	m.id, m.organisation_id, m.project_id, m.filename, coalesce(m.kind, ''), m.content_type, m.size_bytes, m.status,
 	coalesce(m.uploaded_by_user_id::text, ''),
 	coalesce(nullif(trim(coalesce(u.first_name, '') || ' ' || coalesce(u.last_name, '')), ''), u.email, ''),
-	m.created_at, coalesce(m.uploaded_at, m.created_at), m.storage_key`
+	m.created_at, coalesce(m.uploaded_at, m.created_at), m.storage_key,
+	m.processing_status, coalesce(m.processing_error, ''), coalesce(m.container, ''), coalesce(m.duration_ms, 0),
+	coalesce(m.width, 0), coalesce(m.height, 0), coalesce(m.frame_rate, 0)::float8, coalesce(m.video_codec, ''),
+	coalesce(m.audio_codec, ''), coalesce(m.audio_channels, 0), coalesce(m.sample_rate, 0), coalesce(m.thumbnail_key, '')`
 
 const assetFrom = `
 	FROM media_assets m LEFT JOIN users u ON u.id = m.uploaded_by_user_id`
@@ -225,7 +258,10 @@ func scanAsset(row scanner) (Asset, string, error) {
 	var a Asset
 	var key string
 	err := row.Scan(&a.ID, &a.OrganisationID, &a.ProjectID, &a.Filename, &a.Kind, &a.ContentType, &a.SizeBytes,
-		&a.Status, &a.UploadedByID, &a.UploadedByName, &a.CreatedAt, &a.UploadedAt, &key)
+		&a.Status, &a.UploadedByID, &a.UploadedByName, &a.CreatedAt, &a.UploadedAt, &key,
+		&a.ProcessingStatus, &a.ProcessingError, &a.Container, &a.DurationMS,
+		&a.Width, &a.Height, &a.FrameRate, &a.VideoCodec,
+		&a.AudioCodec, &a.AudioChannels, &a.SampleRate, &a.thumbnailKey)
 	return a, key, err
 }
 
@@ -263,6 +299,11 @@ func (s *Service) sign(ctx context.Context, a *Asset, key string) error {
 		return err
 	}
 	a.URL, a.URLExpiresAt = url, exp
+	if a.thumbnailKey != "" {
+		if a.ThumbnailURL, _, err = s.store.PresignDownload(ctx, a.thumbnailKey, downloadURLTTL); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -316,12 +357,19 @@ func (s *Service) Complete(ctx context.Context, actorID, orgID, projectID, asset
 			_, err := s.load(ctx, tx, acc, actorID, orgID, projectID, assetID, false)
 			return err
 		}
+		// Processing is queued in the same transaction, so an uploaded file
+		// always gets processed.
+		if _, err := jobs.Enqueue(ctx, tx, jobs.New{Kind: jobs.KindMediaProcess, OrganisationID: orgID,
+			MediaAssetID: assetID, CorrelationID: jobs.CorrelationID(ctx)}); err != nil {
+			return err
+		}
 		return account.Audit(ctx, tx, orgID, actorID, "media.uploaded", "media_asset", assetID,
 			map[string]any{"project_id": projectID, "kind": kind.Kind, "size_bytes": asset.SizeBytes})
 	})
 	if err != nil {
 		return Asset{}, err
 	}
+	s.jobQueued()
 	asset, key, err = s.loadWithKey(ctx, s.db, acc, actorID, orgID, projectID, assetID, false)
 	if err != nil {
 		return Asset{}, err
@@ -425,6 +473,55 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID, assetID st
 		return Asset{}, ErrNotFound
 	}
 	return a, s.sign(ctx, &a, key)
+}
+
+// ErrProcessingInProgress means the file is already being processed.
+var ErrProcessingInProgress = errors.New("media: processing in progress")
+
+// Reprocess queues processing again for a file whose processing failed
+// (media.upload). Calling it on a ready file returns it unchanged.
+func (s *Service) Reprocess(ctx context.Context, actorID, orgID, projectID, assetID string) (Asset, error) {
+	queued := false
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		acc, _, err := project.Resolve(ctx, tx, actorID, orgID, projectID, false)
+		if err != nil {
+			return err
+		}
+		a, err := s.load(ctx, tx, acc, actorID, orgID, projectID, assetID, true)
+		if err != nil {
+			return err
+		}
+		if a.Status != "uploaded" {
+			return ErrNotFound
+		}
+		if !canUpload(acc) {
+			return ErrForbidden
+		}
+		switch a.ProcessingStatus {
+		case ProcessingReady:
+			return nil
+		case ProcessingPending, ProcessingProcessing:
+			return ErrProcessingInProgress
+		}
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE media_assets SET processing_status = 'pending', processing_error = NULL, updated_at = now()
+			WHERE id = ?`, assetID); err != nil {
+			return fmt.Errorf("reset processing: %w", err)
+		}
+		if _, err := jobs.Enqueue(ctx, tx, jobs.New{Kind: jobs.KindMediaProcess, OrganisationID: orgID,
+			MediaAssetID: assetID, CorrelationID: jobs.CorrelationID(ctx)}); err != nil {
+			return err
+		}
+		queued = true
+		return account.Audit(ctx, tx, orgID, actorID, "media.reprocess_requested", "media_asset", assetID, nil)
+	})
+	if err != nil {
+		return Asset{}, err
+	}
+	if queued {
+		s.jobQueued()
+	}
+	return s.Get(ctx, actorID, orgID, projectID, assetID)
 }
 
 // Delete removes an asset (media.delete, or the uploader's own). The

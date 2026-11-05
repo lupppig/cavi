@@ -106,3 +106,17 @@ func IsPermanent(err error) bool {
 	var p permanent
 	return errors.As(err, &p)
 }
+
+type correlationKey struct{}
+
+// WithCorrelationID records the ID (usually the HTTP request ID) that jobs
+// enqueued under ctx carry, so logs can be followed from request to worker.
+func WithCorrelationID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, correlationKey{}, id)
+}
+
+// CorrelationID returns the ID set by WithCorrelationID, or "".
+func CorrelationID(ctx context.Context) string {
+	id, _ := ctx.Value(correlationKey{}).(string)
+	return id
+}
