@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, raise, type MediaAsset, type Project } from "@/lib/queries";
 import { acceptedFiles, formatBytes, maxUploadBytes, sendFile, UploadAborted } from "@/lib/upload";
+import { TranscriptPanel } from "./transcript-panel";
 
 type Job = {
   key: string;
@@ -18,7 +19,15 @@ type Job = {
 
 let jobSeq = 0;
 
-export function MediaSection({ project, canUpload }: { project: Project; canUpload: boolean }) {
+export function MediaSection({
+  project,
+  canUpload,
+  canTranscribe,
+}: {
+  project: Project;
+  canUpload: boolean;
+  canTranscribe: boolean;
+}) {
   const id = useId();
   const qc = useQueryClient();
   const listKey = ["project", project.id, "media"];
@@ -136,7 +145,7 @@ export function MediaSection({ project, canUpload }: { project: Project; canUplo
         <ul className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
           {items.map((a) => (
             <li key={a.id}>
-              <MediaCard asset={a} project={project} canUpload={canUpload} />
+              <MediaCard asset={a} project={project} canUpload={canUpload} canTranscribe={canTranscribe} />
             </li>
           ))}
         </ul>
@@ -275,8 +284,26 @@ function describe(a: MediaAsset): string[] {
   return out;
 }
 
-function MediaCard({ asset, project, canUpload }: { asset: MediaAsset; project: Project; canUpload: boolean }) {
+function MediaCard({
+  asset,
+  project,
+  canUpload,
+  canTranscribe,
+}: {
+  asset: MediaAsset;
+  project: Project;
+  canUpload: boolean;
+  canTranscribe: boolean;
+}) {
   const qc = useQueryClient();
+  const player = useRef<HTMLMediaElement>(null);
+  const seek = (ms: number) => {
+    const el = player.current;
+    if (!el) return;
+    el.currentTime = ms / 1000;
+    void el.play().catch(() => {});
+    el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
   const url = stable(asset.id, asset.url, asset.url_expires_at);
   const thumb = stable(`${asset.id}:thumb`, asset.thumbnail_url, asset.url_expires_at);
   const path = { orgID: project.organisation_id, projectID: project.id, assetID: asset.id };
@@ -309,7 +336,15 @@ function MediaCard({ asset, project, canUpload }: { asset: MediaAsset; project: 
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border-[3px] border-ink bg-paper">
       <div className="relative grid aspect-video place-items-center border-b-[3px] border-ink bg-ink">
         {url && asset.kind === "video" && (
-          <video src={url} poster={thumb ?? undefined} controls playsInline preload="metadata" className="h-full w-full" />
+          <video
+            ref={player as React.RefObject<HTMLVideoElement>}
+            src={url}
+            poster={thumb ?? undefined}
+            controls
+            playsInline
+            preload="metadata"
+            className="h-full w-full"
+          />
         )}
         {url && asset.kind === "image" && (
           // The preview is the processed thumbnail when there is one; the
@@ -320,7 +355,7 @@ function MediaCard({ asset, project, canUpload }: { asset: MediaAsset; project: 
         {url && asset.kind === "audio" && (
           <div className="flex w-full flex-col items-center gap-4 p-4">
             <span aria-hidden="true" className="text-4xl">🎧</span>
-            <audio src={url} controls preload="metadata" className="w-full" />
+            <audio ref={player as React.RefObject<HTMLAudioElement>} src={url} controls preload="metadata" className="w-full" />
           </div>
         )}
         {busy && (
@@ -360,6 +395,9 @@ function MediaCard({ asset, project, canUpload }: { asset: MediaAsset; project: 
               </button>
             )}
           </div>
+        )}
+        {status === "ready" && asset.metadata?.audio_codec && (asset.kind === "video" || asset.kind === "audio") && (
+          <TranscriptPanel asset={asset} project={project} canTranscribe={canTranscribe} onSeek={seek} />
         )}
         {remove.isError && <div className="mt-3"><Banner>{remove.error.message}</Banner></div>}
         {retry.isError && <div className="mt-3"><Banner>{retry.error.message}</Banner></div>}

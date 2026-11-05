@@ -96,7 +96,11 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
   return (
     <>
       <Details project={project} />
-      <MediaSection project={project} canUpload={!!org && can(org, "media.upload")} />
+      <MediaSection
+        project={project}
+        canUpload={!!org && can(org, "media.upload")}
+        canTranscribe={!!org && can(org, "editing.manage")}
+      />
       <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
         Editing and renders aren’t available yet. They’re next, and they’ll work from the media in this project.
       </p>
