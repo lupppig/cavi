@@ -108,7 +108,7 @@ func (s *Service) RequestTranscript(ctx context.Context, actorID, orgID, project
 			return fmt.Errorf("queue transcript: %w", err)
 		}
 		if _, err := jobs.Enqueue(ctx, tx, jobs.New{Kind: jobs.KindMediaTranscribe, OrganisationID: orgID,
-			MediaAssetID: assetID, CorrelationID: jobs.CorrelationID(ctx), MaxAttempts: 4}); err != nil {
+			MediaAssetID: assetID, CorrelationID: jobs.CorrelationID(ctx), MaxAttempts: 6}); err != nil {
 			return err
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "media.transcription_requested", "media_asset", assetID,

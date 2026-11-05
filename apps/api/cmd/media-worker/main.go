@@ -77,7 +77,13 @@ func run() error {
 		// Transcription calls are slow and rate-limited; run fewer at once.
 		workers = append(workers, jobs.NewWorker(db, bus, jobs.KindMediaTranscribe,
 			media.NewTranscriber(db, store, ff, gemini, logger), logger,
-			jobs.WorkerOptions{Concurrency: max(1, cfg.Concurrency/2), Lease: 45 * time.Minute}))
+			jobs.WorkerOptions{
+				Concurrency: max(1, cfg.Concurrency/2),
+				Lease:       45 * time.Minute,
+				// Provider overload ("high demand") usually clears in minutes:
+				// back off longer than for media processing.
+				RetryDelay: func(n int) time.Duration { return min(30*time.Second<<min(n-1, 6), 5*time.Minute) },
+			}))
 	} else {
 		logger.Warn("transcription disabled: GEMINI_API_KEY is not set; transcription jobs will wait")
 	}
