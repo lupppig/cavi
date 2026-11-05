@@ -499,6 +499,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry processing
+         * @description Requires `media.upload`. Queues processing again for a file whose
+         *     processing failed. A file that is already processed is returned
+         *     unchanged; one that is queued or processing is
+         *     `processing_in_progress` (409).
+         */
+        post: operations["reprocessMedia"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations": {
         parameters: {
             query?: never;
@@ -755,6 +778,34 @@ export interface components {
             url: string | null;
             /** Format: date-time */
             url_expires_at: string | null;
+            /** @description Signed link to a JPEG preview (video and images), once processed. */
+            thumbnail_url: string | null;
+            /**
+             * @description Background processing (probing and thumbnails). `pending` is queued;
+             *     `failed` carries a user-facing `error` and can be retried with
+             *     `POST .../process`.
+             */
+            processing: {
+                /** @enum {string} */
+                status: "pending" | "processing" | "ready" | "failed";
+                error: string | null;
+            };
+            /** @description What processing learned; null until ready. Fields that don't apply are null. */
+            metadata: components["schemas"]["MediaMetadata"] | null;
+        };
+        MediaMetadata: {
+            container: string | null;
+            /** Format: int64 */
+            duration_ms: number | null;
+            /** @description Display width after rotation. */
+            width: number | null;
+            /** @description Display height after rotation. */
+            height: number | null;
+            frame_rate: number | null;
+            video_codec: string | null;
+            audio_codec: string | null;
+            audio_channels: number | null;
+            sample_rate: number | null;
         };
         MediaPage: {
             data: components["schemas"]["MediaAsset"][];
@@ -787,7 +838,7 @@ export interface components {
              * @description Stable, machine-readable error code.
              * @enum {string}
              */
-            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
+            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "processing_in_progress" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
             /** @description Human-readable message safe to show to end users. */
             message: string;
             request_id?: string;
@@ -811,8 +862,8 @@ export interface components {
         };
         /**
          * @description The request conflicts with the resource's state. `error.code` is one of
-         *     `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`
-         *     or `upload_incomplete`.
+         *     `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
+         *     `upload_incomplete` or `processing_in_progress`.
          */
         Conflict: {
             headers: {
@@ -1700,6 +1751,36 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    reprocessMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Processing queued (or the file is already processed). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

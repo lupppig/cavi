@@ -99,6 +99,12 @@ func TestMediaOverHTTP(t *testing.T) {
 	if done.Status != "uploaded" || done.Kind == nil || *done.Kind != "video" || done.URL == nil || done.UploadedAt == nil || !done.CanDelete {
 		t.Fatalf("completed = %+v", done)
 	}
+	if done.Processing.Status != "pending" || done.Processing.Error != nil || done.Metadata != nil || done.ThumbnailURL != nil {
+		t.Fatalf("processing before the worker runs = %+v", done)
+	}
+	// Processing is queued; asking again while it's pending is a conflict.
+	expect(t, w.call(ana, "POST", one+"/process", ""), http.StatusConflict, CodeProcessingInProgress)
+	expect(t, w.call(eve, "POST", one+"/process", ""), http.StatusNotFound, CodeNotFound)
 
 	page := decode[assetPage](t, w.call(ana, "GET", base, ""))
 	if len(page.Data) != 1 || page.NextCursor != nil || page.Data[0].Filename != "Take 1.mp4" {

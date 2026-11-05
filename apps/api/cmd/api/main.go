@@ -17,6 +17,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/httpapi"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
+	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/session"
@@ -78,6 +79,20 @@ func run() error {
 		}), logger)
 		mediaService = svc
 		go sweepMedia(ctx, logger, svc)
+
+		// Jobs are always recorded; with NATS they are also delivered.
+		if cfg.NATSURL != "" {
+			bus, err := jobs.Connect(ctx, jobs.BusConfig{URL: cfg.NATSURL, ClientName: "cavi-api"})
+			if err != nil {
+				return err
+			}
+			defer bus.Close()
+			relay := jobs.NewRelay(db, bus, logger)
+			svc.OnJobQueued(relay.Wake)
+			go relay.Run(ctx)
+		} else {
+			logger.Warn("job delivery disabled: CAVI_NATS_URL is not set; media will wait in processing")
+		}
 	} else {
 		logger.Warn("media disabled: CAVI_STORAGE_ENDPOINT is not set")
 	}

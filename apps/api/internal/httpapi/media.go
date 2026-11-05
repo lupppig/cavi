@@ -20,6 +20,7 @@ type MediaService interface {
 	List(ctx context.Context, actorID, orgID, projectID, cursor string, limit int) (media.Page, error)
 	Get(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, assetID string) error
+	Reprocess(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
 }
 
 type mediaHandler struct {
@@ -28,19 +29,50 @@ type mediaHandler struct {
 }
 
 type assetResponse struct {
-	ID           string   `json:"id"`
-	ProjectID    string   `json:"project_id"`
-	Filename     string   `json:"filename"`
-	Kind         *string  `json:"kind"`
-	ContentType  string   `json:"content_type"`
-	SizeBytes    int64    `json:"size_bytes"`
-	Status       string   `json:"status"`
-	UploadedBy   *userRef `json:"uploaded_by"`
-	CreatedAt    string   `json:"created_at"`
-	UploadedAt   *string  `json:"uploaded_at"`
-	CanDelete    bool     `json:"can_delete"`
-	URL          *string  `json:"url"`
-	URLExpiresAt *string  `json:"url_expires_at"`
+	ID           string             `json:"id"`
+	ProjectID    string             `json:"project_id"`
+	Filename     string             `json:"filename"`
+	Kind         *string            `json:"kind"`
+	ContentType  string             `json:"content_type"`
+	SizeBytes    int64              `json:"size_bytes"`
+	Status       string             `json:"status"`
+	UploadedBy   *userRef           `json:"uploaded_by"`
+	CreatedAt    string             `json:"created_at"`
+	UploadedAt   *string            `json:"uploaded_at"`
+	CanDelete    bool               `json:"can_delete"`
+	URL          *string            `json:"url"`
+	URLExpiresAt *string            `json:"url_expires_at"`
+	ThumbnailURL *string            `json:"thumbnail_url"`
+	Processing   processingResponse `json:"processing"`
+	Metadata     *metadataResponse  `json:"metadata"`
+}
+
+type processingResponse struct {
+	Status string  `json:"status"`
+	Error  *string `json:"error"`
+}
+
+// metadataResponse is what processing learned; fields that don't apply
+// (dimensions of audio, frame rate of a still) are null.
+type metadataResponse struct {
+	Container     *string  `json:"container"`
+	DurationMS    *int64   `json:"duration_ms"`
+	Width         *int     `json:"width"`
+	Height        *int     `json:"height"`
+	FrameRate     *float64 `json:"frame_rate"`
+	VideoCodec    *string  `json:"video_codec"`
+	AudioCodec    *string  `json:"audio_codec"`
+	AudioChannels *int     `json:"audio_channels"`
+	SampleRate    *int     `json:"sample_rate"`
+}
+
+// ptr returns nil for zero values, so absent metadata is null in JSON.
+func ptr[T comparable](v T) *T {
+	var zero T
+	if v == zero {
+		return nil
+	}
+	return &v
 }
 
 type uploadInstruction struct {
@@ -79,6 +111,15 @@ func toAssetResponse(a media.Asset) assetResponse {
 		u, e := a.URL, ts(a.URLExpiresAt)
 		r.URL, r.URLExpiresAt = &u, &e
 	}
+	r.ThumbnailURL = ptr(a.ThumbnailURL)
+	r.Processing = processingResponse{Status: a.ProcessingStatus, Error: ptr(a.ProcessingError)}
+	if a.ProcessingStatus == media.ProcessingReady {
+		r.Metadata = &metadataResponse{
+			Container: ptr(a.Container), DurationMS: ptr(a.DurationMS), Width: ptr(a.Width), Height: ptr(a.Height),
+			FrameRate: ptr(a.FrameRate), VideoCodec: ptr(a.VideoCodec), AudioCodec: ptr(a.AudioCodec),
+			AudioChannels: ptr(a.AudioChannels), SampleRate: ptr(a.SampleRate),
+		}
+	}
 	return r
 }
 
@@ -87,6 +128,8 @@ func (h mediaHandler) fail(c *gin.Context, err error) {
 	switch {
 	case errors.As(err, &rejected):
 		writeError(c, http.StatusUnprocessableEntity, CodeUploadRejected, rejected.Reason)
+	case errors.Is(err, media.ErrProcessingInProgress):
+		writeError(c, http.StatusConflict, CodeProcessingInProgress, "This file is already being processed.")
 	case errors.Is(err, media.ErrNotReceived):
 		writeError(c, http.StatusConflict, CodeUploadIncomplete, "We haven’t received the file yet. Finish uploading it, then try again.")
 	default:
@@ -169,4 +212,14 @@ func (h mediaHandler) delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+func (h mediaHandler) reprocess(c *gin.Context) {
+	a, err := h.svc.Reprocess(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusAccepted, toAssetResponse(a))
 }

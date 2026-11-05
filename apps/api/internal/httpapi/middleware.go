@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/lupppig/cavi/apps/api/internal/jobs"
 )
 
 // HeaderRequestID carries the request identifier in requests and responses.
@@ -29,6 +31,8 @@ func requestID() gin.HandlerFunc {
 		}
 		c.Set(requestIDKey, id)
 		c.Header(HeaderRequestID, id)
+		// Background jobs started by this request carry its ID.
+		c.Request = c.Request.WithContext(jobs.WithCorrelationID(c.Request.Context(), id))
 		c.Next()
 	}
 }

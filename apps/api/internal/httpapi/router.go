@@ -126,6 +126,7 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	med.GET("/:assetID", mediaH.get)
 	med.DELETE("/:assetID", mediaH.delete)
 	med.POST("/:assetID/complete", mediaH.complete)
+	med.POST("/:assetID/process", mediaH.reprocess)
 
 	return r, nil
 }

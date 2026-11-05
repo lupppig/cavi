@@ -869,6 +869,42 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/process:
+    post:
+      operationId: reprocessMedia
+      summary: Retry processing
+      description: |
+        Requires `media.upload`. Queues processing again for a file whose
+        processing failed. A file that is already processed is returned
+        unchanged; one that is queued or processing is
+        `processing_in_progress` (409).
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      responses:
+        "202":
+          description: Processing queued (or the file is already processed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/invitations:
     get:
       operationId: listMyInvitations
@@ -1238,7 +1274,7 @@ components:
 
     MediaAsset:
       type: object
-      required: [id, project_id, filename, kind, content_type, size_bytes, status, uploaded_by, created_at, uploaded_at, can_delete, url, url_expires_at]
+      required: [id, project_id, filename, kind, content_type, size_bytes, status, uploaded_by, created_at, uploaded_at, can_delete, url, url_expires_at, thumbnail_url, processing, metadata]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
@@ -1261,6 +1297,38 @@ components:
           description: Signed link to the file; null until uploaded. Don't store it.
           type: [string, "null"]
         url_expires_at: { type: [string, "null"], format: date-time }
+        thumbnail_url:
+          description: Signed link to a JPEG preview (video and images), once processed.
+          type: [string, "null"]
+        processing:
+          type: object
+          description: |
+            Background processing (probing and thumbnails). `pending` is queued;
+            `failed` carries a user-facing `error` and can be retried with
+            `POST .../process`.
+          required: [status, error]
+          properties:
+            status: { type: string, enum: [pending, processing, ready, failed] }
+            error: { type: [string, "null"] }
+        metadata:
+          description: What processing learned; null until ready. Fields that don't apply are null.
+          oneOf:
+            - $ref: "#/components/schemas/MediaMetadata"
+            - type: "null"
+
+    MediaMetadata:
+      type: object
+      required: [container, duration_ms, width, height, frame_rate, video_codec, audio_codec, audio_channels, sample_rate]
+      properties:
+        container: { type: [string, "null"] }
+        duration_ms: { type: [integer, "null"], format: int64 }
+        width: { type: [integer, "null"], description: Display width after rotation. }
+        height: { type: [integer, "null"], description: Display height after rotation. }
+        frame_rate: { type: [number, "null"] }
+        video_codec: { type: [string, "null"] }
+        audio_codec: { type: [string, "null"] }
+        audio_channels: { type: [integer, "null"] }
+        sample_rate: { type: [integer, "null"] }
 
     MediaPage:
       type: object
@@ -1325,6 +1393,7 @@ components:
             - invitation_exists
             - upload_incomplete
             - upload_rejected
+            - processing_in_progress
             - not_found
             - method_not_allowed
             - internal_error
@@ -1359,8 +1428,8 @@ components:
     Conflict:
       description: |
         The request conflicts with the resource's state. `error.code` is one of
-        `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`
-        or `upload_incomplete`.
+        `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
+        `upload_incomplete` or `processing_in_progress`.
       content:
         application/json:
           schema:
