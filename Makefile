@@ -15,13 +15,13 @@ setup: ## Install dependencies and create local env files if missing
 	@test -f $(API_DIR)/.env || cp $(API_DIR)/.env.example $(API_DIR)/.env
 	@test -f apps/web/.env.local || cp apps/web/.env.example apps/web/.env.local
 
-db-up: ## Start local Postgres and object storage and wait until healthy
-	$(COMPOSE) up -d --wait postgres storage
+db-up: ## Start local Postgres, object storage and NATS and wait until healthy
+	$(COMPOSE) up -d --wait postgres storage nats
 
-db-down: ## Stop local Postgres and object storage (keeps data)
+db-down: ## Stop local services (keeps data)
 	$(COMPOSE) down
 
-db-reset: ## Stop local Postgres and object storage and delete their data
+db-reset: ## Stop local services and delete their data
 	$(COMPOSE) down -v
 
 storage-setup: ## Create the media bucket and allow browser uploads (needs db-up)

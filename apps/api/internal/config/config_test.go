@@ -51,6 +51,7 @@ func TestLoadAuthSettings(t *testing.T) {
 		"CAVI_STORAGE_BUCKET":            "cavi-media",
 		"CAVI_STORAGE_ACCESS_KEY_ID":     "key",
 		"CAVI_STORAGE_SECRET_ACCESS_KEY": "secret",
+		"CAVI_NATS_URL":                  "tls://nats.internal:4222",
 	}
 	cfg, err := Load(env(base))
 	if err != nil {
@@ -75,6 +76,8 @@ func TestLoadAuthSettings(t *testing.T) {
 		{"http storage in production", "CAVI_STORAGE_ENDPOINT", "http://storage.example.com", "https"},
 		{"storage without secret", "CAVI_STORAGE_SECRET_ACCESS_KEY", "", "CAVI_STORAGE_SECRET_ACCESS_KEY"},
 		{"storage without bucket", "CAVI_STORAGE_BUCKET", "", "CAVI_STORAGE_BUCKET"},
+		{"missing nats in production", "CAVI_NATS_URL", "", "CAVI_NATS_URL"},
+		{"bad nats url", "CAVI_NATS_URL", "http://nats:4222", "CAVI_NATS_URL"},
 	}
 	for _, tc := range bad {
 		t.Run(tc.name, func(t *testing.T) {
@@ -110,6 +113,7 @@ func TestLoadParsesValues(t *testing.T) {
 		"CAVI_STORAGE_ACCESS_KEY_ID":     "key",
 		"CAVI_STORAGE_SECRET_ACCESS_KEY": "secret",
 		"CAVI_STORAGE_PATH_STYLE":        "true",
+		"CAVI_NATS_URL":                  "nats://localhost:4222",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

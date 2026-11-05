@@ -37,6 +37,10 @@ type Config struct {
 	WorkOSClientID string
 	SessionTTL     time.Duration
 
+	// NATSURL is the NATS server that delivers background jobs. Empty
+	// disables dispatch (development only): jobs are recorded but wait.
+	NATSURL string
+
 	// Storage is S3-compatible object storage for media (R2 in production,
 	// SeaweedFS locally). Empty Endpoint disables media (development only).
 	Storage Storage
@@ -77,6 +81,7 @@ func Load(getenv func(string) string) (Config, error) {
 		WorkOSAPIKey:    getenv("WORKOS_API_KEY"),
 		WorkOSClientID:  getenv("WORKOS_CLIENT_ID"),
 		SessionTTL:      30 * 24 * time.Hour,
+		NATSURL:         getenv("CAVI_NATS_URL"),
 		Storage: Storage{
 			Endpoint:        strings.TrimRight(getenv("CAVI_STORAGE_ENDPOINT"), "/"),
 			PublicEndpoint:  strings.TrimRight(getenv("CAVI_STORAGE_PUBLIC_ENDPOINT"), "/"),
@@ -139,6 +144,14 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	errs = append(errs, validateStorage(cfg)...)
+
+	if cfg.NATSURL == "" && cfg.Env != EnvDevelopment {
+		errs = append(errs, errors.New("CAVI_NATS_URL is required outside development"))
+	} else if cfg.NATSURL != "" {
+		if u, err := url.Parse(cfg.NATSURL); err != nil || (u.Scheme != "nats" && u.Scheme != "tls") || u.Host == "" {
+			errs = append(errs, fmt.Errorf("CAVI_NATS_URL must be a nats:// or tls:// URL; got %q", cfg.NATSURL))
+		}
+	}
 
 	for _, origin := range cfg.AllowedOrigins {
 		if origin == "*" {

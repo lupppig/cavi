@@ -37,6 +37,22 @@ services:
       timeout: 3s
       retries: 30
 
+  # NATS JetStream: delivers background jobs to workers. Job state itself
+  # lives in Postgres.
+  nats:
+    image: nats:2.12.1-alpine
+    command: ["--jetstream", "--store_dir=/data", "--http_port=8222"]
+    ports:
+      - "127.0.0.1:4222:4222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8222/healthz?js-enabled-only=true"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   postgres-data:
   storage-data:
+  nats-data:
