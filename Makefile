@@ -4,7 +4,7 @@ SHELL := /bin/bash
 COMPOSE := docker compose -f infrastructure/docker/docker-compose.yml
 API_DIR := apps/api
 
-.PHONY: help setup db-up db-down db-reset storage-setup media-worker media-worker-logs migrate-up migrate-down migrate-status api api-build api-test api-test-integration api-vet contracts contracts-check web web-build web-lint web-typecheck check
+.PHONY: help setup db-up db-down db-reset ai-eval storage-setup media-worker media-worker-logs migrate-up migrate-down migrate-status api api-build api-test api-test-integration api-vet contracts contracts-check web web-build web-lint web-typecheck check
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
@@ -53,6 +53,9 @@ api-test: ## Run API tests
 
 api-test-integration: ## Run API tests including Postgres, storage and NATS integration tests (needs db-up, migrate-up, storage-setup)
 	cd $(API_DIR) && set -a && source .env && set +a && CAVI_TEST_DATABASE_URL="$$CAVI_DATABASE_URL" CAVI_TEST_STORAGE_ENDPOINT="$$CAVI_STORAGE_ENDPOINT" CAVI_TEST_NATS_URL="$$CAVI_NATS_URL" go test -count=1 ./...
+
+ai-eval: ## Evaluate supported AI models against fixtures with the real provider (costs a little; needs GEMINI_API_KEY)
+	cd $(API_DIR) && set -a && source .env && set +a && CAVI_AI_EVAL=1 go test -count=1 -v -run Eval ./internal/ai/
 
 api-vet: ## Run go vet on the API
 	cd $(API_DIR) && go vet ./...
