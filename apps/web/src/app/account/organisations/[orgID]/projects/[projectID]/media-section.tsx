@@ -36,6 +36,12 @@ export function MediaSection({ project, canUpload }: { project: Project; canUplo
       return data;
     },
     getNextPageParam: (last) => last.next_cursor ?? undefined,
+    // Poll while anything is still processing. (Live updates over a
+    // WebSocket can replace this later.)
+    refetchInterval: (q) =>
+      q.state.data?.pages.some((p) => p.data.some((a) => a.processing.status === "pending" || a.processing.status === "processing"))
+        ? 2000
+        : false,
   });
 
   const busy = jobs.some((j) => j.state === "sending" || j.state === "checking");
@@ -130,7 +136,7 @@ export function MediaSection({ project, canUpload }: { project: Project; canUplo
         <ul className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
           {items.map((a) => (
             <li key={a.id}>
-              <MediaCard asset={a} project={project} />
+              <MediaCard asset={a} project={project} canUpload={canUpload} />
             </li>
           ))}
         </ul>
@@ -234,46 +240,94 @@ function UploadRow({ job, onCancel }: { job: Job; onCancel: () => void }) {
 // Signed URLs change on every fetch. Keep using the first one until it's
 // close to expiring so refetches don't restart a playing video.
 const urlCache = new Map<string, { url: string; expires: number }>();
-function stableUrl(a: MediaAsset) {
-  if (!a.url) return null;
-  const cached = urlCache.get(a.id);
+function stable(cacheKey: string, url: string | null, expiresAt: string | null) {
+  if (!url) return null;
+  const cached = urlCache.get(cacheKey);
   if (cached && cached.expires - Date.now() > 5 * 60_000) return cached.url;
-  const expires = a.url_expires_at ? Date.parse(a.url_expires_at) : Date.now();
-  urlCache.set(a.id, { url: a.url, expires });
-  return a.url;
+  urlCache.set(cacheKey, { url, expires: expiresAt ? Date.parse(expiresAt) : Date.now() });
+  return url;
 }
 
 const kindColour: Record<string, string> = { video: "bg-sky", audio: "bg-lime", image: "bg-pink" };
 
-function MediaCard({ asset, project }: { asset: MediaAsset; project: Project }) {
+function formatDuration(ms: number) {
+  const total = Math.round(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+/** A short, human description of what processing found. */
+function describe(a: MediaAsset): string[] {
+  const m = a.metadata;
+  if (!m) return [];
+  const out: string[] = [];
+  if (m.duration_ms) out.push(formatDuration(m.duration_ms));
+  if (m.width && m.height) out.push(`${m.width}×${m.height}`);
+  if (m.frame_rate && a.kind === "video") out.push(`${Number(m.frame_rate.toFixed(2))} fps`);
+  if (m.video_codec && a.kind === "video") out.push(m.video_codec.toUpperCase());
+  if (a.kind === "audio") {
+    if (m.audio_channels) out.push(m.audio_channels === 1 ? "Mono" : m.audio_channels === 2 ? "Stereo" : `${m.audio_channels} channels`);
+    if (m.sample_rate) out.push(`${Number((m.sample_rate / 1000).toFixed(1))} kHz`);
+  }
+  if (a.kind === "video" && m.video_codec && !m.audio_codec) out.push("No audio");
+  return out;
+}
+
+function MediaCard({ asset, project, canUpload }: { asset: MediaAsset; project: Project; canUpload: boolean }) {
   const qc = useQueryClient();
-  const url = stableUrl(asset);
+  const url = stable(asset.id, asset.url, asset.url_expires_at);
+  const thumb = stable(`${asset.id}:thumb`, asset.thumbnail_url, asset.url_expires_at);
+  const path = { orgID: project.organisation_id, projectID: project.id, assetID: asset.id };
+  const refresh = () => qc.invalidateQueries({ queryKey: ["project", project.id, "media"] });
   const remove = useMutation({
     mutationFn: async () => {
       const { error, response } = await client().DELETE(
         "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}",
-        { params: { path: { orgID: project.organisation_id, projectID: project.id, assetID: asset.id } } },
+        { params: { path } },
       );
       if (!response.ok) raise(error, response.status, "Could not delete the file.");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["project", project.id, "media"] }),
+    onSuccess: refresh,
   });
+  const retry = useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await client().POST(
+        "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/process",
+        { params: { path } },
+      );
+      if (!data) raise(error, response.status, "Could not retry processing.");
+    },
+    onSettled: refresh,
+  });
+  const status = asset.processing.status;
+  const busy = status === "pending" || status === "processing";
+  const details = describe(asset);
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-2xl border-[3px] border-ink bg-paper">
-      <div className="grid aspect-video place-items-center border-b-[3px] border-ink bg-ink">
+      <div className="relative grid aspect-video place-items-center border-b-[3px] border-ink bg-ink">
         {url && asset.kind === "video" && (
-          <video src={url} controls playsInline preload="metadata" className="h-full w-full" />
+          <video src={url} poster={thumb ?? undefined} controls playsInline preload="metadata" className="h-full w-full" />
         )}
         {url && asset.kind === "image" && (
+          // The preview is the processed thumbnail when there is one; the
+          // original can be large. Download always gets the original.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={asset.filename} loading="lazy" className="h-full w-full object-contain" />
+          <img src={thumb ?? url} alt={asset.filename} loading="lazy" className="h-full w-full object-contain" />
         )}
         {url && asset.kind === "audio" && (
           <div className="flex w-full flex-col items-center gap-4 p-4">
             <span aria-hidden="true" className="text-4xl">🎧</span>
             <audio src={url} controls preload="metadata" className="w-full" />
           </div>
+        )}
+        {busy && (
+          <span className="pointer-events-none absolute top-2 left-2 flex items-center gap-1.5 rounded-full border-2 border-ink bg-sun px-2.5 py-0.5 text-xs font-extrabold">
+            <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
+            Processing…
+          </span>
         )}
       </div>
       <div className="flex flex-1 flex-col p-4">
@@ -287,7 +341,28 @@ function MediaCard({ asset, project }: { asset: MediaAsset; project: Project }) 
           <span>{formatBytes(asset.size_bytes)}</span>
           {asset.uploaded_by && <span>· {asset.uploaded_by.name}</span>}
         </p>
+        {details.length > 0 && (
+          <p className="mt-1 font-mono text-xs font-semibold text-ink-soft" aria-label="File details">
+            {details.join(" · ")}
+          </p>
+        )}
+        {status === "failed" && (
+          <div className="mt-3 rounded-xl border-2 border-ink bg-tomato/15 p-3 text-sm font-semibold" role="status">
+            <p>{asset.processing.error ?? "Processing failed."}</p>
+            {canUpload && (
+              <button
+                type="button"
+                disabled={retry.isPending}
+                onClick={() => retry.mutate()}
+                className="btn-pop mt-2 min-h-11 rounded-xl bg-white px-3 font-extrabold disabled:opacity-60"
+              >
+                {retry.isPending ? "Retrying…" : "Try again"}
+              </button>
+            )}
+          </div>
+        )}
         {remove.isError && <div className="mt-3"><Banner>{remove.error.message}</Banner></div>}
+        {retry.isError && <div className="mt-3"><Banner>{retry.error.message}</Banner></div>}
         <div className="mt-auto flex gap-2 pt-4">
           {url && (
             <a href={url} className="btn-pop flex min-h-11 items-center rounded-xl bg-white px-3 text-sm font-extrabold">
