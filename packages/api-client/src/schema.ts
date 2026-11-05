@@ -400,6 +400,105 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a project's media
+         * @description Uploaded files in a project the caller can see, newest first, each
+         *     with a signed `url` valid for about an hour. Unfinished uploads are
+         *     not listed. Paged like projects.
+         */
+        get: operations["listMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an upload
+         * @description Requires `media.upload`. Records the file as `uploading` and returns
+         *     a signed instruction: the browser sends the file with
+         *     `upload.method` to `upload.url`, setting every header in
+         *     `upload.headers`, before `upload.expires_at` (15 minutes). Then
+         *     call `complete`. Files may be up to 5 GB. `content_type` is the
+         *     browser's guess and only pre-filters; the real type is checked from
+         *     the file's contents on completion.
+         */
+        post: operations["createMediaUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get one media file
+         * @description Returns the file with a fresh signed `url`.
+         */
+        get: operations["getMedia"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a media file
+         * @description Requires `media.delete`, except that people may delete their own
+         *     uploads. The stored file is removed in the background.
+         */
+        delete: operations["deleteMedia"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish an upload
+         * @description Call after the browser has sent the file. The API checks the stored
+         *     file: its size must match `size_bytes` and its contents must be a
+         *     supported video, audio or image format. On success the file is
+         *     `uploaded`. `upload_incomplete` (409) means the file hasn't arrived;
+         *     `upload_rejected` (422) means it failed checks and was discarded.
+         *     Repeating the call on an uploaded file returns it unchanged. Only
+         *     the person who started the upload can complete it.
+         */
+        post: operations["completeMediaUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations": {
         parameters: {
             query?: never;
@@ -630,6 +729,56 @@ export interface components {
         ProjectAccessList: {
             data: components["schemas"]["ProjectAccess"][];
         };
+        MediaAsset: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            filename: string;
+            /**
+             * @description Decided from the file's contents; null until uploaded.
+             * @enum {string|null}
+             */
+            kind: "video" | "audio" | "image" | null;
+            content_type: string;
+            /** Format: int64 */
+            size_bytes: number;
+            /** @enum {string} */
+            status: "uploading" | "uploaded";
+            uploaded_by: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            uploaded_at: string | null;
+            can_delete: boolean;
+            /** @description Signed link to the file; null until uploaded. Don't store it. */
+            url: string | null;
+            /** Format: date-time */
+            url_expires_at: string | null;
+        };
+        MediaPage: {
+            data: components["schemas"]["MediaAsset"][];
+            next_cursor: string | null;
+        };
+        CreateUploadRequest: {
+            filename: string;
+            content_type?: string;
+            /** Format: int64 */
+            size_bytes: number;
+        };
+        MediaUpload: {
+            asset: components["schemas"]["MediaAsset"];
+            upload: {
+                url: string;
+                /** @enum {string} */
+                method: "PUT";
+                headers: {
+                    [key: string]: string;
+                };
+                /** Format: date-time */
+                expires_at: string;
+            };
+        };
         ErrorResponse: {
             error: components["schemas"]["ErrorDetail"];
         };
@@ -638,7 +787,7 @@ export interface components {
              * @description Stable, machine-readable error code.
              * @enum {string}
              */
-            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
+            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
             /** @description Human-readable message safe to show to end users. */
             message: string;
             request_id?: string;
@@ -661,8 +810,9 @@ export interface components {
             };
         };
         /**
-         * @description The change conflicts with an organisation rule. `error.code` is one of
-         *     `last_owner`, `personal_organisation`, `already_member` or `invitation_exists`.
+         * @description The request conflicts with the resource's state. `error.code` is one of
+         *     `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`
+         *     or `upload_incomplete`.
          */
         Conflict: {
             headers: {
@@ -708,7 +858,7 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
-        /** @description One or more fields are invalid. See `error.fields`. */
+        /** @description One or more fields are invalid (`validation_failed`, see `error.fields`), or an uploaded file failed checks (`upload_rejected`). */
         ValidationFailed: {
             headers: {
                 [name: string]: unknown;
@@ -751,6 +901,7 @@ export interface components {
         UserID: string;
         InvitationID: string;
         ProjectID: string;
+        AssetID: string;
     };
     requestBodies: never;
     headers: never;
@@ -1400,6 +1551,157 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    listMedia: {
+        parameters: {
+            query?: {
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of media. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload started. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaUpload"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The media file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deleteMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    completeMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The uploaded file. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     listMyInvitations: {

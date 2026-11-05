@@ -688,6 +688,187 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/media:
+    get:
+      operationId: listMedia
+      summary: List a project's media
+      description: |
+        Uploaded files in a project the caller can see, newest first, each
+        with a signed `url` valid for about an hour. Unfinished uploads are
+        not listed. Paged like projects.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: A page of media.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaPage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/uploads:
+    post:
+      operationId: createMediaUpload
+      summary: Start an upload
+      description: |
+        Requires `media.upload`. Records the file as `uploading` and returns
+        a signed instruction: the browser sends the file with
+        `upload.method` to `upload.url`, setting every header in
+        `upload.headers`, before `upload.expires_at` (15 minutes). Then
+        call `complete`. Files may be up to 5 GB. `content_type` is the
+        browser's guess and only pre-filters; the real type is checked from
+        the file's contents on completion.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUploadRequest"
+      responses:
+        "201":
+          description: Upload started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaUpload"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}:
+    get:
+      operationId: getMedia
+      summary: Get one media file
+      description: Returns the file with a fresh signed `url`.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      responses:
+        "200":
+          description: The media file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      operationId: deleteMedia
+      summary: Delete a media file
+      description: |
+        Requires `media.delete`, except that people may delete their own
+        uploads. The stored file is removed in the background.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/complete:
+    post:
+      operationId: completeMediaUpload
+      summary: Finish an upload
+      description: |
+        Call after the browser has sent the file. The API checks the stored
+        file: its size must match `size_bytes` and its contents must be a
+        supported video, audio or image format. On success the file is
+        `uploaded`. `upload_incomplete` (409) means the file hasn't arrived;
+        `upload_rejected` (422) means it failed checks and was discarded.
+        Repeating the call on an uploaded file returns it unchanged. Only
+        the person who started the upload can complete it.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      responses:
+        "200":
+          description: The uploaded file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/invitations:
     get:
       operationId: listMyInvitations
@@ -776,6 +957,11 @@ components:
       schema: { type: string, format: uuid }
     ProjectID:
       name: projectID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AssetID:
+      name: assetID
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -1050,6 +1236,67 @@ components:
           type: array
           items: { $ref: "#/components/schemas/ProjectAccess" }
 
+    MediaAsset:
+      type: object
+      required: [id, project_id, filename, kind, content_type, size_bytes, status, uploaded_by, created_at, uploaded_at, can_delete, url, url_expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        filename: { type: string }
+        kind:
+          description: Decided from the file's contents; null until uploaded.
+          type: [string, "null"]
+          enum: [video, audio, image, null]
+        content_type: { type: string }
+        size_bytes: { type: integer, format: int64 }
+        status: { type: string, enum: [uploading, uploaded] }
+        uploaded_by:
+          oneOf:
+            - $ref: "#/components/schemas/UserRef"
+            - type: "null"
+        created_at: { type: string, format: date-time }
+        uploaded_at: { type: [string, "null"], format: date-time }
+        can_delete: { type: boolean }
+        url:
+          description: Signed link to the file; null until uploaded. Don't store it.
+          type: [string, "null"]
+        url_expires_at: { type: [string, "null"], format: date-time }
+
+    MediaPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/MediaAsset" }
+        next_cursor:
+          type: [string, "null"]
+
+    CreateUploadRequest:
+      type: object
+      required: [filename, size_bytes]
+      additionalProperties: false
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        content_type: { type: string }
+        size_bytes: { type: integer, format: int64, minimum: 1, maximum: 5368709120 }
+
+    MediaUpload:
+      type: object
+      required: [asset, upload]
+      properties:
+        asset: { $ref: "#/components/schemas/MediaAsset" }
+        upload:
+          type: object
+          required: [url, method, headers, expires_at]
+          properties:
+            url: { type: string }
+            method: { type: string, enum: [PUT] }
+            headers:
+              type: object
+              additionalProperties: { type: string }
+            expires_at: { type: string, format: date-time }
+
     ErrorResponse:
       type: object
       required: [error]
@@ -1076,6 +1323,8 @@ components:
             - personal_organisation
             - already_member
             - invitation_exists
+            - upload_incomplete
+            - upload_rejected
             - not_found
             - method_not_allowed
             - internal_error
@@ -1109,8 +1358,9 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     Conflict:
       description: |
-        The change conflicts with an organisation rule. `error.code` is one of
-        `last_owner`, `personal_organisation`, `already_member` or `invitation_exists`.
+        The request conflicts with the resource's state. `error.code` is one of
+        `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`
+        or `upload_incomplete`.
       content:
         application/json:
           schema:
@@ -1140,7 +1390,7 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
     ValidationFailed:
-      description: One or more fields are invalid. See `error.fields`.
+      description: One or more fields are invalid (`validation_failed`, see `error.fields`), or an uploaded file failed checks (`upload_rejected`).
       content:
         application/json:
           schema:

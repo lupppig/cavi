@@ -19,6 +19,7 @@ type Options struct {
 	Auth           *AuthOptions
 	Organisations  OrganisationService
 	Projects       ProjectService
+	Media          MediaService
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
 	// is trusted when determining the client IP. Empty trusts none.
@@ -117,6 +118,14 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	proj.GET("/:projectID/access", projects.access)
 	proj.POST("/:projectID/access", projects.grant)
 	proj.DELETE("/:projectID/access/:userID", projects.revoke)
+
+	mediaH := mediaHandler{svc: opts.Media, orgHandler: orgs}
+	med := proj.Group("/:projectID/media", requireService(opts.Media != nil))
+	med.GET("", mediaH.list)
+	med.POST("/uploads", mediaH.createUpload)
+	med.GET("/:assetID", mediaH.get)
+	med.DELETE("/:assetID", mediaH.delete)
+	med.POST("/:assetID/complete", mediaH.complete)
 
 	return r, nil
 }

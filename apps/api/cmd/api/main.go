@@ -17,8 +17,10 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/httpapi"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
+	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/session"
+	"github.com/lupppig/cavi/apps/api/internal/storage"
 	"github.com/lupppig/cavi/apps/api/internal/waitlist"
 )
 
@@ -65,6 +67,21 @@ func run() error {
 		logger.Warn("sign-in disabled: WORKOS_API_KEY and WORKOS_CLIENT_ID are not set")
 	}
 
+	// Media needs object storage. Without it (development only) the media
+	// endpoints answer 503.
+	var mediaService httpapi.MediaService
+	if cfg.StorageEnabled() {
+		st := cfg.Storage
+		svc := media.NewService(db, storage.NewS3(storage.S3Config{
+			Endpoint: st.Endpoint, PublicEndpoint: st.PublicEndpoint, Region: st.Region, Bucket: st.Bucket,
+			AccessKeyID: st.AccessKeyID, SecretAccessKey: st.SecretAccessKey, PathStyle: st.PathStyle,
+		}), logger)
+		mediaService = svc
+		go sweepMedia(ctx, logger, svc)
+	} else {
+		logger.Warn("media disabled: CAVI_STORAGE_ENDPOINT is not set")
+	}
+
 	router, err := httpapi.NewRouter(httpapi.Options{
 		Logger:         logger,
 		DB:             db,
@@ -72,6 +89,7 @@ func run() error {
 		Auth:           auth,
 		Organisations:  accounts,
 		Projects:       project.NewService(db),
+		Media:          mediaService,
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,
 		Debug:          cfg.Env == config.EnvDevelopment,
@@ -131,6 +149,28 @@ func sweepExpiredSessions(ctx context.Context, logger *slog.Logger, store *sessi
 			}
 			if n > 0 {
 				logger.Info("expired sessions removed", slog.Int64("count", n))
+			}
+		}
+	}
+}
+
+// sweepMedia removes abandoned uploads and deletes queued storage objects
+// every minute until ctx ends.
+func sweepMedia(ctx context.Context, logger *slog.Logger, svc *media.Service) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			abandoned, deleted, err := svc.Sweep(ctx)
+			if err != nil {
+				logger.Warn("media sweep failed", slog.String("error", err.Error()))
+				continue
+			}
+			if abandoned > 0 || deleted > 0 {
+				logger.Info("media sweep", slog.Int("abandoned_uploads", abandoned), slog.Int("objects_deleted", deleted))
 			}
 		}
 	}
