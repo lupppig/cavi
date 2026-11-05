@@ -22,6 +22,7 @@ import {
   type Organisation,
   type Role,
 } from "@/lib/queries";
+import { AIModels } from "./ai-models-section";
 import { Projects } from "./projects-section";
 
 const field =
@@ -90,6 +91,7 @@ function OrganisationView({ org }: { org: Organisation }) {
       <Projects org={org} />
       {can(org, "organisation.members.read") && <Members org={org} />}
       {!org.personal && can(org, "organisation.members.manage") && <Invite org={org} />}
+      {can(org, "organisation.manage") && <AIModels org={org} />}
     </>
   );
 }
