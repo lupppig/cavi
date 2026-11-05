@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "cavi-local",
+      "credentials": [
+        { "accessKey": "cavi_local_access", "secretKey": "cavi_local_secret_dev_only" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

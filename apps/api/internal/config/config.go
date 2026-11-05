@@ -36,7 +36,25 @@ type Config struct {
 	WorkOSAPIKey   string
 	WorkOSClientID string
 	SessionTTL     time.Duration
+
+	// Storage is S3-compatible object storage for media (R2 in production,
+	// SeaweedFS locally). Empty Endpoint disables media (development only).
+	Storage Storage
 }
+
+// Storage configures object storage.
+type Storage struct {
+	Endpoint        string
+	PublicEndpoint  string
+	Region          string
+	Bucket          string
+	AccessKeyID     string
+	SecretAccessKey string
+	PathStyle       bool
+}
+
+// StorageEnabled reports whether object storage is configured.
+func (c Config) StorageEnabled() bool { return c.Storage.Endpoint != "" }
 
 // AuthEnabled reports whether sign-in is configured.
 func (c Config) AuthEnabled() bool { return c.WorkOSAPIKey != "" && c.WorkOSClientID != "" }
@@ -59,6 +77,15 @@ func Load(getenv func(string) string) (Config, error) {
 		WorkOSAPIKey:    getenv("WORKOS_API_KEY"),
 		WorkOSClientID:  getenv("WORKOS_CLIENT_ID"),
 		SessionTTL:      30 * 24 * time.Hour,
+		Storage: Storage{
+			Endpoint:        strings.TrimRight(getenv("CAVI_STORAGE_ENDPOINT"), "/"),
+			PublicEndpoint:  strings.TrimRight(getenv("CAVI_STORAGE_PUBLIC_ENDPOINT"), "/"),
+			Region:          valueOr(getenv("CAVI_STORAGE_REGION"), "auto"),
+			Bucket:          getenv("CAVI_STORAGE_BUCKET"),
+			AccessKeyID:     getenv("CAVI_STORAGE_ACCESS_KEY_ID"),
+			SecretAccessKey: getenv("CAVI_STORAGE_SECRET_ACCESS_KEY"),
+			PathStyle:       getenv("CAVI_STORAGE_PATH_STYLE") == "true",
+		},
 	}
 	if cfg.Env == EnvDevelopment {
 		cfg.PublicAPIURL = valueOr(cfg.PublicAPIURL, "http://localhost:8080")
@@ -111,6 +138,8 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 	}
 
+	errs = append(errs, validateStorage(cfg)...)
+
 	for _, origin := range cfg.AllowedOrigins {
 		if origin == "*" {
 			errs = append(errs, errors.New("CAVI_ALLOWED_ORIGINS must list explicit origins; wildcard is not allowed"))
@@ -121,6 +150,38 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, errors.Join(errs...)
 	}
 	return cfg, nil
+}
+
+func validateStorage(cfg Config) []error {
+	st := cfg.Storage
+	if !cfg.StorageEnabled() {
+		if cfg.Env != EnvDevelopment {
+			return []error{errors.New("CAVI_STORAGE_ENDPOINT is required outside development")}
+		}
+		return nil
+	}
+	var errs []error
+	for name, v := range map[string]string{"CAVI_STORAGE_ENDPOINT": st.Endpoint, "CAVI_STORAGE_PUBLIC_ENDPOINT": st.PublicEndpoint} {
+		if v == "" {
+			continue
+		}
+		u, err := url.Parse(v)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, fmt.Errorf("%s must be an http(s) URL; got %q", name, v))
+		} else if cfg.Env != EnvDevelopment && u.Scheme != "https" {
+			errs = append(errs, fmt.Errorf("%s must use https outside development", name))
+		}
+	}
+	for name, v := range map[string]string{
+		"CAVI_STORAGE_BUCKET":            st.Bucket,
+		"CAVI_STORAGE_ACCESS_KEY_ID":     st.AccessKeyID,
+		"CAVI_STORAGE_SECRET_ACCESS_KEY": st.SecretAccessKey,
+	} {
+		if v == "" {
+			errs = append(errs, fmt.Errorf("%s is required when CAVI_STORAGE_ENDPOINT is set", name))
+		}
+	}
+	return errs
 }
 
 func valueOr(v, fallback string) string {

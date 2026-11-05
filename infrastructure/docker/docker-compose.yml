@@ -18,5 +18,25 @@ services:
       timeout: 3s
       retries: 20
 
+  # S3-compatible object storage standing in for Cloudflare R2 locally.
+  # Credentials are in seaweedfs/s3.json (local only). Run
+  # `make storage-setup` once to create the bucket and its CORS rules.
+  storage:
+    image: chrislusf/seaweedfs:3.97
+    command: >
+      server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json
+      -volume.max=20 -master.volumeSizeLimitMB=1024
+    ports:
+      - "127.0.0.1:8333:8333"
+    volumes:
+      - storage-data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status && wget -q -O /dev/null http://127.0.0.1:8888/"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   postgres-data:
+  storage-data:

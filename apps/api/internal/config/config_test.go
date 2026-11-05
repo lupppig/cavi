@@ -32,8 +32,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.PublicAPIURL != "http://localhost:8080" || cfg.WebURL != "http://localhost:3000" {
 		t.Errorf("dev URLs = %q %q", cfg.PublicAPIURL, cfg.WebURL)
 	}
-	if cfg.AuthEnabled() || cfg.SecureCookies() {
-		t.Error("auth should be disabled and cookies insecure in bare development")
+	if cfg.AuthEnabled() || cfg.SecureCookies() || cfg.StorageEnabled() {
+		t.Error("auth and storage should be disabled and cookies insecure in bare development")
 	}
 }
 
@@ -46,10 +46,18 @@ func TestLoadAuthSettings(t *testing.T) {
 		"WORKOS_API_KEY":       "sk_live_x",
 		"WORKOS_CLIENT_ID":     "client_x",
 		"CAVI_ALLOWED_ORIGINS": "https://app.example.com",
+
+		"CAVI_STORAGE_ENDPOINT":          "https://acct.r2.cloudflarestorage.com",
+		"CAVI_STORAGE_BUCKET":            "cavi-media",
+		"CAVI_STORAGE_ACCESS_KEY_ID":     "key",
+		"CAVI_STORAGE_SECRET_ACCESS_KEY": "secret",
 	}
 	cfg, err := Load(env(base))
 	if err != nil {
 		t.Fatalf("valid production config rejected: %v", err)
+	}
+	if !cfg.StorageEnabled() || cfg.Storage.Region != "auto" || cfg.Storage.PathStyle {
+		t.Errorf("storage = %+v", cfg.Storage)
 	}
 	if cfg.PublicAPIURL != "https://api.example.com" || !cfg.AuthEnabled() || !cfg.SecureCookies() {
 		t.Errorf("cfg = %+v", cfg)
@@ -63,6 +71,10 @@ func TestLoadAuthSettings(t *testing.T) {
 		{"web url with path", "CAVI_WEB_URL", "https://app.example.com/app", "CAVI_WEB_URL"},
 		{"missing api url in production", "CAVI_PUBLIC_API_URL", "", "CAVI_PUBLIC_API_URL"},
 		{"short session ttl", "CAVI_SESSION_TTL", "5m", "CAVI_SESSION_TTL"},
+		{"missing storage in production", "CAVI_STORAGE_ENDPOINT", "", "CAVI_STORAGE_ENDPOINT"},
+		{"http storage in production", "CAVI_STORAGE_ENDPOINT", "http://storage.example.com", "https"},
+		{"storage without secret", "CAVI_STORAGE_SECRET_ACCESS_KEY", "", "CAVI_STORAGE_SECRET_ACCESS_KEY"},
+		{"storage without bucket", "CAVI_STORAGE_BUCKET", "", "CAVI_STORAGE_BUCKET"},
 	}
 	for _, tc := range bad {
 		t.Run(tc.name, func(t *testing.T) {
@@ -90,9 +102,21 @@ func TestLoadParsesValues(t *testing.T) {
 		"CAVI_WEB_URL":          "https://app.example.com",
 		"WORKOS_API_KEY":        "sk_test_x",
 		"WORKOS_CLIENT_ID":      "client_x",
+
+		"CAVI_STORAGE_ENDPOINT":          "https://acct.r2.cloudflarestorage.com/",
+		"CAVI_STORAGE_PUBLIC_ENDPOINT":   "https://media.example.com",
+		"CAVI_STORAGE_REGION":            "us-east-1",
+		"CAVI_STORAGE_BUCKET":            "cavi-media",
+		"CAVI_STORAGE_ACCESS_KEY_ID":     "key",
+		"CAVI_STORAGE_SECRET_ACCESS_KEY": "secret",
+		"CAVI_STORAGE_PATH_STYLE":        "true",
 	}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if st := cfg.Storage; st.Endpoint != "https://acct.r2.cloudflarestorage.com" || st.PublicEndpoint != "https://media.example.com" ||
+		st.Region != "us-east-1" || !st.PathStyle {
+		t.Errorf("storage = %+v", st)
 	}
 	want := []string{"http://localhost:3000", "https://app.example.com"}
 	if strings.Join(cfg.AllowedOrigins, "|") != strings.Join(want, "|") {
