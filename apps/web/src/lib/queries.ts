@@ -83,6 +83,21 @@ export function useMembers(orgID: string, enabled = true) {
   });
 }
 
+/** The organisation's AI model for each task. Any member can read it. */
+export function useAIModelSettings(orgID: string) {
+  return useQuery({
+    queryKey: ["organisation", orgID, "ai-models"],
+    queryFn: async () => {
+      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/ai-models", {
+        params: { path: { orgID } },
+      });
+      if (!data) raise(error, response.status, "Could not load AI settings.");
+      return data.data;
+    },
+    staleTime: 30_000,
+  });
+}
+
 /** Whether a permission list (organisation or project) includes p. */
 export function can(subject: { permissions: string[] }, p: string) {
   return subject.permissions.includes(p);

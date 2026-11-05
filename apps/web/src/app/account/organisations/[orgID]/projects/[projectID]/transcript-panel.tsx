@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Banner } from "@/components/account/account-header";
-import { client, NotFound, raise, type MediaAsset, type Project, type Transcript } from "@/lib/queries";
+import { client, NotFound, raise, useAIModelSettings, type MediaAsset, type Project, type Transcript } from "@/lib/queries";
 
 function stamp(ms: number) {
   const total = Math.floor(ms / 1000);
@@ -11,21 +11,6 @@ function stamp(ms: number) {
   const m = Math.floor((total % 3600) / 60);
   const s = String(total % 60).padStart(2, "0");
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
-}
-
-/** The organisation's current transcription model, to tell people where audio goes. */
-function useTranscriptionModel(orgID: string) {
-  return useQuery({
-    queryKey: ["organisation", orgID, "ai-models"],
-    queryFn: async () => {
-      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/ai-models", {
-        params: { path: { orgID } },
-      });
-      if (!data) raise(error, response.status, "Could not load AI settings.");
-      return data.data.find((s) => s.task === "transcription")?.model ?? null;
-    },
-    staleTime: 60_000,
-  });
 }
 
 export function TranscriptPanel({
@@ -58,7 +43,8 @@ export function TranscriptPanel({
     retry: (n, e) => !(e instanceof NotFound) && n < 2,
     refetchInterval: (q) => (q.state.data && (q.state.data.status === "queued" || q.state.data.status === "running") ? 3000 : false),
   });
-  const model = useTranscriptionModel(project.organisation_id);
+  const settings = useAIModelSettings(project.organisation_id);
+  const model = settings.data?.find((s) => s.task === "transcription")?.model;
 
   const request = useMutation({
     mutationFn: async () => {
@@ -73,7 +59,7 @@ export function TranscriptPanel({
   });
 
   function start() {
-    const where = model.data ? `Google ${model.data.label}` : "your organisation’s AI provider";
+    const where = model ? `${model.provider === "gemini" ? "Google " : ""}${model.label}` : "your organisation’s AI provider";
     if (window.confirm(`To transcribe “${asset.filename}”, its audio will be sent to ${where}. Continue?`)) request.mutate();
   }
 

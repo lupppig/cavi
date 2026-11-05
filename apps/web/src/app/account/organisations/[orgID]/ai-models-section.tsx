@@ -1,9 +1,9 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useId } from "react";
 import { Banner } from "@/components/account/account-header";
-import { client, raise, type Organisation } from "@/lib/queries";
+import { client, raise, useAIModelSettings, type Organisation } from "@/lib/queries";
 
 const taskNames: Record<string, { title: string; hint: string }> = {
   transcription: {
@@ -17,16 +17,7 @@ export function AIModels({ org }: { org: Organisation }) {
   const id = useId();
   const qc = useQueryClient();
   const key = ["organisation", org.id, "ai-models"];
-  const settings = useQuery({
-    queryKey: key,
-    queryFn: async () => {
-      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/ai-models", {
-        params: { path: { orgID: org.id } },
-      });
-      if (!data) raise(error, response.status, "Could not load AI settings.");
-      return data.data;
-    },
-  });
+  const settings = useAIModelSettings(org.id);
   const save = useMutation({
     mutationFn: async ({ task, value }: { task: string; value: string }) => {
       const [provider, model] = value ? value.split("/") : ["", ""];
