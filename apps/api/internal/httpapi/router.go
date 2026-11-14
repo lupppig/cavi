@@ -130,6 +130,8 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	med.POST("/:assetID/process", mediaH.reprocess)
 	med.GET("/:assetID/transcript", mediaH.transcript)
 	med.POST("/:assetID/transcript", mediaH.requestTranscript)
+	med.GET("/:assetID/highlights", mediaH.highlights)
+	med.POST("/:assetID/highlights", mediaH.requestHighlights)
 
 	aiH := aiHandler{svc: opts.AISettings, orgHandler: orgs}
 	aiGroup := signedIn.Group("/organisations/:orgID/ai-models", requireService(opts.AISettings != nil))

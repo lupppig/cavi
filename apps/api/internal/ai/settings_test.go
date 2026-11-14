@@ -47,7 +47,7 @@ func TestOrganisationModelSettings(t *testing.T) {
 		t.Fatalf("resolve = %+v, %v", m, err)
 	}
 	s, err := Settings(ctx, db, editor, org.ID)
-	if err != nil || len(s) != 1 || s[0].Custom || len(s[0].Options) < 2 {
+	if err != nil || len(s) != len(Tasks()) || s[0].Custom || len(s[0].Options) < 2 {
 		t.Fatalf("settings = %+v, %v", s, err)
 	}
 

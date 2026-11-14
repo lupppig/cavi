@@ -974,6 +974,85 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/highlights:
+    get:
+      operationId: getHighlights
+      summary: Get a file's candidate clips
+      description: |
+        Anyone who can see the project can read them. 404 when highlights
+        have never been requested for the file. Clips are present once
+        `status` is `ready`, best first.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      responses:
+        "200":
+          description: The current highlight run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Highlights"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      operationId: requestHighlights
+      summary: Find candidate clips in a file's transcript
+      description: |
+        Requires `editing.manage`. The file must have a ready transcript with
+        speech (`validation_failed` on `media` otherwise). The transcript
+        text, not the media, is sent to the organisation's chosen AI
+        provider and model for the `highlights` task; the choice and the
+        brief are fixed on the run and the request is recorded in the audit
+        log. Clips are cut on whole transcript lines. Requesting again after
+        a run is ready or failed replaces it; `highlights_in_progress` (409)
+        while one is queued or running.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestHighlightsRequest"
+      responses:
+        "202":
+          description: Highlight detection queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Highlights"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/ai-models:
     get:
       operationId: listAIModelSettings
@@ -1019,7 +1098,7 @@ paths:
         - name: task
           in: path
           required: true
-          schema: { type: string, enum: [transcription] }
+          schema: { type: string, enum: [transcription, highlights] }
       requestBody:
         required: true
         content:
@@ -1533,6 +1612,55 @@ components:
               speaker: { type: string }
               text: { type: string }
 
+    RequestHighlightsRequest:
+      type: object
+      required: [min_seconds, max_seconds]
+      additionalProperties: false
+      properties:
+        objective:
+          type: string
+          maxLength: 500
+          description: What the editor wants from the clips, in their words. Optional.
+        min_seconds: { type: integer, minimum: 5, description: Shortest clip length. }
+        max_seconds:
+          type: integer
+          maximum: 600
+          description: Longest clip length; at least 5 seconds more than `min_seconds`.
+
+    Highlights:
+      type: object
+      required: [id, media_asset_id, status, provider, model, model_label, prompt_version, objective, min_seconds, max_seconds, error, requested_at, completed_at, clips]
+      properties:
+        id: { type: string, format: uuid }
+        media_asset_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, running, ready, failed] }
+        provider: { type: string, description: AI provider the transcript was sent to. }
+        model: { type: string }
+        model_label: { type: string }
+        prompt_version: { type: string }
+        objective: { type: string, description: The objective as requested; empty if none. }
+        min_seconds: { type: integer }
+        max_seconds: { type: integer }
+        error: { type: [string, "null"], description: User-facing reason when failed. }
+        requested_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        clips:
+          type: array
+          description: |
+            Candidate clips, best first. Each spans whole transcript lines
+            `first_segment` to `last_segment` (indexes into the transcript's
+            segments when the clips were found); times are in the source file.
+          items:
+            type: object
+            required: [start_ms, end_ms, first_segment, last_segment, title, reason]
+            properties:
+              start_ms: { type: integer, format: int64 }
+              end_ms: { type: integer, format: int64 }
+              first_segment: { type: integer }
+              last_segment: { type: integer }
+              title: { type: string }
+              reason: { type: string, description: Why the model chose the moment. }
+
     AIModel:
       type: object
       required: [provider, id, label, default]
@@ -1552,7 +1680,7 @@ components:
             type: object
             required: [task, model, custom, options]
             properties:
-              task: { type: string, enum: [transcription] }
+              task: { type: string, enum: [transcription, highlights] }
               model: { $ref: "#/components/schemas/AIModel" }
               custom: { type: boolean }
               options:
@@ -1597,6 +1725,7 @@ components:
             - upload_rejected
             - processing_in_progress
             - transcription_in_progress
+            - highlights_in_progress
             - not_found
             - method_not_allowed
             - internal_error
@@ -1632,7 +1761,8 @@ components:
       description: |
         The request conflicts with the resource's state. `error.code` is one of
         `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
-        `upload_incomplete`, `processing_in_progress` or `transcription_in_progress`.
+        `upload_incomplete`, `processing_in_progress`, `transcription_in_progress` or
+        `highlights_in_progress`.
       content:
         application/json:
           schema:

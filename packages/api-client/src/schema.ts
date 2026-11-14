@@ -553,6 +553,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/highlights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a file's candidate clips
+         * @description Anyone who can see the project can read them. 404 when highlights
+         *     have never been requested for the file. Clips are present once
+         *     `status` is `ready`, best first.
+         */
+        get: operations["getHighlights"];
+        put?: never;
+        /**
+         * Find candidate clips in a file's transcript
+         * @description Requires `editing.manage`. The file must have a ready transcript with
+         *     speech (`validation_failed` on `media` otherwise). The transcript
+         *     text, not the media, is sent to the organisation's chosen AI
+         *     provider and model for the `highlights` task; the choice and the
+         *     brief are fixed on the run and the request is recorded in the audit
+         *     log. Clips are cut on whole transcript lines. Requesting again after
+         *     a run is ready or failed replaces it; `highlights_in_progress` (409)
+         *     while one is queued or running.
+         */
+        post: operations["requestHighlights"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/ai-models": {
         parameters: {
             query?: never;
@@ -938,6 +971,53 @@ export interface components {
                 text: string;
             }[];
         };
+        RequestHighlightsRequest: {
+            /** @description What the editor wants from the clips, in their words. Optional. */
+            objective?: string;
+            /** @description Shortest clip length. */
+            min_seconds: number;
+            /** @description Longest clip length; at least 5 seconds more than `min_seconds`. */
+            max_seconds: number;
+        };
+        Highlights: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            media_asset_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed";
+            /** @description AI provider the transcript was sent to. */
+            provider: string;
+            model: string;
+            model_label: string;
+            prompt_version: string;
+            /** @description The objective as requested; empty if none. */
+            objective: string;
+            min_seconds: number;
+            max_seconds: number;
+            /** @description User-facing reason when failed. */
+            error: string | null;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            /**
+             * @description Candidate clips, best first. Each spans whole transcript lines
+             *     `first_segment` to `last_segment` (indexes into the transcript's
+             *     segments when the clips were found); times are in the source file.
+             */
+            clips: {
+                /** Format: int64 */
+                start_ms: number;
+                /** Format: int64 */
+                end_ms: number;
+                first_segment: number;
+                last_segment: number;
+                title: string;
+                /** @description Why the model chose the moment. */
+                reason: string;
+            }[];
+        };
         AIModel: {
             provider: string;
             id: string;
@@ -948,7 +1028,7 @@ export interface components {
         AIModelSettingList: {
             data: {
                 /** @enum {string} */
-                task: "transcription";
+                task: "transcription" | "highlights";
                 model: components["schemas"]["AIModel"];
                 custom: boolean;
                 options: components["schemas"]["AIModel"][];
@@ -967,7 +1047,7 @@ export interface components {
              * @description Stable, machine-readable error code.
              * @enum {string}
              */
-            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "processing_in_progress" | "transcription_in_progress" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
+            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "processing_in_progress" | "transcription_in_progress" | "highlights_in_progress" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
             /** @description Human-readable message safe to show to end users. */
             message: string;
             request_id?: string;
@@ -992,7 +1072,8 @@ export interface components {
         /**
          * @description The request conflicts with the resource's state. `error.code` is one of
          *     `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
-         *     `upload_incomplete`, `processing_in_progress` or `transcription_in_progress`.
+         *     `upload_incomplete`, `processing_in_progress`, `transcription_in_progress` or
+         *     `highlights_in_progress`.
          */
         Conflict: {
             headers: {
@@ -1973,6 +2054,70 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    getHighlights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current highlight run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Highlights"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    requestHighlights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestHighlightsRequest"];
+            };
+        };
+        responses: {
+            /** @description Highlight detection queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Highlights"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     listAIModelSettings: {
         parameters: {
             query?: never;
@@ -2005,7 +2150,7 @@ export interface operations {
             header?: never;
             path: {
                 orgID: components["parameters"]["OrgID"];
-                task: "transcription";
+                task: "transcription" | "highlights";
             };
             cookie?: never;
         };

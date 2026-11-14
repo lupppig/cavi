@@ -23,6 +23,8 @@ type MediaService interface {
 	Reprocess(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
 	RequestTranscript(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Transcript, error)
 	Transcript(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Transcript, error)
+	RequestHighlights(ctx context.Context, actorID, orgID, projectID, assetID string, req media.HighlightRequest) (media.Highlights, error)
+	Highlights(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Highlights, error)
 }
 
 type mediaHandler struct {
@@ -132,6 +134,8 @@ func (h mediaHandler) fail(c *gin.Context, err error) {
 		writeError(c, http.StatusUnprocessableEntity, CodeUploadRejected, rejected.Reason)
 	case errors.Is(err, media.ErrTranscriptionInProgress):
 		writeError(c, http.StatusConflict, CodeTranscriptionInProgress, "This file is already being transcribed.")
+	case errors.Is(err, media.ErrHighlightsInProgress):
+		writeError(c, http.StatusConflict, CodeHighlightsInProgress, "Highlights are already being found for this file.")
 	case errors.Is(err, media.ErrProcessingInProgress):
 		writeError(c, http.StatusConflict, CodeProcessingInProgress, "This file is already being processed.")
 	case errors.Is(err, media.ErrNotReceived):
@@ -284,4 +288,79 @@ func (h mediaHandler) transcript(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, toTranscriptResponse(t))
+}
+
+type highlightResponse struct {
+	StartMS      int64  `json:"start_ms"`
+	EndMS        int64  `json:"end_ms"`
+	FirstSegment int    `json:"first_segment"`
+	LastSegment  int    `json:"last_segment"`
+	Title        string `json:"title"`
+	Reason       string `json:"reason"`
+}
+
+type highlightsResponse struct {
+	ID            string              `json:"id"`
+	MediaAssetID  string              `json:"media_asset_id"`
+	Status        string              `json:"status"`
+	Provider      string              `json:"provider"`
+	Model         string              `json:"model"`
+	ModelLabel    string              `json:"model_label"`
+	PromptVersion string              `json:"prompt_version"`
+	Objective     string              `json:"objective"`
+	MinSeconds    int64               `json:"min_seconds"`
+	MaxSeconds    int64               `json:"max_seconds"`
+	Error         *string             `json:"error"`
+	RequestedAt   string              `json:"requested_at"`
+	CompletedAt   *string             `json:"completed_at"`
+	Clips         []highlightResponse `json:"clips"`
+}
+
+func toHighlightsResponse(h media.Highlights) highlightsResponse {
+	r := highlightsResponse{
+		ID: h.ID, MediaAssetID: h.MediaAssetID, Status: h.Status, Provider: h.Provider, Model: h.Model,
+		ModelLabel: h.ModelLabel, PromptVersion: h.PromptVersion, Objective: h.Objective,
+		MinSeconds: h.MinMS / 1000, MaxSeconds: h.MaxMS / 1000, Error: ptr(h.Error),
+		RequestedAt: ts(h.CreatedAt), Clips: make([]highlightResponse, len(h.Clips)),
+	}
+	if !h.CompletedAt.IsZero() && h.Status == media.HighlightsReady {
+		c := ts(h.CompletedAt)
+		r.CompletedAt = &c
+	}
+	for i, c := range h.Clips {
+		r.Clips[i] = highlightResponse{StartMS: c.StartMS, EndMS: c.EndMS, FirstSegment: c.FirstSegment,
+			LastSegment: c.LastSegment, Title: c.Title, Reason: c.Reason}
+	}
+	return r
+}
+
+type requestHighlightsRequest struct {
+	Objective  string `json:"objective"`
+	MinSeconds int    `json:"min_seconds"`
+	MaxSeconds int    `json:"max_seconds"`
+}
+
+func (h mediaHandler) requestHighlights(c *gin.Context) {
+	var req requestHighlightsRequest
+	if !decodeJSON(c, &req) {
+		return
+	}
+	out, err := h.svc.RequestHighlights(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"),
+		media.HighlightRequest{Objective: req.Objective, MinSeconds: req.MinSeconds, MaxSeconds: req.MaxSeconds})
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusAccepted, toHighlightsResponse(out))
+}
+
+func (h mediaHandler) highlights(c *gin.Context) {
+	out, err := h.svc.Highlights(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, toHighlightsResponse(out))
 }

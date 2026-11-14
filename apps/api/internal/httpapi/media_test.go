@@ -130,6 +130,18 @@ func TestMediaOverHTTP(t *testing.T) {
 	}
 	expect(t, w.call(eve, "POST", one+"/transcript", ""), http.StatusNotFound, CodeNotFound)
 
+	// Highlights need a transcript first; the body is validated as JSON.
+	const brief = `{"objective":"the funniest bit","min_seconds":15,"max_seconds":60}`
+	expect(t, w.call(ana, "GET", one+"/highlights", ""), http.StatusNotFound, CodeNotFound)
+	rec = w.call(ana, "POST", one+"/highlights", brief)
+	expect(t, rec, http.StatusUnprocessableEntity, CodeValidation)
+	if f := decodeError(t, rec).Fields; len(f) != 1 || f[0].Field != "media" {
+		t.Fatalf("fields = %+v", f)
+	}
+	expect(t, w.call(ana, "POST", one+"/highlights", `{"min_seconds":"soon"}`), http.StatusBadRequest, CodeInvalidRequest)
+	expect(t, w.call(eve, "POST", one+"/highlights", brief), http.StatusNotFound, CodeNotFound)
+	expect(t, w.call(eve, "GET", one+"/highlights", ""), http.StatusNotFound, CodeNotFound)
+
 	expect(t, w.call(ana, "DELETE", one, ""), http.StatusNoContent, "")
 	expect(t, w.call(ana, "GET", one, ""), http.StatusNotFound, CodeNotFound)
 }
@@ -141,7 +153,8 @@ func TestAIModelSettingsOverHTTP(t *testing.T) {
 	base := "/api/v1/organisations/" + org.ID + "/ai-models"
 
 	list := decode[listResponse[aiTaskSettingResponse]](t, w.call(ana, "GET", base, ""))
-	if len(list.Data) != 1 || list.Data[0].Task != "transcription" || list.Data[0].Custom || !list.Data[0].Model.Default || len(list.Data[0].Options) < 2 {
+	if len(list.Data) != 2 || list.Data[0].Task != "transcription" || list.Data[1].Task != "highlights" ||
+		list.Data[0].Custom || !list.Data[0].Model.Default || len(list.Data[0].Options) < 2 {
 		t.Fatalf("settings = %+v", list)
 	}
 	expect(t, w.call(eve, "GET", base, ""), http.StatusNotFound, CodeNotFound)
