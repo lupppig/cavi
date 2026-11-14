@@ -200,192 +200,198 @@ export function ClipComposer({
   return (
     <form onSubmit={submit} aria-label="Make a clip" className="@container space-y-3 border-2 border-ink bg-white p-2.5 sm:p-3">
       {create.isError && <Banner>{create.error.message}</Banner>}
-      <div>
-        <label htmlFor={`${id}-name`} className="text-sm font-extrabold">Clip name</label>
-        <input
-          id={`${id}-name`}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={120}
-          className="mt-1 block min-h-11 w-full border-2 border-ink bg-paper px-3 text-base font-semibold"
-        />
-      </div>
-
-      <fieldset className="space-y-1.5">
-        <legend className="text-sm font-extrabold">
-          Trim <span className="font-semibold text-ink-soft">· {length(len)}</span>
-        </legend>
-        {edge("start", "In", start)}
-        {edge("end", "Out", end)}
-        {problem && <p className="text-sm font-semibold text-ink">{problem}</p>}
-        <button
-          type="button"
-          onClick={() => onPreview(start, end)}
-          aria-label="Preview the trimmed clip in the player"
-          className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
-        >
-          ▶ Preview
-        </button>
-      </fieldset>
-
-      <fieldset>
-        <legend className="text-sm font-extrabold">
-          Shape <span className="font-semibold text-ink-soft">· {shape.hint}</span>
-        </legend>
-        <div className="mt-1 grid grid-cols-2 gap-1.5 @[13rem]:grid-cols-4">
-          {shapes.map((s) => (
-            <label
-              key={s.aspect}
-              title={s.hint}
-              className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 border-2 border-ink px-1 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
-                aspect === s.aspect ? "bg-ink text-white" : "bg-white"
-              }`}
-            >
-              <input
-                type="radio"
-                name={`${id}-shape`}
-                checked={aspect === s.aspect}
-                onChange={() => setAspect(s.aspect)}
-                aria-label={`${s.aspect}, ${s.hint}`}
-                className="sr-only"
-              />
-              <span
-                aria-hidden="true"
-                className="shrink-0 border-2 border-ink bg-white"
-                style={{ width: s.w >= s.h ? 22 : (22 * s.w) / s.h, height: s.h >= s.w ? 22 : (22 * s.h) / s.w }}
-              />
-              <span className="text-xs font-extrabold">{s.aspect}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
-      <div>
-        <p className="text-sm font-extrabold">Framing</p>
-        <div className="mt-1 grid place-items-center bg-ink p-2">
-          <div
-            className="relative [container-type:inline-size]"
-            style={{
-              // Width-led sizing keeps the exact shape at any width (at most
-              // 16rem tall), so the preview crops exactly as the render will.
-              width: `min(100%, calc(16rem * ${shape.w} / ${shape.h}))`,
-              aspectRatio: `${shape.w} / ${shape.h}`,
-            }}
-          >
-            <video
-              ref={frame}
-              src={url}
-              muted
-              playsInline
-              preload="metadata"
-              aria-label="How the clip will be framed"
-              className="block h-full w-full bg-ink"
-              style={{ objectFit: "cover", objectPosition: `${focus}% ${focus}%` }}
-            />
-            {captions && spoken && (
-              <CaptionPreview
-                options={captions}
-                speaker={spoken.speaker}
-                lines={firstCaption(
-                  spoken,
-                  start,
-                  captionLayout(shape.outW, shape.outH, captions.mode, captions.position).maxChars,
-                  captions.mode,
-                )}
-                outW={shape.outW}
-                outH={shape.outH}
-              />
-            )}
-          </div>
-        </div>
-        {crops ? (
-          <label className="mt-2 block">
-            <span className="text-xs font-semibold text-ink-soft">
-              Slide to choose what stays in frame ({horizontal ? "left to right" : "top to bottom"})
-            </span>
+      {/* Two columns when there's room: what you're cutting on the left, how it looks on the right. */}
+      <div className="grid gap-3 @[44rem]:grid-cols-2 @[44rem]:gap-6">
+        <div className="min-w-0 space-y-3">
+          <div>
+            <label htmlFor={`${id}-name`} className="text-sm font-extrabold">Clip name</label>
             <input
-              type="range"
-              min={0}
-              max={100}
-              value={focus}
-              onChange={(e) => setFocus(Number(e.target.value))}
-              className="mt-1 block h-11 w-full accent-[var(--ink)]"
+              id={`${id}-name`}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={120}
+              className="mt-1 block min-h-11 w-full border-2 border-ink bg-paper px-3 text-base font-semibold"
             />
-          </label>
-        ) : (
-          <p className="mt-1 text-xs font-semibold text-ink-soft">The whole frame fits this shape.</p>
-        )}
-      </div>
+          </div>
 
-      <fieldset>
-        <legend className="text-sm font-extrabold">Captions</legend>
-        {ready && t.segments.length > 0 ? (
-          <>
-            <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-extrabold">
-              <input
-                type="checkbox"
-                checked={!!captions}
-                onChange={(e) => setCaptions(e.target.checked ? defaultCaptionOptions : null)}
-                className="size-5 accent-[var(--ink)]"
-              />
-              Burn in captions
-            </label>
-            {captions && (
-              <>
-                <CaptionOptionsPicker value={captions} onChange={setCaptions} speakers={speakersInClip} />
-                <p className="mt-1 text-xs font-semibold text-ink-soft">
-                  {spoken
-                    ? "Captions come from the transcript, timed word by word. Check it for mistakes first."
-                    : "There’s no speech in this part of the clip, so there’s nothing to caption."}
-                </p>
-              </>
-            )}
-          </>
-        ) : (
-          <div className="mt-1 border-2 border-dashed border-ink p-2.5 text-sm font-semibold" role="status">
-            {transcript.isPending ? (
-              <p>Checking for a transcript…</p>
-            ) : t && (t.status === "queued" || t.status === "running") ? (
-              <p>Transcribing… Captions will be available when the transcript is ready.</p>
-            ) : ready ? (
-              <p>No speech was found in this file, so there’s nothing to caption.</p>
-            ) : (
-              <>
-                <p>
-                  {t?.status === "failed"
-                    ? `Captions need a transcript, and the last one failed: ${t.error ?? "transcription failed"}.`
-                    : "Captions need a transcript of this file."}
-                </p>
-                {canTranscribe ? (
-                  <button
-                    type="button"
-                    onClick={transcribe.start}
-                    disabled={transcribe.request.isPending}
-                    className="btn-pop mt-2 min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
-                  >
-                    {transcribe.request.isPending ? "Starting…" : t?.status === "failed" ? "Transcribe again" : "Transcribe now"}
-                  </button>
-                ) : (
-                  <p className="mt-1 text-ink-soft">Ask an editor to transcribe it.</p>
+          <fieldset className="space-y-1.5">
+            <legend className="text-sm font-extrabold">
+              Trim <span className="font-semibold text-ink-soft">· {length(len)}</span>
+            </legend>
+            {edge("start", "In", start)}
+            {edge("end", "Out", end)}
+            {problem && <p className="text-sm font-semibold text-ink">{problem}</p>}
+            <button
+              type="button"
+              onClick={() => onPreview(start, end)}
+              aria-label="Preview the trimmed clip in the player"
+              className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
+            >
+              ▶ Preview
+            </button>
+          </fieldset>
+
+          <div>
+            <p className="text-sm font-extrabold">Framing</p>
+            <div className="mt-1 grid place-items-center bg-ink p-2">
+              <div
+                className="relative [container-type:inline-size]"
+                style={{
+                  // Width-led sizing keeps the exact shape at any width (at most
+                  // 16rem tall), so the preview crops exactly as the render will.
+                  width: `min(100%, calc(16rem * ${shape.w} / ${shape.h}))`,
+                  aspectRatio: `${shape.w} / ${shape.h}`,
+                }}
+              >
+                <video
+                  ref={frame}
+                  src={url}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  aria-label="How the clip will be framed"
+                  className="block h-full w-full bg-ink"
+                  style={{ objectFit: "cover", objectPosition: `${focus}% ${focus}%` }}
+                />
+                {captions && spoken && (
+                  <CaptionPreview
+                    options={captions}
+                    speaker={spoken.speaker}
+                    lines={firstCaption(
+                      spoken,
+                      start,
+                      captionLayout(shape.outW, shape.outH, captions.mode, captions.position).maxChars,
+                      captions.mode,
+                    )}
+                    outW={shape.outW}
+                    outH={shape.outH}
+                  />
                 )}
-                {transcribe.request.isError && <p className="mt-1">{transcribe.request.error.message}</p>}
-              </>
+              </div>
+            </div>
+            {crops ? (
+              <label className="mt-2 block">
+                <span className="text-xs font-semibold text-ink-soft">
+                  Slide to choose what stays in frame ({horizontal ? "left to right" : "top to bottom"})
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={focus}
+                  onChange={(e) => setFocus(Number(e.target.value))}
+                  className="mt-1 block h-11 w-full accent-[var(--ink)]"
+                />
+              </label>
+            ) : (
+              <p className="mt-1 text-xs font-semibold text-ink-soft">The whole frame fits this shape.</p>
             )}
           </div>
-        )}
-      </fieldset>
+        </div>
+        <div className="min-w-0 space-y-3">
+          <fieldset>
+            <legend className="text-sm font-extrabold">
+              Shape <span className="font-semibold text-ink-soft">· {shape.hint}</span>
+            </legend>
+            <div className="mt-1 grid grid-cols-2 gap-1.5 @[13rem]:grid-cols-4">
+              {shapes.map((s) => (
+                <label
+                  key={s.aspect}
+                  title={s.hint}
+                  className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 border-2 border-ink px-1 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                    aspect === s.aspect ? "bg-ink text-white" : "bg-white"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name={`${id}-shape`}
+                    checked={aspect === s.aspect}
+                    onChange={() => setAspect(s.aspect)}
+                    aria-label={`${s.aspect}, ${s.hint}`}
+                    className="sr-only"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="shrink-0 border-2 border-ink bg-white"
+                    style={{ width: s.w >= s.h ? 22 : (22 * s.w) / s.h, height: s.h >= s.w ? 22 : (22 * s.h) / s.w }}
+                  />
+                  <span className="text-xs font-extrabold">{s.aspect}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="submit"
-          disabled={create.isPending || !!problem || (!!captions && !spoken)}
-          className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
-        >
-          {create.isPending ? "Starting…" : "Render clip"}
-        </button>
-        <button type="button" onClick={onClose} className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold">
-          Cancel
-        </button>
+          <fieldset>
+            <legend className="text-sm font-extrabold">Captions</legend>
+            {ready && t.segments.length > 0 ? (
+              <>
+                <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-extrabold">
+                  <input
+                    type="checkbox"
+                    checked={!!captions}
+                    onChange={(e) => setCaptions(e.target.checked ? defaultCaptionOptions : null)}
+                    className="size-5 accent-[var(--ink)]"
+                  />
+                  Burn in captions
+                </label>
+                {captions && (
+                  <>
+                    <CaptionOptionsPicker value={captions} onChange={setCaptions} speakers={speakersInClip} />
+                    <p className="mt-1 text-xs font-semibold text-ink-soft">
+                      {spoken
+                        ? "Captions come from the transcript, timed word by word. Check it for mistakes first."
+                        : "There’s no speech in this part of the clip, so there’s nothing to caption."}
+                    </p>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="mt-1 border-2 border-dashed border-ink p-2.5 text-sm font-semibold" role="status">
+                {transcript.isPending ? (
+                  <p>Checking for a transcript…</p>
+                ) : t && (t.status === "queued" || t.status === "running") ? (
+                  <p>Transcribing… Captions will be available when the transcript is ready.</p>
+                ) : ready ? (
+                  <p>No speech was found in this file, so there’s nothing to caption.</p>
+                ) : (
+                  <>
+                    <p>
+                      {t?.status === "failed"
+                        ? `Captions need a transcript, and the last one failed: ${t.error ?? "transcription failed"}.`
+                        : "Captions need a transcript of this file."}
+                    </p>
+                    {canTranscribe ? (
+                      <button
+                        type="button"
+                        onClick={transcribe.start}
+                        disabled={transcribe.request.isPending}
+                        className="btn-pop mt-2 min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
+                      >
+                        {transcribe.request.isPending ? "Starting…" : t?.status === "failed" ? "Transcribe again" : "Transcribe now"}
+                      </button>
+                    ) : (
+                      <p className="mt-1 text-ink-soft">Ask an editor to transcribe it.</p>
+                    )}
+                    {transcribe.request.isError && <p className="mt-1">{transcribe.request.error.message}</p>}
+                  </>
+                )}
+              </div>
+            )}
+          </fieldset>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={create.isPending || !!problem || (!!captions && !spoken)}
+              className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
+            >
+              {create.isPending ? "Starting…" : "Render clip"}
+            </button>
+            <button type="button" onClick={onClose} className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold">
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
     </form>
   );

@@ -2,11 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
-import { AccountHeader, Banner } from "@/components/account/account-header";
+import { Banner } from "@/components/account/account-header";
+import { PageHeader, StatePanel } from "@/components/account/page-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
-import { MediaSection } from "./media-section";
+import { Studio } from "./media-section";
 import {
   can,
   client,
@@ -15,7 +16,6 @@ import {
   NotFound,
   NotSignedIn,
   raise,
-  useMe,
   useMembers,
   useOrganisation,
   type Organisation,
@@ -44,70 +44,86 @@ export function ProjectScreen() {
   const { orgID, projectID } = useParams<{ orgID: string; projectID: string }>();
   const project = useProject(orgID, projectID);
   const org = useOrganisation(orgID);
-  useMe(); // keeps the header's sign-out button in sync
 
-  return (
-    <main className="min-h-dvh px-4 py-6 sm:px-8">
-      <AccountHeader />
-      <div className="mx-auto mt-8 max-w-4xl space-y-8">
-        <Link
-          href={`/account/organisations/${orgID}`}
-          className="inline-flex min-h-11 max-w-full items-center font-extrabold underline decoration-2 underline-offset-4"
-        >
-          <span className="truncate">← {org.data?.name ?? "Back to organisation"}</span>
-        </Link>
-
-        {project.isPending && (
-          <div aria-busy="true" className="space-y-6">
-            <span className="sr-only">Loading…</span>
-            <div className="h-48 animate-pulse bg-paper-deep" />
-            <div className="h-32 animate-pulse bg-paper-deep" />
-          </div>
-        )}
-        {project.isError && project.error instanceof NotSignedIn && (
-          <div className="sticker-lg bg-white p-6 sm:p-8">
-            <h1 className="text-3xl font-extrabold">Sign in to see this project</h1>
-            <GoogleSignIn className="mt-6 w-full sm:w-auto" />
-          </div>
-        )}
-        {project.isError && project.error instanceof NotFound && (
-          <div className="sticker-lg bg-white p-6 sm:p-8">
-            <h1 className="text-3xl font-extrabold">Project not found</h1>
-            <p className="mt-2 font-medium">It doesn’t exist, or it hasn’t been shared with you.</p>
-          </div>
-        )}
-        {project.isError && !(project.error instanceof NotFound) && !(project.error instanceof NotSignedIn) && (
-          <div className="sticker-lg bg-white p-6 sm:p-8">
-            <h1 className="text-3xl font-extrabold">Something went wrong</h1>
-            <p className="mt-2 font-medium">{project.error.message}</p>
-            <button type="button" onClick={() => project.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
-              Try again
-            </button>
-          </div>
-        )}
-        {project.data && <ProjectView project={project.data} org={org.data} />}
+  if (project.isPending) {
+    return (
+      <div aria-busy="true" className="space-y-6">
+        <span className="sr-only">Loading…</span>
+        <div className="h-24 w-2/3 animate-pulse bg-paper-deep" />
+        <div className="h-96 animate-pulse bg-paper-deep" />
       </div>
-    </main>
-  );
+    );
+  }
+  if (project.isError && project.error instanceof NotSignedIn) {
+    return (
+      <StatePanel title="Sign in to see this project">
+        <GoogleSignIn className="mt-6 w-full sm:w-auto" />
+      </StatePanel>
+    );
+  }
+  if (project.isError && project.error instanceof NotFound) {
+    return <StatePanel title="Project not found">It doesn’t exist, or it hasn’t been shared with you.</StatePanel>;
+  }
+  if (project.isError) {
+    return (
+      <StatePanel title="Something went wrong">
+        <p>{project.error.message}</p>
+        <button type="button" onClick={() => project.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
+          Try again
+        </button>
+      </StatePanel>
+    );
+  }
+  return <ProjectView project={project.data} org={org.data} />;
 }
 
 function ProjectView({ project, org }: { project: Project; org?: Organisation }) {
+  const search = useSearchParams();
+  const settings = search.get("view") === "settings";
+  const base = `/account/organisations/${project.organisation_id}/projects/${project.id}`;
+  const crumbs = [
+    { label: "Home", href: "/account" },
+    { label: org?.name ?? "Organisation", href: `/account/organisations/${project.organisation_id}` },
+  ];
+
+  if (settings) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6">
+        <PageHeader
+          crumbs={[...crumbs, { label: project.name, href: base }]}
+          title="Project settings"
+          actions={
+            <Link href={base} className="btn-pop flex min-h-11 items-center bg-white px-4 text-sm font-extrabold">
+              ← Back to studio
+            </Link>
+          }
+        />
+        <Details project={project} />
+        {org && !org.personal && can(project, "project.access.manage") && <ClientAccess project={project} />}
+        {can(project, "project.delete") && <DeleteProject project={project} />}
+      </div>
+    );
+  }
+
   return (
-    <>
-      <Details project={project} />
-      <MediaSection
+    <div className="space-y-6">
+      <PageHeader
+        crumbs={crumbs}
+        title={project.name}
+        subtitle={project.description || undefined}
+        actions={
+          <Link href={`${base}?view=settings`} className="btn-pop flex min-h-11 items-center bg-white px-4 text-sm font-extrabold">
+            Project settings
+          </Link>
+        }
+      />
+      <Studio
         project={project}
         canUpload={!!org && can(org, "media.upload")}
         canTranscribe={!!org && can(org, "editing.manage")}
         canRender={!!org && can(org, "render.execute")}
       />
-      <p className="border-2 border-dashed border-ink bg-white/60 p-5 font-semibold">
-        You can cut single clips from a video above. The timeline editor, captions and multi-clip edits aren’t available
-        yet.
-      </p>
-      {org && !org.personal && can(project, "project.access.manage") && <ClientAccess project={project} />}
-      {can(project, "project.delete") && <DeleteProject project={project} />}
-    </>
+    </div>
   );
 }
 

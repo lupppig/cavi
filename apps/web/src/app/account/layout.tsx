@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { AppShell } from "@/components/account/app-shell";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
@@ -9,7 +11,9 @@ export const metadata: Metadata = {
 export default function AccountLayout({ children }: LayoutProps<"/account">) {
   return (
     <Providers>
-      <div className="app">{children}</div>
+      <Suspense>
+        <AppShell>{children}</AppShell>
+      </Suspense>
     </Providers>
   );
 }

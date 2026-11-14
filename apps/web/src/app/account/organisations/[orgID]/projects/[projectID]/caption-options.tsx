@@ -267,7 +267,7 @@ export function CaptionOptionsPicker({
             </label>
           ))}
         </div>
-        <div className="mt-2 grid grid-cols-1 gap-1.5 @[24rem]:grid-cols-3">
+        <div className="mt-2 grid grid-cols-1 gap-1.5 @[30rem]:grid-cols-3">
           {(
             [
               ["text", "Text"],

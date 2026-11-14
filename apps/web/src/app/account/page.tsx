@@ -4,12 +4,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useState, useSyncExternalStore, type FormEvent } from "react";
-import { AccountHeader, Banner } from "@/components/account/account-header";
+import { Banner } from "@/components/account/account-header";
+import { PageHeader, StatePanel } from "@/components/account/page-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
 import {
   client,
-  displayName,
-  initials,
   NotSignedIn,
   raise,
   useMe,
@@ -48,28 +47,20 @@ export default function AccountPage() {
   const me = useMe();
 
   return (
-    <main className="min-h-dvh px-4 py-6 sm:px-8">
-      <AccountHeader />
-      <div className="mx-auto mt-10 max-w-4xl space-y-8 sm:mt-14">
-        {authError && <Banner>{authError}</Banner>}
-        {me.isPending && <Loading />}
-        {me.isError && me.error instanceof NotSignedIn && <SignedOut />}
-        {me.isError && !(me.error instanceof NotSignedIn) && (
-          <div className="sticker-lg bg-white p-6 sm:p-8">
-            <h1 className="text-3xl font-extrabold tracking-tight">We couldn’t load your account</h1>
-            <p className="mt-2 font-medium">{me.error.message}</p>
-            <button
-              type="button"
-              onClick={() => me.refetch()}
-              className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white"
-            >
-              Try again
-            </button>
-          </div>
-        )}
-        {me.data && <SignedIn me={me.data} />}
-      </div>
-    </main>
+    <div className="mx-auto max-w-5xl space-y-10">
+      {authError && <Banner>{authError}</Banner>}
+      {me.isPending && <Loading />}
+      {me.isError && me.error instanceof NotSignedIn && <SignedOut />}
+      {me.isError && !(me.error instanceof NotSignedIn) && (
+        <StatePanel title="We couldn’t load your account">
+          <p>{me.error.message}</p>
+          <button type="button" onClick={() => me.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
+            Try again
+          </button>
+        </StatePanel>
+      )}
+      {me.data && <SignedIn me={me.data} />}
+    </div>
   );
 }
 
@@ -85,79 +76,44 @@ function Loading() {
 
 function SignedOut() {
   return (
-    <div className="sticker-lg bg-white p-6 sm:p-10">
-      <h1 className="text-4xl leading-tight font-extrabold tracking-tight sm:text-5xl">You’re not signed in</h1>
-      <p className="mt-3 max-w-xl text-lg font-medium">
-        Sign in with your Google account to see your account and workspaces. New here? Your account is
-        created the first time you sign in.
-      </p>
+    <StatePanel title="Sign in to CAVI">
+      <p>Use your Google account. New here? Your account and personal studio are created the first time you sign in.</p>
       <GoogleSignIn className="mt-8 w-full sm:w-auto" />
-    </div>
+    </StatePanel>
   );
 }
 
 function SignedIn({ me }: { me: Me }) {
-  const name = displayName(me.user);
   return (
     <>
-      <section className="flex flex-col gap-5 sm:flex-row sm:items-center">
-        {me.user.avatar_url ? (
-          // Avatars come from the identity provider's CDN; a plain img avoids
-          // configuring every possible remote host for next/image.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={me.user.avatar_url} alt="" referrerPolicy="no-referrer" className="sticker size-20 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span aria-hidden="true" className="sticker grid size-20 shrink-0 place-items-center rounded-full bg-ink text-white text-2xl font-extrabold">
-            {initials(me.user)}
-          </span>
-        )}
-        <div className="min-w-0">
-          <h1 className="text-4xl leading-tight font-extrabold tracking-tight break-words sm:text-5xl">
-            Hey{me.user.first_name ? `, ${me.user.first_name}` : ""}!
-          </h1>
-          <p className="mt-1 font-semibold break-all text-ink-soft">
-            {name !== me.user.email ? `${name} · ` : ""}
-            {me.user.email}
-          </p>
-        </div>
-      </section>
-
+      <PageHeader title={`Welcome back${me.user.first_name ? `, ${me.user.first_name}` : ""}.`} subtitle="Pick up where you left off." />
       <PendingInvitations />
-
       <section aria-labelledby="orgs-heading">
-        <h2 id="orgs-heading" className="text-2xl font-extrabold tracking-tight">
+        <h2 id="orgs-heading" className="text-2xl">
           Your organisations
         </h2>
-        <ul className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2">
+        <ul className="mt-4 border-b-2 border-ink">
           {me.organisations.map((o) => (
             <li key={o.id}>
               <Link
                 href={`/account/organisations/${o.id}`}
-                className="tilt-hover sticker-lg block bg-ink p-2 focus-visible:outline-offset-4"
+                className="group flex min-h-16 items-center gap-4 border-t-2 border-ink px-2 py-3 transition-colors hover:bg-ink hover:text-paper sm:px-4"
               >
-                <span className="block border-2 border-ink bg-white p-5">
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="mr-auto text-xl font-extrabold tracking-tight break-words">{o.name}</span>
-                    {o.personal && <span className="border-2 border-ink bg-white px-2.5 py-0.5 text-xs font-extrabold">Personal</span>}
-                    <span className="border-2 border-ink bg-paper-deep px-2.5 py-0.5 text-xs font-extrabold capitalize">{o.role}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-lg font-extrabold">{o.name}</span>
+                  <span className="block truncate font-mono text-xs font-semibold uppercase opacity-80">
+                    {o.personal ? "Personal studio" : "Team"} · {o.role}
                   </span>
-                  <span className="mt-3 block text-sm font-semibold text-ink-soft">
-                    {o.workspaces.length} workspace{o.workspaces.length === 1 ? "" : "s"} · {o.workspaces.map((w) => w.name).join(", ")}
-                  </span>
-                  <span className="mt-4 block font-extrabold">Open →</span>
+                </span>
+                <span aria-hidden="true" className="text-xl font-black transition-transform group-hover:translate-x-1">
+                  →
                 </span>
               </Link>
             </li>
           ))}
         </ul>
       </section>
-
       <CreateTeam />
-
-      <p className="border-2 border-dashed border-ink bg-white/60 p-5 font-semibold">
-        Open an organisation to see its projects. CAVI is still being built: uploads, editing and renders will
-        arrive in projects as they’re ready.
-      </p>
     </>
   );
 }
@@ -182,8 +138,8 @@ function PendingInvitations() {
 
   if (!invitations.data?.length) return null;
   return (
-    <section aria-labelledby="inv-heading" className="sticker-lg bg-white p-5 sm:p-7">
-      <h2 id="inv-heading" className="text-2xl font-extrabold tracking-tight">
+    <section aria-labelledby="inv-heading" className="border-2 border-ink bg-white p-5 sm:p-7">
+      <h2 id="inv-heading" className="text-2xl">
         You’ve been invited
       </h2>
       {respond.isError && <div className="mt-4"><Banner>{respond.error.message}</Banner></div>}
@@ -246,8 +202,8 @@ function CreateTeam() {
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-5 sm:p-7">
-      <h2 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">
+    <section aria-labelledby={`${id}-h`} className="border-2 border-ink bg-white p-5 sm:p-7">
+      <h2 id={`${id}-h`} className="text-2xl">
         Start a team
       </h2>
       <p className="mt-1 font-medium text-ink-soft">

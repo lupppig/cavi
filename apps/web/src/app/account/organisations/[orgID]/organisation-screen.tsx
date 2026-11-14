@@ -2,9 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
-import { AccountHeader, Banner } from "@/components/account/account-header";
+import { Banner } from "@/components/account/account-header";
+import { orgTabs } from "@/components/account/app-shell";
+import { PageHeader, StatePanel } from "@/components/account/page-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
 import {
   can,
@@ -31,75 +33,107 @@ const field =
 export function OrganisationScreen() {
   const { orgID } = useParams<{ orgID: string }>();
   const org = useOrganisation(orgID);
-  useMe(); // keeps the header's sign-out button in sync
 
-  return (
-    <main className="min-h-dvh px-4 py-6 sm:px-8">
-      <AccountHeader />
-      <div className="mx-auto mt-8 max-w-4xl space-y-8">
-        <Link href="/account" className="inline-flex min-h-11 items-center font-extrabold underline decoration-2 underline-offset-4">
-          ← Your account
-        </Link>
-
-        {org.isPending && (
-          <div aria-busy="true" className="space-y-6">
-            <span className="sr-only">Loading…</span>
-            <div className="h-20 w-2/3 animate-pulse bg-paper-deep" />
-            <div className="h-64 animate-pulse bg-paper-deep" />
-          </div>
-        )}
-        {org.isError && org.error instanceof NotSignedIn && (
-          <div className="sticker-lg bg-white p-6 sm:p-8">
-            <h1 className="text-3xl font-extrabold">Sign in to see this organisation</h1>
-            <GoogleSignIn className="mt-6 w-full sm:w-auto" />
-          </div>
-        )}
-        {org.isError && org.error instanceof NotFound && (
-          <div className="sticker-lg bg-white p-6 sm:p-8">
-            <h1 className="text-3xl font-extrabold">Organisation not found</h1>
-            <p className="mt-2 font-medium">It doesn’t exist, or you’re not a member of it.</p>
-          </div>
-        )}
-        {org.isError && !(org.error instanceof NotFound) && !(org.error instanceof NotSignedIn) && (
-          <div className="sticker-lg bg-white p-6 sm:p-8">
-            <h1 className="text-3xl font-extrabold">Something went wrong</h1>
-            <p className="mt-2 font-medium">{org.error.message}</p>
-            <button type="button" onClick={() => org.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
-              Try again
-            </button>
-          </div>
-        )}
-        {org.data && <OrganisationView org={org.data} />}
+  if (org.isPending) {
+    return (
+      <div aria-busy="true" className="mx-auto max-w-6xl space-y-6">
+        <span className="sr-only">Loading…</span>
+        <div className="h-24 w-2/3 animate-pulse bg-paper-deep" />
+        <div className="h-64 animate-pulse bg-paper-deep" />
       </div>
-    </main>
-  );
+    );
+  }
+  if (org.isError && org.error instanceof NotSignedIn) {
+    return (
+      <StatePanel title="Sign in to see this organisation">
+        <GoogleSignIn className="mt-6 w-full sm:w-auto" />
+      </StatePanel>
+    );
+  }
+  if (org.isError && org.error instanceof NotFound) {
+    return <StatePanel title="Organisation not found">It doesn’t exist, or you’re not a member of it.</StatePanel>;
+  }
+  if (org.isError) {
+    return (
+      <StatePanel title="Something went wrong">
+        <p>{org.error.message}</p>
+        <button type="button" onClick={() => org.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
+          Try again
+        </button>
+      </StatePanel>
+    );
+  }
+  return <OrganisationView org={org.data} />;
 }
 
 function OrganisationView({ org }: { org: Organisation }) {
+  const search = useSearchParams();
+  const tabs = orgTabs.filter(
+    (t) =>
+      t.tab === "projects" ||
+      (t.tab === "people" && can(org, "organisation.members.read")) ||
+      (t.tab === "settings" && can(org, "organisation.manage")),
+  );
+  const tab = tabs.find((t) => t.tab === search.get("tab"))?.tab ?? "projects";
+  const role = `${/^[aeiou]/.test(org.role) ? "an" : "a"} ${org.role}`;
+
   return (
-    <>
-      <Title org={org} />
-      {org.personal && (
-        <p className="sticker bg-paper-deep p-5 font-semibold">
-          This is your personal studio, just for you. To work with collaborators or clients,{" "}
-          <Link href="/account" className="font-extrabold underline decoration-2 underline-offset-4">
-            start a team
-          </Link>
-          .
-        </p>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <PageHeader
+        crumbs={[{ label: "Home", href: "/account" }]}
+        title={org.name}
+        subtitle={org.personal ? `Your personal studio · you’re ${role}` : `Team · you’re ${role}`}
+      />
+      {tabs.length > 1 && (
+        <nav aria-label="Organisation sections" className="flex gap-1 overflow-x-auto border-b-2 border-ink">
+          {tabs.map((t) => (
+            <Link
+              key={t.tab}
+              href={t.tab === "projects" ? `/account/organisations/${org.id}` : `/account/organisations/${org.id}?tab=${t.tab}`}
+              aria-current={tab === t.tab ? "page" : undefined}
+              className={`-mb-0.5 flex min-h-11 shrink-0 items-center border-2 border-b-0 px-4 text-sm font-extrabold uppercase tracking-wider ${
+                tab === t.tab ? "border-ink bg-ink text-paper" : "border-transparent hover:border-ink"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </nav>
       )}
-      <Projects org={org} />
-      {can(org, "organisation.members.read") && <Members org={org} />}
-      {!org.personal && can(org, "organisation.members.manage") && <Invite org={org} />}
-      {can(org, "organisation.manage") && <AIModels org={org} />}
-    </>
+
+      {tab === "projects" && (
+        <>
+          {org.personal && (
+            <p className="border-2 border-ink bg-paper-deep p-4 text-sm font-semibold">
+              Your personal studio is just for you. To work with collaborators or clients,{" "}
+              <Link href="/account" className="font-extrabold underline decoration-2 underline-offset-4">
+                start a team
+              </Link>
+              .
+            </p>
+          )}
+          <Projects org={org} />
+        </>
+      )}
+      {tab === "people" && (
+        <>
+          <Members org={org} />
+          {!org.personal && can(org, "organisation.members.manage") && <Invite org={org} />}
+        </>
+      )}
+      {tab === "settings" && (
+        <>
+          <Rename org={org} />
+          <AIModels org={org} />
+        </>
+      )}
+    </div>
   );
 }
 
-function Title({ org }: { org: Organisation }) {
+function Rename({ org }: { org: Organisation }) {
   const id = useId();
   const qc = useQueryClient();
-  const [editing, setEditing] = useState(false);
   const [name, setName] = useState(org.name);
   const rename = useMutation({
     mutationFn: async (newName: string) => {
@@ -113,7 +147,6 @@ function Title({ org }: { org: Organisation }) {
     onSuccess: async (updated) => {
       qc.setQueryData(["organisation", org.id], updated);
       await qc.invalidateQueries({ queryKey: ["me"] });
-      setEditing(false);
     },
   });
 
@@ -123,37 +156,25 @@ function Title({ org }: { org: Organisation }) {
   }
 
   return (
-    <section>
-      {editing ? (
-        <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row">
-          <label htmlFor={`${id}-name`} className="sr-only">Organisation name</label>
-          <input id={`${id}-name`} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required autoFocus className={field} disabled={rename.isPending} />
-          <div className="flex gap-2">
-            <button type="submit" disabled={rename.isPending} className="btn-pop min-h-12 flex-1 bg-ink px-5 font-extrabold text-white disabled:opacity-60">
-              Save
-            </button>
-            <button type="button" onClick={() => { setEditing(false); setName(org.name); }} className="btn-pop min-h-12 flex-1 bg-white px-5 font-extrabold">
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-4xl leading-tight font-extrabold tracking-tight break-words sm:text-5xl">{org.name}</h1>
-          {can(org, "organisation.manage") && (
-            <button type="button" onClick={() => setEditing(true)} className="btn-pop min-h-11 bg-white px-4 text-sm font-extrabold">
-              Rename
-            </button>
-          )}
-        </div>
-      )}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {org.personal && <span className="border-2 border-ink bg-paper-deep px-3 py-1 text-sm font-extrabold">Personal</span>}
-        <span className="border-2 border-ink bg-paper-deep px-3 py-1 text-sm font-extrabold">
-          You’re {/^[aeiou]/.test(org.role) ? "an" : "a"} <span className="capitalize">{org.role}</span>
-        </span>
-      </div>
-      {rename.isError && <div className="mt-4"><Banner>{rename.error.message}</Banner></div>}
+    <section aria-labelledby={`${id}-h`} className="border-2 border-ink bg-white p-5 sm:p-7">
+      <h2 id={`${id}-h`} className="text-2xl">
+        Name
+      </h2>
+      <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <label htmlFor={`${id}-name`} className="sr-only">
+          Organisation name
+        </label>
+        <input id={`${id}-name`} value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required className={field} disabled={rename.isPending} />
+        <button
+          type="submit"
+          disabled={rename.isPending || name.trim() === org.name || !name.trim()}
+          className="btn-pop min-h-12 bg-ink px-6 font-extrabold whitespace-nowrap text-white disabled:opacity-60"
+        >
+          {rename.isPending ? "Saving…" : "Save name"}
+        </button>
+      </form>
+      {rename.isSuccess && name.trim() === org.name && <div className="mt-3"><Banner tone="ok">Saved.</Banner></div>}
+      {rename.isError && <div className="mt-3"><Banner>{rename.error.message}</Banner></div>}
     </section>
   );
 }

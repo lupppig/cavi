@@ -1,6 +1,8 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, raise, type MediaAsset, type Project } from "@/lib/queries";
@@ -21,7 +23,11 @@ type Job = {
 
 let jobSeq = 0;
 
-export function MediaSection({
+/**
+ * The studio: the project's media library beside the selected file, with
+ * its transcript, highlights and clips.
+ */
+export function Studio({
   project,
   canUpload,
   canTranscribe,
@@ -109,68 +115,183 @@ export function MediaSection({
 
   const items = media.data?.pages.flatMap((p) => p.data) ?? [];
   const visibleJobs = jobs.filter((j) => j.state !== "done");
+  const search = useSearchParams();
+  const chosen = search.get("media");
+  // Wide screens open the first file; phones show the library until one is picked.
+  const selected = items.find((a) => a.id === chosen) ?? (chosen ? undefined : items[0]);
+  const hrefFor = (assetID: string | null) => {
+    const q = new URLSearchParams(search.toString());
+    if (assetID) q.set("media", assetID);
+    else q.delete("media");
+    q.delete("tab");
+    const str = q.toString();
+    return str ? `?${str}` : "?";
+  };
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-3.5 sm:p-7">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <h2 id={`${id}-h`} className="mr-auto text-2xl font-extrabold tracking-tight">
-          Media {items.length > 0 && <span className="text-ink-soft">· {items.length}{media.hasNextPage ? "+" : ""}</span>}
-        </h2>
-        {jobs.some((j) => j.state !== "sending" && j.state !== "checking") && !busy && (
-          <button type="button" onClick={() => setJobs([])} className="min-h-11 px-2 text-sm font-extrabold underline decoration-2 underline-offset-4">
-            Clear finished
+    <div className="lg:grid lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+      <section
+        aria-labelledby={`${id}-h`}
+        className={`border-2 border-ink bg-white lg:sticky lg:top-6 ${chosen ? "hidden lg:block" : ""}`}
+        onDragOver={(e) => {
+          if (canUpload) e.preventDefault();
+        }}
+        onDrop={(e) => {
+          if (!canUpload) return;
+          e.preventDefault();
+          Array.from(e.dataTransfer.files).forEach(upload);
+        }}
+      >
+        <div className="flex min-h-14 items-center gap-2 border-b-2 border-ink px-3">
+          <h2 id={`${id}-h`} className="mr-auto text-xl">
+            Media{items.length > 0 && <span className="text-ink-soft"> · {items.length}{media.hasNextPage ? "+" : ""}</span>}
+          </h2>
+          {canUpload && <UploadButton onFiles={(files) => files.forEach(upload)} />}
+        </div>
+
+        {visibleJobs.length > 0 && (
+          <ul className="space-y-2 border-b-2 border-ink p-2" aria-label="Uploads">
+            {visibleJobs.map((j) => (
+              <UploadRow key={j.key} job={j} onCancel={() => j.controller.abort()} />
+            ))}
+            {!busy && (
+              <li>
+                <button type="button" onClick={() => setJobs([])} className="min-h-11 px-1 text-sm font-extrabold underline decoration-2 underline-offset-4">
+                  Clear finished
+                </button>
+              </li>
+            )}
+          </ul>
+        )}
+
+        {media.isPending && <div className="m-3 h-40 animate-pulse bg-paper-deep" />}
+        {media.isError && (
+          <div className="space-y-3 p-3">
+            <Banner>{media.error.message}</Banner>
+            <button type="button" onClick={() => media.refetch()} className="btn-pop min-h-11 bg-white px-4 font-extrabold">
+              Try again
+            </button>
+          </div>
+        )}
+        {media.isSuccess && items.length === 0 &&
+          (canUpload ? (
+            <DropZone onFiles={(files) => files.forEach(upload)} />
+          ) : (
+            <p className="p-4 font-semibold text-ink-soft">No media in this project yet.</p>
+          ))}
+        {items.length > 0 && (
+          <ul aria-label="Files" className="max-h-[70vh] overflow-y-auto">
+            {items.map((a) => (
+              <li key={a.id}>
+                <MediaRow
+                  asset={a}
+                  href={hrefFor(a.id)}
+                  selected={a.id === chosen ? "always" : !chosen && a.id === selected?.id ? "wide" : "no"}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+        {media.hasNextPage && (
+          <button
+            type="button"
+            onClick={() => media.fetchNextPage()}
+            disabled={media.isFetchingNextPage}
+            className="min-h-11 w-full border-t-2 border-ink px-3 text-sm font-extrabold disabled:opacity-60"
+          >
+            {media.isFetchingNextPage ? "Loading…" : "Show more"}
           </button>
         )}
+        {canUpload && items.length > 0 && (
+          <p className="border-t-2 border-ink px-3 py-2 text-xs font-semibold text-ink-soft">Drop files here to upload. Up to 5 GB each.</p>
+        )}
+      </section>
+
+      <div className={`${chosen ? "" : "hidden lg:block"} min-w-0`}>
+        {chosen && (
+          <Link href={hrefFor(null)} scroll={false} className="mb-3 inline-flex min-h-11 items-center font-extrabold underline decoration-2 underline-offset-4 lg:hidden">
+            ← All media
+          </Link>
+        )}
+        {selected ? (
+          <MediaViewer
+            key={selected.id}
+            asset={selected}
+            project={project}
+            canUpload={canUpload}
+            canTranscribe={canTranscribe}
+            canRender={canRender}
+          />
+        ) : (
+          media.isSuccess && (
+            <div className="grid min-h-64 place-items-center border-2 border-dashed border-ink p-8 text-center">
+              <p className="max-w-sm font-semibold text-ink-soft">
+                {chosen ? "That file isn’t in this project any more." : canUpload ? "Upload footage, audio or stills to start." : "Nothing to show yet."}
+              </p>
+            </div>
+          )
+        )}
       </div>
+    </div>
+  );
+}
 
-      {canUpload && <DropZone onFiles={(files) => files.forEach(upload)} />}
+function UploadButton({ onFiles }: { onFiles: (files: File[]) => void }) {
+  const id = useId();
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <label htmlFor={`${id}-file`} className="btn-pop flex min-h-11 cursor-pointer items-center bg-ink px-3 text-sm font-extrabold text-white focus-within:ring-4 focus-within:ring-ink/30">
+      + Upload
+      <input
+        ref={input}
+        id={`${id}-file`}
+        type="file"
+        multiple
+        accept={acceptedFiles}
+        className="sr-only"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          if (files.length) onFiles(files);
+          if (input.current) input.current.value = "";
+        }}
+      />
+    </label>
+  );
+}
 
-      {visibleJobs.length > 0 && (
-        <ul className="mt-4 space-y-2" aria-label="Uploads">
-          {visibleJobs.map((j) => (
-            <UploadRow key={j.key} job={j} onCancel={() => j.controller.abort()} />
-          ))}
-        </ul>
-      )}
-
-      {media.isPending && <div className="mt-5 h-40 animate-pulse bg-paper-deep" />}
-      {media.isError && (
-        <div className="mt-5 space-y-3">
-          <Banner>{media.error.message}</Banner>
-          <button type="button" onClick={() => media.refetch()} className="btn-pop min-h-11 bg-white px-4 font-extrabold">
-            Try again
-          </button>
-        </div>
-      )}
-      {media.isSuccess && items.length === 0 && !canUpload && (
-        <p className="mt-4 font-semibold text-ink-soft">No media in this project yet.</p>
-      )}
-      {items.length > 0 && (
-        <ul className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-          {items.map((a) => (
-            <li key={a.id}>
-              <MediaCard
-                asset={a}
-                project={project}
-                canUpload={canUpload}
-                canTranscribe={canTranscribe}
-                canRender={canRender}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-      {media.hasNextPage && (
-        <button
-          type="button"
-          onClick={() => media.fetchNextPage()}
-          disabled={media.isFetchingNextPage}
-          className="btn-pop mt-5 min-h-12 w-full bg-white px-6 font-extrabold disabled:opacity-60 sm:w-auto"
-        >
-          {media.isFetchingNextPage ? "Loading…" : "Show more"}
-        </button>
-      )}
-    </section>
+/** One file in the library: thumbnail, name, length and where it's at. */
+// "wide": the file shown by default on wide screens (phones show the
+// library alone, so nothing is selected there).
+function MediaRow({ asset, href, selected }: { asset: MediaAsset; href: string; selected: "always" | "wide" | "no" }) {
+  const thumb = stable(`${asset.id}:thumb`, asset.thumbnail_url, asset.url_expires_at);
+  const status = asset.processing.status;
+  const state =
+    status === "pending" || status === "processing" ? "Processing…" : status === "failed" ? "Couldn’t process" : null;
+  const length = asset.metadata?.duration_ms ? formatDuration(asset.metadata.duration_ms) : null;
+  return (
+    <Link
+      href={href}
+      scroll={false}
+      aria-current={selected === "always" ? "true" : undefined}
+      className={`flex min-h-16 items-center gap-3 border-b-2 border-ink/15 px-3 py-2 transition-colors ${
+        selected === "always" ? "bg-ink text-paper" : selected === "wide" ? "hover:bg-paper-deep lg:bg-ink lg:text-paper" : "hover:bg-paper-deep"
+      }`}
+    >
+      <span className="grid h-10 w-16 shrink-0 place-items-center overflow-hidden border-2 border-current bg-ink text-paper">
+        {thumb ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumb} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="font-mono text-[11px] font-bold uppercase">{asset.kind ?? "file"}</span>
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-extrabold">{asset.filename}</span>
+        <span className="block truncate font-mono text-xs font-semibold uppercase opacity-80">
+          {[asset.kind, length, state].filter(Boolean).join(" · ")}
+        </span>
+      </span>
+    </Link>
   );
 }
 
@@ -194,7 +315,7 @@ function DropZone({ onFiles }: { onFiles: (files: File[]) => void }) {
       }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
-      className={`mt-4 flex flex-col items-center gap-3 border-2 border-dashed border-ink p-6 text-center transition-colors ${over ? "bg-paper-deep" : "bg-paper"}`}
+      className={`m-3 flex flex-col items-center gap-3 border-2 border-dashed border-ink p-6 text-center transition-colors ${over ? "bg-paper-deep" : "bg-paper"}`}
     >
       <p className="text-lg font-extrabold">Drop footage, audio or stills here</p>
       <p className="text-sm font-semibold text-ink-soft">Video, audio, PNG, JPEG or WebP · up to 5 GB each</p>
@@ -267,8 +388,6 @@ function stable(cacheKey: string, url: string | null, expiresAt: string | null) 
   return url;
 }
 
-const kindColour: Record<string, string> = { video: "bg-ink text-white", audio: "bg-paper-deep", image: "bg-white" };
-
 function formatDuration(ms: number) {
   const total = Math.round(ms / 1000);
   const h = Math.floor(total / 3600);
@@ -294,7 +413,10 @@ function describe(a: MediaAsset): string[] {
   return out;
 }
 
-function MediaCard({
+type ViewerTab = "transcript" | "highlights" | "clips";
+
+/** The selected file: a large player, its details and actions, and tabs for what you can do with it. */
+function MediaViewer({
   asset,
   project,
   canUpload,
@@ -359,10 +481,52 @@ function MediaCard({
   const status = asset.processing.status;
   const busy = status === "pending" || status === "processing";
   const details = describe(asset);
+  const search = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const spoken = status === "ready" && !!asset.metadata?.audio_codec && (asset.kind === "video" || asset.kind === "audio");
+  const clippable = status === "ready" && asset.kind === "video" && !!url;
+  const tabs: { tab: ViewerTab; label: string }[] = [
+    ...(spoken ? [{ tab: "transcript" as const, label: "Transcript" }, { tab: "highlights" as const, label: "Highlights" }] : []),
+    ...(clippable ? [{ tab: "clips" as const, label: "Clips" }] : []),
+  ];
+  const tab = tabs.find((t) => t.tab === search.get("tab"))?.tab ?? tabs[0]?.tab;
+  const setTab = (t: ViewerTab) => {
+    const q = new URLSearchParams(search.toString());
+    q.set("tab", t);
+    router.replace(`${pathname}?${q}`, { scroll: false });
+  };
 
   return (
-    <article className="flex h-full flex-col overflow-hidden border-2 border-ink bg-paper">
-      <div className="relative grid aspect-video place-items-center border-b-[3px] border-ink bg-ink">
+    <article className="border-2 border-ink bg-white">
+      <header className="flex flex-col gap-3 border-b-2 border-ink p-3 sm:flex-row sm:items-start sm:p-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl break-all normal-case [font-stretch:100%] sm:text-2xl">{asset.filename}</h2>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-xs font-semibold uppercase text-ink-soft">
+            {[asset.kind, ...details, formatBytes(asset.size_bytes), asset.uploaded_by?.name].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {url && (
+            <a href={url} className="btn-pop flex min-h-11 items-center bg-white px-3 text-sm font-extrabold">
+              Download
+            </a>
+          )}
+          {asset.can_delete && (
+            <button
+              type="button"
+              disabled={remove.isPending}
+              onClick={() => {
+                if (window.confirm(`Delete “${asset.filename}”? This can’t be undone.`)) remove.mutate();
+              }}
+              className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold disabled:opacity-60"
+            >
+              {remove.isPending ? "Deleting…" : "Delete"}
+            </button>
+          )}
+        </div>
+      </header>
+      <div className="relative grid min-h-48 place-items-center bg-ink">
         {url && asset.kind === "video" && (
           <video
             ref={player as React.RefObject<HTMLVideoElement>}
@@ -373,17 +537,17 @@ function MediaCard({
             preload="metadata"
             onTimeUpdate={onTimeUpdate}
             onSeeking={onSeeking}
-            className="h-full w-full"
+            className="max-h-[60vh] w-full"
           />
         )}
         {url && asset.kind === "image" && (
           // The preview is the processed thumbnail when there is one; the
           // original can be large. Download always gets the original.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumb ?? url} alt={asset.filename} loading="lazy" className="h-full w-full object-contain" />
+          <img src={thumb ?? url} alt={asset.filename} loading="lazy" className="max-h-[60vh] w-full object-contain" />
         )}
         {url && asset.kind === "audio" && (
-          <div className="flex w-full flex-col items-center gap-4 p-4">
+          <div className="flex w-full flex-col items-center gap-4 p-6 sm:p-10">
             <span aria-hidden="true" className="flex h-10 items-center gap-1">
               {[0.4, 0.9, 0.6, 1, 0.5, 0.8, 0.35].map((h, i) => (
                 <span key={i} className="block w-1.5 bg-paper" style={{ height: `${h * 100}%` }} />
@@ -407,83 +571,66 @@ function MediaCard({
           </span>
         )}
       </div>
-      <div className="flex flex-1 flex-col p-3 sm:p-4">
-        <p className="font-extrabold break-all">{asset.filename}</p>
-        <p className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-soft">
-          {asset.kind && (
-            <span className={`border-2 border-ink px-2 py-0.5 text-xs font-extrabold text-ink capitalize ${kindColour[asset.kind] ?? "bg-white"}`}>
-              {asset.kind}
-            </span>
-          )}
-          <span>{formatBytes(asset.size_bytes)}</span>
-          {asset.uploaded_by && <span>· {asset.uploaded_by.name}</span>}
-        </p>
-        {details.length > 0 && (
-          <p className="mt-1 font-mono text-xs font-semibold text-ink-soft" aria-label="File details">
-            {details.join(" · ")}
-          </p>
-        )}
-        {status === "failed" && (
-          <div className="mt-3 border-2 border-ink bg-paper-deep p-3 text-sm font-semibold" role="status">
-            <p>{asset.processing.error ?? "Processing failed."}</p>
-            {canUpload && (
-              <button
-                type="button"
-                disabled={retry.isPending}
-                onClick={() => retry.mutate()}
-                className="btn-pop mt-2 min-h-11 bg-white px-3 font-extrabold disabled:opacity-60"
-              >
-                {retry.isPending ? "Retrying…" : "Try again"}
-              </button>
-            )}
-          </div>
-        )}
-        {status === "ready" && asset.metadata?.audio_codec && (asset.kind === "video" || asset.kind === "audio") && (
-          <>
-            <TranscriptPanel asset={asset} project={project} canTranscribe={canTranscribe} onSeek={seek} />
-            <HighlightsPanel
-              asset={asset}
-              project={project}
-              canEdit={canTranscribe}
-              canRender={canRender}
-              url={url}
-              onPlay={playClip}
-            />
-          </>
-        )}
-        {status === "ready" && asset.kind === "video" && url && (
-          <ClipsPanel
-            asset={asset}
-            project={project}
-            url={url}
-            canRender={canRender}
-            canTranscribe={canTranscribe}
-            playheadMS={() => (player.current?.currentTime ?? 0) * 1000}
-            onPreview={playClip}
-          />
-        )}
-        {remove.isError && <div className="mt-3"><Banner>{remove.error.message}</Banner></div>}
-        {retry.isError && <div className="mt-3"><Banner>{retry.error.message}</Banner></div>}
-        <div className="mt-auto flex gap-2 pt-4">
-          {url && (
-            <a href={url} className="btn-pop flex min-h-11 items-center bg-white px-3 text-sm font-extrabold">
-              Download
-            </a>
-          )}
-          {asset.can_delete && (
+      {status === "failed" && (
+        <div className="m-3 border-2 border-ink bg-paper-deep p-3 text-sm font-semibold sm:m-4" role="status">
+          <p>{asset.processing.error ?? "Processing failed."}</p>
+          {canUpload && (
             <button
               type="button"
-              disabled={remove.isPending}
-              onClick={() => {
-                if (window.confirm(`Delete “${asset.filename}”? This can’t be undone.`)) remove.mutate();
-              }}
-              className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold disabled:opacity-60"
+              disabled={retry.isPending}
+              onClick={() => retry.mutate()}
+              className="btn-pop mt-2 min-h-11 bg-white px-3 font-extrabold disabled:opacity-60"
             >
-              {remove.isPending ? "Deleting…" : "Delete"}
+              {retry.isPending ? "Retrying…" : "Try again"}
             </button>
           )}
         </div>
-      </div>
+      )}
+      {remove.isError && <div className="m-3"><Banner>{remove.error.message}</Banner></div>}
+      {retry.isError && <div className="m-3"><Banner>{retry.error.message}</Banner></div>}
+
+      {tabs.length > 0 && (
+        <>
+          <div role="tablist" aria-label="Work with this file" className="flex border-y-2 border-ink">
+            {tabs.map((t) => (
+              <button
+                key={t.tab}
+                type="button"
+                role="tab"
+                id={`${asset.id}-${t.tab}-tab`}
+                aria-selected={tab === t.tab}
+                aria-controls={`${asset.id}-${t.tab}-panel`}
+                onClick={() => setTab(t.tab)}
+                className={`min-h-12 min-w-0 flex-1 border-r-2 border-ink px-2 text-xs font-extrabold tracking-wider uppercase last:border-r-0 sm:flex-none sm:px-5 sm:text-sm sm:last:border-r-2 ${
+                  tab === t.tab ? "bg-ink text-paper" : "hover:bg-paper-deep"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" id={`${asset.id}-${tab}-panel`} aria-labelledby={`${asset.id}-${tab}-tab`} className="p-3 sm:p-4 [&>*:first-child]:mt-0">
+            {tab === "transcript" && <TranscriptPanel asset={asset} project={project} canTranscribe={canTranscribe} onSeek={seek} />}
+            {tab === "highlights" && (
+              <HighlightsPanel asset={asset} project={project} canEdit={canTranscribe} canRender={canRender} url={url} onPlay={playClip} />
+            )}
+            {tab === "clips" && url && (
+              <ClipsPanel
+                asset={asset}
+                project={project}
+                url={url}
+                canRender={canRender}
+                canTranscribe={canTranscribe}
+                playheadMS={() => (player.current?.currentTime ?? 0) * 1000}
+                onPreview={playClip}
+              />
+            )}
+          </div>
+        </>
+      )}
+      {status === "ready" && tabs.length === 0 && asset.kind !== "image" && (
+        <p className="p-4 text-sm font-semibold text-ink-soft">This file has no sound, so there’s nothing to transcribe.</p>
+      )}
     </article>
   );
 }

@@ -107,27 +107,26 @@ export function TranscriptPanel({
         </div>
       )}
       {t?.status === "ready" && (
-        <details className="group border-2 border-ink bg-white">
-          <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 font-extrabold">
-            <span aria-hidden="true" className="transition-transform group-open:rotate-90">▸</span>
+        <div className="border-2 border-ink bg-white">
+          <div className="flex min-h-11 items-center gap-2 px-3 font-extrabold">
             Transcript
             <span className="text-sm font-semibold text-ink-soft">
               · {t.segments.length} {t.segments.length === 1 ? "line" : "lines"}
               {t.language ? ` · ${t.language}` : ""}
             </span>
-          </summary>
+          </div>
           {t.segments.length === 0 ? (
             <p className="px-3 pb-3 text-sm font-semibold text-ink-soft">No speech was found.</p>
           ) : (
             <>
               {t.speakers.length > 0 && <Speakers transcript={t} project={project} asset={asset} canEdit={canTranscribe} />}
-              <ol className="max-h-80 space-y-2 overflow-y-auto px-3 pb-3">
+              <ol className="max-h-[32rem] space-y-1 overflow-y-auto px-3 pb-3">
                 {t.segments.map((s, i) => (
                   <li key={i} className="text-sm">
                     <button
                       type="button"
                       onClick={() => onSeek(s.start_ms)}
-                      className="mr-2 inline-flex min-h-8 items-center bg-paper px-1.5 font-mono text-xs font-bold underline-offset-2 hover:underline"
+                      className="mr-2 inline-flex min-h-11 min-w-11 items-center justify-center bg-paper px-1.5 font-mono text-xs font-bold underline-offset-2 hover:underline"
                       aria-label={`Play from ${stamp(s.start_ms)}`}
                     >
                       {stamp(s.start_ms)}
@@ -157,7 +156,7 @@ export function TranscriptPanel({
               </div>
             </>
           )}
-        </details>
+        </div>
       )}
     </div>
   );
