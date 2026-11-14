@@ -66,8 +66,8 @@ export function BriefToSpec() {
   }, []);
 
   return (
-    <div ref={root} className="grid grid-cols-1 border-2 border-current lg:grid-cols-2">
-      <div className="border-b-2 border-current p-5 sm:p-8 lg:border-r-2 lg:border-b-0">
+    <div ref={root} className="grid grid-cols-1 overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm lg:grid-cols-2">
+      <div className="border-b border-[var(--line)] p-5 sm:p-8 lg:border-r lg:border-b-0">
         <p className="mono text-xs uppercase opacity-80">Your brief</p>
         <p className="serif mt-4 text-3xl leading-tight sm:text-4xl">
           <span className="sr-only">{brief}</span>
@@ -83,7 +83,7 @@ export function BriefToSpec() {
           {spec.map(([k, v], i) => (
             <div
               key={k}
-              className={`grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 border-b border-current/40 pb-2 transition-[opacity,transform] duration-500 ${
+              className={`grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 border-b border-[var(--line)] pb-2 transition-[opacity,transform] duration-500 ${
                 i < lines ? "opacity-100" : "translate-x-4 opacity-0"
               }`}
             >

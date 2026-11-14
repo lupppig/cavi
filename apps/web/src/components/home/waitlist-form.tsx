@@ -72,13 +72,13 @@ export function WaitlistForm() {
   if (state.kind === "joined") {
     return (
       <div role="status" className="[perspective:900px]">
-        <div className="ticket flipped relative flex max-w-xl items-stretch border-2 border-current bg-[var(--fg)] text-[var(--bg)]">
+        <div className="ticket flipped relative flex max-w-xl items-stretch rounded-2xl border border-transparent bg-[var(--accent-strong)] text-white shadow-lg">
           <div className="flex-1 p-5 sm:p-6">
             <p className="mono text-xs uppercase opacity-85">Access ticket · early access</p>
             <p className="display mt-2 text-3xl sm:text-4xl">You&rsquo;re on the list.</p>
             <p className="mt-2 font-medium">We&rsquo;ll email you when early access opens.</p>
           </div>
-          <div className="mono flex w-14 items-center justify-center border-l-2 border-dashed border-current text-xs font-bold tracking-[0.3em] uppercase [writing-mode:vertical-rl]">
+          <div className="mono flex w-14 items-center justify-center border-l border-dashed border-[var(--line-strong)] text-xs font-bold tracking-[0.3em] uppercase [writing-mode:vertical-rl]">
             Admit one
           </div>
         </div>
@@ -92,7 +92,7 @@ export function WaitlistForm() {
   const emailInvalid = state.kind === "error" && state.field === "email";
 
   const field =
-    "min-h-13 w-full min-w-0 border-2 border-current bg-transparent px-4 text-base font-medium text-current placeholder:text-current placeholder:opacity-75 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-current focus:ring-offset-2 focus:ring-offset-[var(--bg)] disabled:opacity-50";
+    "min-h-13 w-full min-w-0 rounded-xl border border-[var(--line-strong)] bg-white px-4 text-base font-medium text-[var(--fg)] placeholder:text-[var(--muted)] focus:border-[var(--accent)] focus:outline-none focus:ring-3 focus:ring-[var(--accent)]/20 disabled:opacity-50";
 
   return (
     <form onSubmit={onSubmit}>
@@ -143,15 +143,15 @@ export function WaitlistForm() {
 
       <p id={errorId} aria-live="polite" className="mt-3 min-h-5 text-sm font-bold">
         {state.kind === "error" && (
-          <span className="inline-block bg-[var(--fg)] px-2 py-0.5 text-[var(--bg)]">{state.message}</span>
+          <span className="inline-block rounded-md bg-[var(--danger-soft)] px-2 py-0.5 text-[var(--danger)]">{state.message}</span>
         )}
         {unavailable && (
-          <span className="inline-block bg-[var(--fg)] px-2 py-0.5 text-[var(--bg)]">
+          <span className="inline-block rounded-md bg-[var(--danger-soft)] px-2 py-0.5 text-[var(--danger)]">
             Signups are unavailable right now. Please check back soon.
           </span>
         )}
       </p>
-      <p className="text-sm font-medium opacity-85">
+      <p className="text-sm text-[var(--muted)]">
         We&rsquo;ll only use your email to contact you about CAVI early access.
       </p>
     </form>

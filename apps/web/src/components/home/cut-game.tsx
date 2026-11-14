@@ -262,16 +262,16 @@ export function CutGame() {
   const x = (ms: number) => ms * PX_PER_MS;
 
   return (
-    <div className="border-2 border-current">
+    <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-white shadow-sm">
       {/* HUD */}
-      <div className="mono grid grid-cols-3 border-b-2 border-current text-xs uppercase sm:text-xs">
-        <div className="border-r-2 border-current p-3">
+      <div className="mono grid grid-cols-3 border-b border-[var(--line-strong)] text-xs uppercase sm:text-xs">
+        <div className="border-r border-[var(--line-strong)] p-3">
           <p className="opacity-80">Round</p>
           <p className="mt-0.5 text-base font-bold sm:text-lg">
             {round + 1}/{rounds.length} · {rounds[round].name}
           </p>
         </div>
-        <div className="border-r-2 border-current p-3">
+        <div className="border-r border-[var(--line-strong)] p-3">
           <p className="opacity-80">Score</p>
           <p className="mt-0.5 text-base font-bold tabular-nums sm:text-lg">{total}</p>
         </div>
@@ -326,7 +326,7 @@ export function CutGame() {
       </div>
 
       {/* The timeline, tilted back in 3D, scrolling under a fixed playhead */}
-      <div ref={stage} className="game-stage relative overflow-hidden border-y-2 border-current" aria-hidden="true">
+      <div ref={stage} className="game-stage relative overflow-hidden border-y border-[var(--line-strong)]" aria-hidden="true">
         <div className="game-track relative h-28 sm:h-32">
           <div className="absolute inset-y-0 left-1/2">
             <div ref={track} className="absolute inset-y-0 left-0 will-change-transform">
@@ -334,9 +334,9 @@ export function CutGame() {
                 {tl.lines.map((l, i) => (
                   <div
                     key={i}
-                    className={`absolute inset-y-0 overflow-hidden border-2 border-current px-2 py-1.5 ${
-                      revealed && l.kind === "payoff" ? "bg-[var(--fg)] text-[var(--bg)]" : ""
-                    } ${revealed && l.kind === "filler" ? "opacity-50" : ""}`}
+                    className={`absolute inset-y-0 overflow-hidden border border-[var(--line-strong)] px-2 py-1.5 ${
+                      revealed && l.kind === "payoff" ? "bg-[var(--accent-strong)] text-white" : ""
+                    } ${revealed && l.kind === "filler" ? "opacity-50" : ""} rounded-xl`}
                     style={{
                       left: x(l.start) + 2,
                       width: x(l.end - l.start) - 4,
@@ -351,13 +351,13 @@ export function CutGame() {
                   </div>
                 ))}
                 {marks.in !== null && (
-                  <div className="absolute -inset-y-3 w-1 bg-[var(--fg)]" style={{ left: x(marks.in) }}>
-                    <span className="mono absolute -top-0.5 left-1.5 bg-[var(--fg)] px-1 text-[11px] font-bold text-[var(--bg)]">IN</span>
+                  <div className="absolute -inset-y-3 w-1 bg-[var(--accent-strong)]" style={{ left: x(marks.in) }}>
+                    <span className="mono absolute -top-0.5 left-1.5 rounded bg-[var(--accent-strong)] px-1 text-[11px] font-bold text-white">IN</span>
                   </div>
                 )}
                 {marks.out !== null && (
-                  <div className="absolute -inset-y-3 w-1 bg-[var(--fg)]" style={{ left: x(marks.out) }}>
-                    <span className="mono absolute right-1.5 -bottom-0.5 bg-[var(--fg)] px-1 text-[11px] font-bold text-[var(--bg)]">OUT</span>
+                  <div className="absolute -inset-y-3 w-1 bg-[var(--accent-strong)]" style={{ left: x(marks.out) }}>
+                    <span className="mono absolute right-1.5 -bottom-0.5 rounded bg-[var(--accent-strong)] px-1 text-[11px] font-bold text-white">OUT</span>
                   </div>
                 )}
               </div>
@@ -372,9 +372,9 @@ export function CutGame() {
         </div>
       </div>
       {revealed && (
-        <p className="mono flex flex-wrap gap-x-4 gap-y-1 border-b-2 border-current px-4 py-2 text-xs uppercase sm:px-8">
+        <p className="mono flex flex-wrap gap-x-4 gap-y-1 border-b border-[var(--line-strong)] px-4 py-2 text-xs uppercase sm:px-8">
           <span>
-            <span className="mr-1 inline-block size-2.5 border border-current bg-[repeating-linear-gradient(135deg,currentColor_0_1px,transparent_1px_4px)] align-middle" />
+            <span className="mr-1 inline-block size-2.5 border border-[var(--line-strong)] bg-[repeating-linear-gradient(135deg,currentColor_0_1px,transparent_1px_4px)] align-middle" />
             Setup
           </span>
           <span>

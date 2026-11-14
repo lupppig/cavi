@@ -17,20 +17,20 @@ export function Mark({ className = "size-7" }: { className?: string }) {
   );
 }
 
-/** Sits over every section and inverts against it (mix-blend-mode: difference). */
+/** A light bar that stays over every section. */
 export function SiteHeader() {
   return (
     <header className="site-header fixed inset-x-0 top-0 z-40">
       <div className="mx-auto flex h-16 max-w-[90rem] items-center justify-between gap-3 px-4 sm:h-20 sm:px-8">
-        <a href="#top" className="flex min-h-11 items-center gap-2.5 text-xl font-black tracking-tight [font-stretch:125%]">
+        <a href="#top" className="flex min-h-11 items-center gap-2.5 text-lg font-semibold tracking-tight">
           <Mark />
           CAVI
         </a>
         <nav aria-label="Primary" className="hidden md:block">
-          <ul className="mono flex gap-1 text-xs font-medium uppercase">
+          <ul className="flex gap-1 text-sm font-medium text-[var(--subtle)]">
             {links.map((l) => (
               <li key={l.href}>
-                <a href={l.href} className="flex min-h-11 items-center px-3 underline-offset-4 hover:underline">
+                <a href={l.href} className="flex min-h-11 items-center rounded-lg px-3 transition-colors hover:bg-black/5 hover:text-[var(--fg)]">
                   {l.label}
                 </a>
               </li>
@@ -38,12 +38,12 @@ export function SiteHeader() {
           </ul>
         </nav>
         <div className="flex items-center gap-1 sm:gap-2">
-          <a href={signInHref()} className="mono hidden min-h-11 items-center px-3 text-xs font-medium uppercase underline-offset-4 hover:underline sm:flex">
+          <a href={signInHref()} className="hidden min-h-11 items-center rounded-lg px-3 text-sm font-medium text-[var(--subtle)] transition-colors hover:bg-black/5 hover:text-[var(--fg)] sm:flex">
             Sign in
           </a>
           <a
             href="#waitlist"
-            className="flex min-h-11 items-center border-2 border-current px-3 text-xs font-extrabold tracking-wider uppercase transition-colors hover:bg-white hover:text-black sm:px-4"
+            className="btn btn-sm"
           >
             Join the waitlist
           </a>

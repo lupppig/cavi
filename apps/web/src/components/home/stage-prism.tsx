@@ -113,7 +113,7 @@ export function StagePrism({ stages }: { stages: Stage[] }) {
               </p>
               <div className="mt-2 flex gap-1.5" aria-hidden="true">
                 {stages.map((s, i) => (
-                  <span key={s.title} className={`h-1.5 flex-1 ${i < unlocked ? "bg-current" : "bg-current/30"}`} />
+                  <span key={s.title} className={`h-1.5 flex-1 rounded-full ${i < unlocked ? "bg-[var(--accent)]" : "bg-[var(--line-strong)]"}`} />
                 ))}
               </div>
               <ol className="mt-6 hidden space-y-1 lg:block">
@@ -139,7 +139,7 @@ export function StagePrism({ stages }: { stages: Stage[] }) {
                 {stages.map((s, i) => (
                   <div
                     key={s.title}
-                    className="prism-face flex flex-col justify-between border-2 border-current bg-[var(--bg)] p-5 sm:p-7"
+                    className="prism-face flex flex-col justify-between rounded-2xl border border-[var(--line)] bg-white p-5 shadow-[0_20px_50px_-24px_rgb(16_16_20/0.3)] sm:p-7"
                     style={{ "--i": i } as CSSProperties}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -168,7 +168,7 @@ export function StagePrism({ stages }: { stages: Stage[] }) {
 
       <ol className="still-only mx-auto grid max-w-[90rem] grid-cols-1 gap-px px-4 pb-20 sm:grid-cols-2 sm:px-8 lg:grid-cols-3">
         {stages.map((s, i) => (
-          <li key={s.title} className="border-2 border-current p-6">
+          <li key={s.title} className="border border-[var(--line-strong)] p-6 rounded-xl">
             <div className="flex items-start justify-between">
               <span className="display text-5xl">{String(i + 1).padStart(2, "0")}</span>
               <Motif title={s.title} />

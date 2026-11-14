@@ -13,8 +13,8 @@ import "./home.css";
 
 
 export const viewport: Viewport = {
-  themeColor: "#050505",
-  colorScheme: "dark",
+  themeColor: "#f7f7f8",
+  colorScheme: "light",
 };
 
 const stages: Stage[] = [
@@ -69,8 +69,8 @@ function Flip({ text, from = 0, className = "" }: { text: string; from?: number;
 function Kicker({ n, children }: { n: string; children: string }) {
   return (
     <p className="mono flex items-center gap-3 text-xs uppercase">
-      <span className="border-2 border-current px-1.5 py-0.5 font-bold">{n}</span>
-      <span className="opacity-85">{children}</span>
+      <span className="rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-semibold text-[var(--accent-text)]">{n}</span>
+      <span className="text-[var(--muted)]">{children}</span>
     </p>
   );
 }
@@ -79,8 +79,8 @@ function Band({ items, invert, reverse }: { items: string[]; invert?: boolean; r
   const row = [...items, ...items];
   return (
     <div
-      className={`skew-band overflow-hidden border-y-2 py-3 sm:py-4 ${
-        invert ? "border-[var(--black)] bg-[var(--white)] text-[var(--black)]" : "border-[var(--white)] bg-[var(--black)] text-[var(--white)]"
+      className={`skew-band overflow-hidden border-y py-3 sm:py-4 ${
+        invert ? "border-transparent bg-[var(--accent-strong)] text-white" : "border-[var(--line)] bg-white text-[var(--fg)]"
       }`}
     >
       <ul className={`flex w-max gap-8 ${reverse ? "marquee-reverse" : "marquee"}`}>
@@ -100,7 +100,7 @@ export default function Home() {
     <div className="home">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-white focus:px-4 focus:py-3 focus:text-black"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-black focus:shadow"
       >
         Skip to content
       </a>
@@ -112,13 +112,13 @@ export default function Home() {
           <div className="mx-auto max-w-[90rem] px-4 sm:px-8">
             <div className="mono flex flex-wrap items-center justify-between gap-2 text-xs uppercase">
               <p className="flex items-center gap-2">
-                <span aria-hidden="true" className="rec size-2.5 rounded-full bg-current" />
+                <span aria-hidden="true" className="rec size-2.5 rounded-full bg-[var(--accent)]" />
                 Rec <Timecode />
               </p>
-              <p className="opacity-85">Creative production · in development</p>
+              <p className="text-[var(--muted)]">Creative production · in development</p>
             </div>
 
-            <h1 className="display relative z-10 mt-8 text-[clamp(2.6rem,9.5vw,9.5rem)] mix-blend-difference sm:mt-12">
+            <h1 className="display relative z-10 mt-8 text-[clamp(2.6rem,9.5vw,9.5rem)] sm:mt-12">
               <span className="sr-only">Make more of what moves people.</span>
               <Flip text="Make more of what" />
               <span aria-hidden="true" className="serif inline-block pr-[0.08em] text-[1.12em] leading-[0.8] lowercase">
@@ -145,8 +145,8 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mono mt-6 flex flex-wrap items-center justify-between gap-3 border-t-2 border-current pt-4 text-xs uppercase">
-              <span className="opacity-85">Scroll to roll ↓</span>
+            <div className="mono mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--line-strong)] pt-4 text-xs uppercase">
+              <span className="text-[var(--muted)]">Scroll to roll ↓</span>
               <a href="#game" className="flex min-h-11 items-center gap-2 font-bold underline-offset-4 hover:underline">
                 ▶ Play “Cut the moment”
               </a>
@@ -238,11 +238,11 @@ export default function Home() {
             <h2 className="display reveal mt-6 max-w-5xl text-[clamp(2.5rem,7vw,6.5rem)]">
               For people who make things <span className="serif lowercase">for a living</span>.
             </h2>
-            <ul className="mt-12 border-b-2 border-current">
+            <ul className="mt-12 border-b border-[var(--line-strong)]">
               {audiences.map((a, i) => (
                 <li
                   key={a.name}
-                  className="row-reveal reveal grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 border-t-2 border-current px-2 py-6 hover:bg-[var(--fg)] hover:text-[var(--bg)] sm:grid-cols-[4rem_minmax(0,1.1fr)_minmax(0,1fr)] sm:items-center sm:px-4 sm:py-8"
+                  className="row-reveal reveal grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 border-t border-[var(--line-strong)] px-2 py-6 hover:bg-[var(--accent-soft)] sm:grid-cols-[4rem_minmax(0,1.1fr)_minmax(0,1fr)] sm:items-center sm:px-4 sm:py-8"
                 >
                   <span className="mono text-sm">{String(i + 1).padStart(2, "0")}</span>
                   <h3 className="display text-3xl sm:text-5xl">{a.name}</h3>
@@ -257,10 +257,10 @@ export default function Home() {
         <section className="ink grain py-20 sm:py-28">
           <div className="mx-auto max-w-[90rem] px-4 sm:px-8">
             <Kicker n="06">What we promise</Kicker>
-            <ol className="mt-12 grid grid-cols-1 gap-px bg-current md:grid-cols-3">
+            <ol className="mt-12 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--line)] md:grid-cols-3">
               {principles.map((p, i) => (
                 <li key={p.title} className="reveal-3d bg-[var(--bg)] p-6 sm:p-8">
-                  <span className="display outline-text text-7xl sm:text-8xl">{i + 1}</span>
+                  <span className="display text-7xl text-[var(--accent)] sm:text-8xl">{i + 1}</span>
                   <h3 className="display mt-6 text-3xl sm:text-4xl">{p.title}</h3>
                   <p className="mt-3 text-lg leading-relaxed">{p.body}</p>
                 </li>
@@ -291,14 +291,14 @@ export default function Home() {
           <p className="display outline-text text-[clamp(5rem,26vw,24rem)] leading-[0.8]" aria-hidden="true">
             CAVI
           </p>
-          <div className="mono mt-8 flex flex-col gap-3 border-t-2 border-current pt-6 text-xs uppercase sm:flex-row sm:items-center sm:justify-between">
+          <div className="mono mt-8 flex flex-col gap-3 border-t border-[var(--line-strong)] pt-6 text-xs uppercase sm:flex-row sm:items-center sm:justify-between">
             <span className="flex items-center gap-2">
               <Mark className="size-5" /> Made for people who make things
             </span>
             <a href={signInHref()} className="flex min-h-11 items-center underline-offset-4 hover:underline">
               Already have an account? Sign in
             </a>
-            <span className="opacity-80">© 2026 CAVI · In development</span>
+            <span className="text-[var(--muted)]">© 2026 CAVI · In development</span>
           </div>
         </div>
       </footer>

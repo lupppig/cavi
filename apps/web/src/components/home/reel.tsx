@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 
-/** Monochrome motifs for the frames: abstract production marks, not screenshots. */
+/** Two-tone motifs for the frames: abstract production marks, not screenshots. */
 function Frame({ i, children, invert }: { i: number; children: ReactNode; invert?: boolean }) {
   return (
     <div
-      className={`reel-frame flex flex-col justify-between border-2 p-2 sm:p-3 ${
-        invert ? "border-black bg-[var(--white)] text-black" : "border-[var(--white)] bg-black text-[var(--white)]"
+      className={`reel-frame flex flex-col justify-between rounded-2xl border p-2 shadow-[0_10px_30px_-12px_rgb(16_16_20/0.25)] sm:p-3 ${
+        invert ? "border-[var(--line)] bg-white text-[var(--ink)]" : "border-transparent bg-[var(--accent)] text-white"
       }`}
       style={{ "--i": i } as CSSProperties}
     >
@@ -38,7 +38,7 @@ const frames: { invert?: boolean; body: ReactNode }[] = [
   {
     invert: true,
     body: (
-      <div className="relative mx-auto h-12 w-20 border-2 border-current sm:h-20 sm:w-36">
+      <div className="relative mx-auto h-12 w-20 border border-[var(--line-strong)] sm:h-20 sm:w-36 rounded-xl">
         <div className="absolute inset-y-0 left-1/2 w-[30%] -translate-x-1/2 bg-current" />
         <span className="mono absolute -bottom-4 left-0 text-[10px] sm:-bottom-5 sm:text-[11px]">16:9 → 9:16</span>
       </div>
@@ -48,8 +48,8 @@ const frames: { invert?: boolean; body: ReactNode }[] = [
   {
     invert: true,
     body: (
-      <div className="mx-auto grid size-12 place-items-center border-2 border-current sm:size-20">
-        <div className="grid size-7 place-items-center border-2 border-current sm:size-12">
+      <div className="mx-auto grid size-12 place-items-center border border-[var(--line-strong)] sm:size-20 rounded-xl">
+        <div className="grid size-7 place-items-center border border-[var(--line-strong)] sm:size-12 rounded-xl">
           <div className="size-2.5 bg-current sm:size-4" />
         </div>
       </div>
@@ -60,9 +60,9 @@ const frames: { invert?: boolean; body: ReactNode }[] = [
     invert: true,
     body: (
       <div className="mono flex items-center justify-between text-[11px] font-bold sm:text-sm">
-        <span className="border-2 border-current px-1.5">IN</span>
+        <span className="border border-[var(--line-strong)] px-1.5 rounded-md">IN</span>
         <span className="mx-2 h-0.5 flex-1 bg-current" />
-        <span className="border-2 border-current px-1.5">OUT</span>
+        <span className="border border-[var(--line-strong)] px-1.5 rounded-md">OUT</span>
       </div>
     ),
   },

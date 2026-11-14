@@ -132,9 +132,9 @@ export function Listbox({
         disabled={disabled}
         onClick={() => (open ? setOpen(false) : openAt(all.indexOf(selected)))}
         onKeyDown={onKey}
-        className="flex min-h-13 w-full min-w-0 items-center justify-between gap-3 border-2 border-current bg-[var(--bg)] px-4 text-left text-base font-medium text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] disabled:opacity-50"
+        className="flex min-h-13 w-full min-w-0 items-center justify-between gap-3 rounded-xl border border-[var(--line-strong)] bg-white px-4 text-left text-base font-medium text-[var(--fg)] focus:outline-none focus-visible:border-[var(--accent)] focus-visible:ring-3 focus-visible:ring-[var(--accent)]/20 disabled:opacity-50"
       >
-        <span className={`truncate ${value ? "" : "opacity-80"}`}>{shown}</span>
+        <span className={`truncate ${value ? "" : "text-[var(--muted)]"}`}>{shown}</span>
         <svg viewBox="0 0 12 8" className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true">
           <path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" />
         </svg>
@@ -144,7 +144,7 @@ export function Listbox({
         role="listbox"
         aria-label={label}
         hidden={!open}
-        className="absolute inset-x-0 top-full z-30 -mt-0.5 max-h-[min(26rem,60vh)] overflow-y-auto overscroll-contain border-2 border-current bg-[var(--bg)] text-[var(--fg)]"
+        className="absolute inset-x-0 top-full z-30 mt-1.5 max-h-[min(26rem,60vh)] overflow-y-auto overscroll-contain rounded-xl border border-[var(--line)] bg-white p-1 text-[var(--fg)] shadow-xl"
       >
         {all.map((o, i) => (
           <li
@@ -155,8 +155,8 @@ export function Listbox({
             onPointerEnter={() => setActive(i)}
             onPointerDown={(e) => e.preventDefault()}
             onClick={() => choose(i)}
-            className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 text-base ${
-              i === active ? "bg-[var(--fg)] text-[var(--bg)]" : ""
+            className={`flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg px-3 text-base ${
+              i === active ? "bg-[var(--accent-soft)] text-[var(--accent-text)]" : ""
             } ${i === 0 ? "italic" : "font-medium"}`}
           >
             {o.label}

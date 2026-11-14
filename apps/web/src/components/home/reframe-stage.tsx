@@ -40,7 +40,7 @@ export function ReframeStage() {
 
   return (
     <div>
-      <div className="relative aspect-video w-full overflow-hidden border-2 border-current" aria-hidden="true">
+      <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-[var(--line)] bg-white" aria-hidden="true">
         {/* The wide shot: two people at a table, drawn in line. */}
         <svg viewBox="0 0 160 90" className="absolute inset-0 h-full w-full" fill="none" stroke="currentColor" strokeWidth="1.2">
           <path d="M0 70 H160" />
@@ -65,14 +65,14 @@ export function ReframeStage() {
         </svg>
         {/* Everything outside the frame is cut. */}
         <div
-          className="reframe-box absolute inset-y-0 border-2 border-current shadow-[0_0_0_100vmax_color-mix(in_srgb,var(--bg)_78%,transparent)]"
+          className="reframe-box absolute inset-y-0 border-2 border-[var(--accent)] shadow-[0_0_0_100vmax_color-mix(in_srgb,white_80%,transparent)]"
           style={{ width: `${width}%`, left: `${left}%` }}
         >
-          <span className="mono absolute top-1.5 left-1.5 bg-[var(--fg)] px-1.5 text-[11px] font-bold text-[var(--bg)] sm:text-xs">
+          <span className="mono absolute top-1.5 left-1.5 rounded bg-[var(--accent-strong)] px-1.5 text-[11px] font-bold text-white sm:text-xs">
             {s.aspect}
           </span>
           {["top-0 left-0 border-t-4 border-l-4", "top-0 right-0 border-t-4 border-r-4", "bottom-0 left-0 border-b-4 border-l-4", "right-0 bottom-0 border-r-4 border-b-4"].map((c) => (
-            <span key={c} className={`absolute size-4 border-current ${c}`} />
+            <span key={c} className={`absolute size-4 border-[var(--accent)] ${c}`} />
           ))}
         </div>
       </div>
@@ -83,9 +83,9 @@ export function ReframeStage() {
           {shapes.map((sh, i) => (
             <label
               key={sh.aspect}
-              className={`flex min-h-14 cursor-pointer flex-col items-center justify-center gap-1 border-2 border-current px-1 transition-colors has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-current ${
-                i === shape ? "bg-[var(--fg)] text-[var(--bg)]" : ""
-              }`}
+              className={`flex min-h-14 cursor-pointer flex-col items-center justify-center gap-1 border border-[var(--line-strong)] px-1 transition-colors has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--accent)] ${
+                i === shape ? "border-[var(--accent-strong)] bg-[var(--accent-strong)] text-white" : "bg-white hover:bg-[var(--surface-2)]"
+              } rounded-xl`}
             >
               <input
                 type="radio"
