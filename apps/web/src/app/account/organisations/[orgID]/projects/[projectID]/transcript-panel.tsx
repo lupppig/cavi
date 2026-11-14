@@ -5,12 +5,31 @@ import { useState } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, NotFound, raise, useAIModelSettings, type MediaAsset, type Project, type Transcript } from "@/lib/queries";
 
-function stamp(ms: number) {
+export function stamp(ms: number) {
   const total = Math.floor(ms / 1000);
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = String(total % 60).padStart(2, "0");
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
+}
+
+/** A file's transcript, or null if it has never been transcribed. Polls while it's in progress. */
+export function useTranscript(project: Project, asset: MediaAsset) {
+  const path = { orgID: project.organisation_id, projectID: project.id, assetID: asset.id };
+  return useQuery({
+    queryKey: ["media", asset.id, "transcript"],
+    queryFn: async (): Promise<Transcript | null> => {
+      const { data, error, response } = await client().GET(
+        "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript",
+        { params: { path } },
+      );
+      if (response.status === 404) return null;
+      if (!data) raise(error, response.status, "Could not load the transcript.");
+      return data;
+    },
+    retry: (n, e) => !(e instanceof NotFound) && n < 2,
+    refetchInterval: (q) => (q.state.data && (q.state.data.status === "queued" || q.state.data.status === "running") ? 3000 : false),
+  });
 }
 
 export function TranscriptPanel({
@@ -29,20 +48,7 @@ export function TranscriptPanel({
   const path = { orgID: project.organisation_id, projectID: project.id, assetID: asset.id };
   const key = ["media", asset.id, "transcript"];
 
-  const transcript = useQuery({
-    queryKey: key,
-    queryFn: async (): Promise<Transcript | null> => {
-      const { data, error, response } = await client().GET(
-        "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript",
-        { params: { path } },
-      );
-      if (response.status === 404) return null;
-      if (!data) raise(error, response.status, "Could not load the transcript.");
-      return data;
-    },
-    retry: (n, e) => !(e instanceof NotFound) && n < 2,
-    refetchInterval: (q) => (q.state.data && (q.state.data.status === "queued" || q.state.data.status === "running") ? 3000 : false),
-  });
+  const transcript = useTranscript(project, asset);
   const settings = useAIModelSettings(project.organisation_id);
   const model = settings.data?.find((s) => s.task === "transcription")?.model;
 

@@ -13,6 +13,7 @@ export type Project = components["schemas"]["Project"];
 export type ProjectAccess = components["schemas"]["ProjectAccess"];
 export type MediaAsset = components["schemas"]["MediaAsset"];
 export type Transcript = components["schemas"]["Transcript"];
+export type Highlights = components["schemas"]["Highlights"];
 
 export class NotSignedIn extends Error {}
 export class NotFound extends Error {}

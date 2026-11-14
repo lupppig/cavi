@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, raise, type MediaAsset, type Project } from "@/lib/queries";
 import { acceptedFiles, formatBytes, maxUploadBytes, sendFile, UploadAborted } from "@/lib/upload";
+import { HighlightsPanel } from "./highlights-panel";
 import { TranscriptPanel } from "./transcript-panel";
 
 type Job = {
@@ -297,12 +298,28 @@ function MediaCard({
 }) {
   const qc = useQueryClient();
   const player = useRef<HTMLMediaElement>(null);
-  const seek = (ms: number) => {
+  // Where to pause when playing a clip; null plays on.
+  const stopAt = useRef<number | null>(null);
+  const play = (startMS: number, endMS: number | null) => {
     const el = player.current;
     if (!el) return;
-    el.currentTime = ms / 1000;
+    stopAt.current = endMS === null ? null : endMS / 1000;
+    el.currentTime = startMS / 1000;
     void el.play().catch(() => {});
     el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+  const seek = (ms: number) => play(ms, null);
+  const playClip = (startMS: number, endMS: number) => play(startMS, endMS);
+  const onTimeUpdate = (e: React.SyntheticEvent<HTMLMediaElement>) => {
+    const el = e.currentTarget;
+    if (stopAt.current !== null && el.currentTime >= stopAt.current) {
+      stopAt.current = null;
+      el.pause();
+    }
+  };
+  // Seeking past the clip's end yourself ends clip playback.
+  const onSeeking = (e: React.SyntheticEvent<HTMLMediaElement>) => {
+    if (stopAt.current !== null && e.currentTarget.currentTime > stopAt.current) stopAt.current = null;
   };
   const url = stable(asset.id, asset.url, asset.url_expires_at);
   const thumb = stable(`${asset.id}:thumb`, asset.thumbnail_url, asset.url_expires_at);
@@ -343,6 +360,8 @@ function MediaCard({
             controls
             playsInline
             preload="metadata"
+            onTimeUpdate={onTimeUpdate}
+            onSeeking={onSeeking}
             className="h-full w-full"
           />
         )}
@@ -355,7 +374,15 @@ function MediaCard({
         {url && asset.kind === "audio" && (
           <div className="flex w-full flex-col items-center gap-4 p-4">
             <span aria-hidden="true" className="text-4xl">🎧</span>
-            <audio ref={player as React.RefObject<HTMLAudioElement>} src={url} controls preload="metadata" className="w-full" />
+            <audio
+              ref={player as React.RefObject<HTMLAudioElement>}
+              src={url}
+              controls
+              preload="metadata"
+              onTimeUpdate={onTimeUpdate}
+              onSeeking={onSeeking}
+              className="w-full"
+            />
           </div>
         )}
         {busy && (
@@ -397,7 +424,10 @@ function MediaCard({
           </div>
         )}
         {status === "ready" && asset.metadata?.audio_codec && (asset.kind === "video" || asset.kind === "audio") && (
-          <TranscriptPanel asset={asset} project={project} canTranscribe={canTranscribe} onSeek={seek} />
+          <>
+            <TranscriptPanel asset={asset} project={project} canTranscribe={canTranscribe} onSeek={seek} />
+            <HighlightsPanel asset={asset} project={project} canEdit={canTranscribe} onPlay={playClip} />
+          </>
         )}
         {remove.isError && <div className="mt-3"><Banner>{remove.error.message}</Banner></div>}
         {retry.isError && <div className="mt-3"><Banner>{retry.error.message}</Banner></div>}
