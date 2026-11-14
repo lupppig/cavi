@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -61,6 +62,16 @@ func (m *memStore) Put(_ context.Context, key, _ string, body []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.objects[key] = body
+	return nil
+}
+func (m *memStore) PutFile(_ context.Context, key, _, _, path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.objects[key] = b
 	return nil
 }
 func (m *memStore) Delete(_ context.Context, key string) error {

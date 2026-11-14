@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -134,6 +135,32 @@ func TestS3RoundTrip(t *testing.T) {
 		t.Fatalf("put then stat = %+v, %v", info, err)
 	}
 	_ = s.Delete(ctx, thumb)
+
+	// Rendered files stream from disk and download under their name.
+	file := filepath.Join(t.TempDir(), "clip.mp4")
+	if err := os.WriteFile(file, []byte("rendered clip bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	clip := key + "-clip"
+	if err := s.PutFile(ctx, clip, "video/mp4", "Best bit.mp4", file); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := s.Stat(ctx, clip); err != nil || info.Size != 19 {
+		t.Fatalf("put file then stat = %+v, %v", info, err)
+	}
+	clipURL, _, err := s.PresignDownload(ctx, clip, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err = http.Get(clipURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if cd := res.Header.Get("Content-Disposition"); cd != `attachment; filename="Best bit.mp4"` {
+		t.Errorf("content-disposition = %q", cd)
+	}
+	_ = s.Delete(ctx, clip)
 
 	if err := s.Delete(ctx, key); err != nil {
 		t.Fatal(err)

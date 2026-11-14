@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -166,6 +167,31 @@ func (s *S3) Put(ctx context.Context, key, contentType string, body []byte) erro
 		ContentType:   aws.String(contentType),
 		ContentLength: aws.Int64(int64(len(body))),
 		Body:          bytes.NewReader(body),
+	})
+	if err != nil {
+		return fmt.Errorf("put object: %w", err)
+	}
+	return nil
+}
+
+// PutFile implements Store.
+func (s *S3) PutFile(ctx context.Context, key, contentType, filename, path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("put file: %w", err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("put file: %w", err)
+	}
+	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:             aws.String(s.bucket),
+		Key:                aws.String(key),
+		ContentType:        aws.String(contentType),
+		ContentDisposition: aws.String(attachment(filename)),
+		ContentLength:      aws.Int64(info.Size()),
+		Body:               f,
 	})
 	if err != nil {
 		return fmt.Errorf("put object: %w", err)

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,6 +52,16 @@ func (f *fakeStore) Put(_ context.Context, key, _ string, body []byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.objects[key] = body
+	return nil
+}
+func (f *fakeStore) PutFile(_ context.Context, key, _, _, path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.objects[key] = b
 	return nil
 }
 func (f *fakeStore) Delete(_ context.Context, key string) error {
