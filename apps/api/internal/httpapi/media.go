@@ -23,6 +23,7 @@ type MediaService interface {
 	Reprocess(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
 	RequestTranscript(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Transcript, error)
 	Transcript(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Transcript, error)
+	SetSpeakerVoice(ctx context.Context, actorID, orgID, projectID, assetID, label, voice string) (media.Transcript, error)
 	RequestHighlights(ctx context.Context, actorID, orgID, projectID, assetID string, req media.HighlightRequest) (media.Highlights, error)
 	Highlights(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Highlights, error)
 }
@@ -252,6 +253,13 @@ type transcriptResponse struct {
 	RequestedAt   string            `json:"requested_at"`
 	CompletedAt   *string           `json:"completed_at"`
 	Segments      []segmentResponse `json:"segments"`
+	Speakers      []speakerResponse `json:"speakers"`
+}
+
+type speakerResponse struct {
+	Label      string `json:"label"`
+	Voice      string `json:"voice"`
+	VoiceSetBy string `json:"voice_set_by"`
 }
 
 func toTranscriptResponse(t media.Transcript) transcriptResponse {
@@ -259,6 +267,10 @@ func toTranscriptResponse(t media.Transcript) transcriptResponse {
 		ID: t.ID, MediaAssetID: t.MediaAssetID, Status: t.Status, Provider: t.Provider, Model: t.Model,
 		ModelLabel: t.ModelLabel, PromptVersion: t.PromptVersion, Language: ptr(t.Language), Error: ptr(t.Error),
 		RequestedAt: ts(t.CreatedAt), Segments: make([]segmentResponse, len(t.Segments)),
+		Speakers: make([]speakerResponse, len(t.Speakers)),
+	}
+	for i, sp := range t.Speakers {
+		r.Speakers[i] = speakerResponse{Label: sp.Label, Voice: sp.Voice, VoiceSetBy: sp.VoiceSetBy}
 	}
 	if !t.CompletedAt.IsZero() && t.Status == media.TranscriptReady {
 		c := ts(t.CompletedAt)
@@ -363,4 +375,23 @@ func (h mediaHandler) highlights(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, toHighlightsResponse(out))
+}
+
+type setSpeakerVoiceRequest struct {
+	Voice string `json:"voice"`
+}
+
+func (h mediaHandler) setSpeakerVoice(c *gin.Context) {
+	var req setSpeakerVoiceRequest
+	if !decodeJSON(c, &req) {
+		return
+	}
+	t, err := h.svc.SetSpeakerVoice(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"),
+		c.Param("label"), req.Voice)
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, toTranscriptResponse(t))
 }

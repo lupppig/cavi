@@ -974,6 +974,58 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript/speakers/{label}:
+    patch:
+      operationId: setSpeakerVoice
+      summary: Correct how a speaker's voice is labelled
+      description: |
+        Requires `editing.manage`. Voices are suggested by the transcription
+        model from how a voice sounds; this records a person's correction
+        (`voice_set_by` becomes `person`) and is audited. 404 if the file has
+        no ready transcript or no speaker with that label.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/AssetID"
+        - name: label
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [voice]
+              additionalProperties: false
+              properties:
+                voice: { type: string, enum: [woman, man, unclear] }
+      responses:
+        "200":
+          description: The transcript after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcript"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/highlights:
     get:
       operationId: getHighlights
@@ -1731,7 +1783,7 @@ components:
 
     Transcript:
       type: object
-      required: [id, media_asset_id, status, provider, model, model_label, prompt_version, language, error, requested_at, completed_at, segments]
+      required: [id, media_asset_id, status, provider, model, model_label, prompt_version, language, error, requested_at, completed_at, segments, speakers]
       properties:
         id: { type: string, format: uuid }
         media_asset_id: { type: string, format: uuid }
@@ -1757,6 +1809,19 @@ components:
               end_ms: { type: integer, format: int64 }
               speaker: { type: string }
               text: { type: string }
+        speakers:
+          type: array
+          description: |
+            Each speaker label once, in order of first appearance, with how
+            their voice sounds. Suggested by the model (`voice_set_by: ai`)
+            from the voice alone, and correctable by people.
+          items:
+            type: object
+            required: [label, voice, voice_set_by]
+            properties:
+              label: { type: string }
+              voice: { type: string, enum: [woman, man, unclear] }
+              voice_set_by: { type: string, enum: [ai, person] }
 
     RequestHighlightsRequest:
       type: object
@@ -1829,6 +1894,34 @@ components:
             Where the frame sits along the axis the source is cropped on:
             0 left or top, 0.5 centre, 1 right or bottom.
 
+    CaptionOptions:
+      type: object
+      required: [style]
+      properties:
+        style:
+          type: string
+          enum: [bold, boxed]
+          description: "`bold`: text with an outline; `boxed`: text on a solid box."
+        mode:
+          type: string
+          enum: [lines, words]
+          default: lines
+          description: "`words` shows up to three words at a time and highlights the one being said."
+        position: { type: string, enum: [bottom, middle, top], default: bottom }
+        uppercase: { type: boolean, default: false }
+        colors:
+          type: object
+          description: Defaults to white text, a yellow highlight and a black outline.
+          required: [text, highlight, stroke]
+          properties:
+            text: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+            highlight: { type: string, pattern: "^#[0-9A-Fa-f]{6}$", description: The word being said, in `words` mode. }
+            stroke: { type: string, pattern: "^#[0-9A-Fa-f]{6}$", description: The outline (`bold`) or the box (`boxed`). }
+        speaker_colors:
+          type: object
+          description: Text colour per speaker label (up to 20), overriding `colors.text`.
+          additionalProperties: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+
     RenderComposition:
       description: The stored composition, with a summary of any captions.
       allOf:
@@ -1838,11 +1931,12 @@ components:
           properties:
             captions:
               oneOf:
-                - type: object
-                  required: [style, cue_count]
-                  properties:
-                    style: { type: string, enum: [bold, boxed] }
-                    cue_count: { type: integer }
+                - allOf:
+                    - $ref: "#/components/schemas/CaptionOptions"
+                    - type: object
+                      required: [cue_count]
+                      properties:
+                        cue_count: { type: integer }
                 - type: "null"
 
     CreateRenderRequest:
@@ -1853,17 +1947,13 @@ components:
         name: { type: string, maxLength: 120, description: Also the download filename. }
         composition: { $ref: "#/components/schemas/Composition" }
         captions:
-          type: object
           description: |
             Burn in captions made from the source's transcript (which must be
             ready, with speech in the clip; `validation_failed` on `captions`
-            otherwise). The caption text and timing are copied into the
-            composition when the render is created. `bold` is white text with
-            a black outline; `boxed` is white text on a black box.
-          required: [style]
-          additionalProperties: false
-          properties:
-            style: { type: string, enum: [bold, boxed] }
+            otherwise). The caption text and word timing are copied into the
+            composition when the render is created; clients can't send cues.
+          allOf:
+            - $ref: "#/components/schemas/CaptionOptions"
 
     Render:
       type: object

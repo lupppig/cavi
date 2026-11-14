@@ -140,6 +140,10 @@ func TestMediaOverHTTP(t *testing.T) {
 		t.Fatalf("fields = %+v", f)
 	}
 	expect(t, w.call(eve, "POST", one+"/transcript", ""), http.StatusNotFound, CodeNotFound)
+	// Speaker voices can only be set on a ready transcript, by members.
+	expect(t, w.call(ana, "PATCH", one+"/transcript/speakers/Speaker%201", `{"voice":"woman"}`), http.StatusNotFound, CodeNotFound)
+	expect(t, w.call(ana, "PATCH", one+"/transcript/speakers/Speaker%201", `{"voice":"robot"}`), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(eve, "PATCH", one+"/transcript/speakers/Speaker%201", `{"voice":"woman"}`), http.StatusNotFound, CodeNotFound)
 
 	// Highlights need a transcript first; the body is validated as JSON.
 	const brief = `{"objective":"the funniest bit","min_seconds":15,"max_seconds":60}`

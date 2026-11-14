@@ -131,6 +131,7 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	med.POST("/:assetID/process", mediaH.reprocess)
 	med.GET("/:assetID/transcript", mediaH.transcript)
 	med.POST("/:assetID/transcript", mediaH.requestTranscript)
+	med.PATCH("/:assetID/transcript/speakers/:label", mediaH.setSpeakerVoice)
 	med.GET("/:assetID/highlights", mediaH.highlights)
 	med.POST("/:assetID/highlights", mediaH.requestHighlights)
 

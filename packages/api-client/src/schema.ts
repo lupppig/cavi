@@ -553,6 +553,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript/speakers/{label}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Correct how a speaker's voice is labelled
+         * @description Requires `editing.manage`. Voices are suggested by the transcription
+         *     model from how a voice sounds; this records a person's correction
+         *     (`voice_set_by` becomes `person`) and is audited. 404 if the file has
+         *     no ready transcript or no speaker with that label.
+         */
+        patch: operations["setSpeakerVoice"];
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/highlights": {
         parameters: {
             query?: never;
@@ -1024,6 +1047,18 @@ export interface components {
                 speaker: string;
                 text: string;
             }[];
+            /**
+             * @description Each speaker label once, in order of first appearance, with how
+             *     their voice sounds. Suggested by the model (`voice_set_by: ai`)
+             *     from the voice alone, and correctable by people.
+             */
+            speakers: {
+                label: string;
+                /** @enum {string} */
+                voice: "woman" | "man" | "unclear";
+                /** @enum {string} */
+                voice_set_by: "ai" | "person";
+            }[];
         };
         RequestHighlightsRequest: {
             /** @description What the editor wants from the clips, in their words. Optional. */
@@ -1097,13 +1132,43 @@ export interface components {
              */
             focus: number;
         };
+        CaptionOptions: {
+            /**
+             * @description `bold`: text with an outline; `boxed`: text on a solid box.
+             * @enum {string}
+             */
+            style: "bold" | "boxed";
+            /**
+             * @description `words` shows up to three words at a time and highlights the one being said.
+             * @default lines
+             * @enum {string}
+             */
+            mode: "lines" | "words";
+            /**
+             * @default bottom
+             * @enum {string}
+             */
+            position: "bottom" | "middle" | "top";
+            /** @default false */
+            uppercase: boolean;
+            /** @description Defaults to white text, a yellow highlight and a black outline. */
+            colors?: {
+                text: string;
+                /** @description The word being said */
+                highlight: string;
+                /** @description The outline (`bold`) or the box (`boxed`). */
+                stroke: string;
+            };
+            /** @description Text colour per speaker label (up to 20), overriding `colors.text`. */
+            speaker_colors?: {
+                [key: string]: string;
+            };
+        };
         /** @description The stored composition, with a summary of any captions. */
         RenderComposition: components["schemas"]["Composition"] & {
-            captions: {
-                /** @enum {string} */
-                style: "bold" | "boxed";
+            captions: (components["schemas"]["CaptionOptions"] & {
                 cue_count: number;
-            } | null;
+            }) | null;
         };
         CreateRenderRequest: {
             /** @description Also the download filename. */
@@ -1112,14 +1177,10 @@ export interface components {
             /**
              * @description Burn in captions made from the source's transcript (which must be
              *     ready, with speech in the clip; `validation_failed` on `captions`
-             *     otherwise). The caption text and timing are copied into the
-             *     composition when the render is created. `bold` is white text with
-             *     a black outline; `boxed` is white text on a black box.
+             *     otherwise). The caption text and word timing are copied into the
+             *     composition when the render is created; clients can't send cues.
              */
-            captions?: {
-                /** @enum {string} */
-                style: "bold" | "boxed";
-            };
+            captions?: components["schemas"]["CaptionOptions"];
         };
         Render: {
             /** Format: uuid */
@@ -2193,6 +2254,45 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    setSpeakerVoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+                label: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    voice: "woman" | "man" | "unclear";
+                };
+            };
+        };
+        responses: {
+            /** @description The transcript after the change. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transcript"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
