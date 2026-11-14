@@ -1,0 +1,186 @@
+{
+ "_about": "Ground truth for podcast-two-voices.mp3 (espeak-ng, two voices, 0.4s gaps): each line's start and end in ms.",
+ "duration_ms": 151416,
+ "lines": [
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 0,
+   "end_ms": 3642,
+   "text": "Okay, we're recording. Welcome back to Loose Ends."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 4042,
+   "end_ms": 8131,
+   "text": "I'm here with Maya Okafor, who just finished her first headline tour."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 8531,
+   "end_ms": 13456,
+   "text": "Hi, thanks for having me. Sorry I was late, the traffic was awful."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 13856,
+   "end_ms": 17644,
+   "text": "No worries. Did you get a coffee? There's some in the kitchen."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 18044,
+   "end_ms": 20714,
+   "text": "I'm fine, I've had three already today."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 21114,
+   "end_ms": 26098,
+   "text": "Fair enough. So, before the tour, I want to go back to the very beginning."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 26498,
+   "end_ms": 30989,
+   "text": "Tell me about your first ever gig, because I've heard it did not go to plan."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 31389,
+   "end_ms": 38123,
+   "text": "Oh no. Okay. So I'm nineteen, I've booked a slot at a pub in Leeds, and I've told everyone I know."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 38523,
+   "end_ms": 46109,
+   "text": "I walk on stage, I plug in my guitar, and the whole pub's power goes out. Every light, the fridges, everything."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 46509,
+   "end_ms": 48654,
+   "text": "No way. What did you do?"
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 49054,
+   "end_ms": 55460,
+   "text": "The landlord's shouting, people are using their phone torches, and I just thought, well, I'm here now."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 55860,
+   "end_ms": 61625,
+   "text": "So I unplugged, stood on a chair in the middle of the room and played the whole set acoustic in the dark."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 62025,
+   "end_ms": 70190,
+   "text": "And honestly it's still the best gig I've ever played. Forty people singing along by torchlight. I've been chasing that feeling ever since."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 70590,
+   "end_ms": 73341,
+   "text": "That's incredible. That's a film scene."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 73741,
+   "end_ms": 79299,
+   "text": "Quick note for listeners: this episode is out on Thursday, and the video is on our channel."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 79700,
+   "end_ms": 83265,
+   "text": "If you want to support the show there's a link in the description."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 83665,
+   "end_ms": 85868,
+   "text": "Do you want me to mention the merch?"
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 86268,
+   "end_ms": 90193,
+   "text": "Go for it. Anyway. Let's talk about the new single."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 90593,
+   "end_ms": 95438,
+   "text": "A lot of artists listening want to know how you plan a release. What's your approach?"
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 95838,
+   "end_ms": 102402,
+   "text": "The biggest mistake I made early on was announcing a song the same week it came out. Nobody had time to care."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 102803,
+   "end_ms": 110233,
+   "text": "Now I start eight weeks out. I tease a fifteen second clip, I let people ask what it is, and I don't answer yet."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 110634,
+   "end_ms": 117390,
+   "text": "Four weeks out I open the pre-save and show the cover. Two weeks out I play it live and film the crowd."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 117791,
+   "end_ms": 125307,
+   "text": "By release day, people feel like they've been part of it. That's the whole trick, make them feel involved before it exists."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 125707,
+   "end_ms": 129519,
+   "text": "So it's less about the song and more about the story around it."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 129919,
+   "end_ms": 134889,
+   "text": "The song has to be good. But a good song nobody's waiting for just disappears."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 135289,
+   "end_ms": 137269,
+   "text": "That's such useful advice."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 137669,
+   "end_ms": 141643,
+   "text": "Okay, we're nearly out of time. Where can people find you?"
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 142044,
+   "end_ms": 145911,
+   "text": "I'm Maya Okafor everywhere. The single's out on the twentieth."
+  },
+  {
+   "speaker": "Speaker 1",
+   "start_ms": 146312,
+   "end_ms": 148863,
+   "text": "Amazing. Thanks for coming in."
+  },
+  {
+   "speaker": "Speaker 2",
+   "start_ms": 149263,
+   "end_ms": 150943,
+   "text": "Thanks for having me."
+  }
+ ]
+}

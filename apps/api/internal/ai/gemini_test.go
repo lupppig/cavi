@@ -73,8 +73,8 @@ func transcribe(t *testing.T, g *Gemini, m Model, file string, durationMS int64)
 		t.Fatal(err)
 	}
 	var last error
-	for attempt := 0; attempt < 4; attempt++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	for attempt := 0; attempt < 6; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		tr, usage, err := g.Transcribe(ctx, m, audio, "audio/mpeg", durationMS)
 		cancel()
 		if err == nil {
@@ -83,7 +83,8 @@ func transcribe(t *testing.T, g *Gemini, m Model, file string, durationMS int64)
 		}
 		last = err
 		if strings.Contains(err.Error(), "temporarily unavailable") {
-			time.Sleep(time.Duration(attempt+1) * 5 * time.Second)
+			// Overload clears in seconds; per-minute quota needs a minute.
+			time.Sleep(time.Duration(attempt+1) * 20 * time.Second)
 			continue
 		}
 		break
