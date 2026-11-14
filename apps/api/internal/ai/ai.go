@@ -1,5 +1,5 @@
 // Package ai is CAVI's boundary with AI providers. Product code asks for a
-// task (transcription) with a resolved model and gets back validated,
+// task (transcription, highlight detection) with a resolved model and gets back validated,
 // structured results; nothing outside this package imports a provider SDK.
 //
 // Models are chosen per organisation from a catalogue of models CAVI has
@@ -16,6 +16,7 @@ import (
 // Tasks AI is used for.
 const (
 	TaskTranscription = "transcription"
+	TaskHighlights    = "highlights"
 )
 
 // Providers.
@@ -39,10 +40,14 @@ var catalogue = map[string][]Model{
 		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
 		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (lower cost)"},
 	},
+	TaskHighlights: {
+		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
+		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (lower cost)"},
+	},
 }
 
 // Tasks returns every task, in a stable order.
-func Tasks() []string { return []string{TaskTranscription} }
+func Tasks() []string { return []string{TaskTranscription, TaskHighlights} }
 
 // Models returns the supported models for task.
 func Models(task string) []Model { return catalogue[task] }
