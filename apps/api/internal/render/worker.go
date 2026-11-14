@@ -33,11 +33,17 @@ type Renderer struct {
 	// TempDir holds work files; empty means the system default. Each job's
 	// files are removed when it finishes, whatever the outcome.
 	TempDir string
+	// FontsDir holds the caption font (Inter). The worker image installs
+	// it at DefaultFontsDir.
+	FontsDir string
 }
+
+// DefaultFontsDir is where Alpine's font-inter package puts Inter.
+const DefaultFontsDir = "/usr/share/fonts/inter"
 
 // NewRenderer returns a render job handler.
 func NewRenderer(db *bun.DB, store storage.Store, ff Clipper, logger *slog.Logger) *Renderer {
-	return &Renderer{db: db, store: store, ff: ff, logger: logger}
+	return &Renderer{db: db, store: store, ff: ff, logger: logger, FontsDir: DefaultFontsDir}
 }
 
 var _ jobs.Handler = (*Renderer)(nil)
@@ -112,6 +118,13 @@ func (r *Renderer) Process(ctx context.Context, job jobs.Job) error {
 	}
 	defer os.RemoveAll(dir)
 	out := filepath.Join(dir, "clip.mp4")
+	if c.Captions != nil {
+		plan.Subtitles = filepath.Join(dir, "captions.ass")
+		plan.FontsDir = r.FontsDir
+		if err := os.WriteFile(plan.Subtitles, []byte(ASS(*c.Captions, c.Aspect)), 0o600); err != nil {
+			return fmt.Errorf("write captions: %w", err)
+		}
+	}
 
 	started := time.Now()
 	if err := r.ff.Clip(ctx, url, out, plan, timeoutFor(plan.Length)); err != nil {

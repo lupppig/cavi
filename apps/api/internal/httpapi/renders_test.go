@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -34,11 +35,27 @@ func TestRendersOverHTTP(t *testing.T) {
 		t.Fatalf("fields = %+v", f)
 	}
 	expect(t, w.call(eve, "POST", base+"/renders", body(0, 5000, "9:16")), http.StatusNotFound, CodeNotFound)
+
+	// Captions need a transcript; cues can't be sent by the client.
+	withCaptions := func(style string) string {
+		return strings.TrimSuffix(body(0, 5000, "9:16"), "}") + `,"captions":{"style":"` + style + `"}}`
+	}
+	rec = w.call(ana, "POST", base+"/renders", withCaptions("bold"))
+	expect(t, rec, http.StatusUnprocessableEntity, CodeValidation)
+	if f := decodeError(t, rec).Fields; len(f) != 1 || f[0].Field != "captions" {
+		t.Fatalf("fields = %+v", f)
+	}
+	expect(t, w.call(ana, "POST", base+"/renders", withCaptions("")), http.StatusUnprocessableEntity, CodeValidation)
+	smuggled := strings.Replace(body(0, 5000, "9:16"), `"focus":0.5`, `"focus":0.5,"captions":{"style":"bold","cues":[]}`, 1)
+	expect(t, w.call(ana, "POST", base+"/renders", smuggled), http.StatusBadRequest, CodeInvalidRequest)
 	expect(t, w.call(ana, "POST", base+"/renders", body(0, 5000, "9:16"), "https://evil.example"), http.StatusForbidden, CodeForbidden)
 
 	rec = w.call(ana, "POST", base+"/renders", body(87000, 150000, "9:16"))
 	expect(t, rec, http.StatusAccepted, "")
 	r := decode[renderResponse](t, rec)
+	if r.Composition.Captions != nil {
+		t.Fatalf("captions on a plain render: %+v", r.Composition.Captions)
+	}
 	if r.Status != "queued" || r.Output != nil || r.SourceAssetID == nil || *r.SourceAssetID != up.Asset.ID ||
 		r.Composition.Aspect != "9:16" || r.Composition.EndMS != 150000 || r.RequestedBy == nil || !r.CanDelete {
 		t.Fatalf("created = %+v", r)

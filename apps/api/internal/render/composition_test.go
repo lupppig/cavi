@@ -63,7 +63,7 @@ func TestPlan(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	for field, c := range map[string]Composition{
-		"composition.version":  {Version: 2, StartMS: 0, EndMS: 5000, Aspect: "9:16"},
+		"composition.version":  {Version: 3, StartMS: 0, EndMS: 5000, Aspect: "9:16"},
 		"composition.start_ms": comp(-1, 5000, "9:16", 0.5),
 		"composition.end_ms":   comp(0, 500, "9:16", 0.5),
 		"composition.aspect":   comp(0, 5000, "21:9", 0.5),

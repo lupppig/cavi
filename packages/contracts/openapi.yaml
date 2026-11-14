@@ -1810,11 +1810,13 @@ components:
     Composition:
       type: object
       description: |
-        A clip cut from one source file. Versioned: this is version 1.
+        A clip cut from one source file, as sent when creating a render.
+        Version 2 adds captions (requested separately; see
+        CreateRenderRequest). Version 1 is still accepted.
       required: [version, source_asset_id, start_ms, end_ms, aspect, focus]
       additionalProperties: false
       properties:
-        version: { type: integer, enum: [1] }
+        version: { type: integer, enum: [1, 2] }
         source_asset_id: { type: string, format: uuid }
         start_ms: { type: integer, format: int64, minimum: 0 }
         end_ms: { type: integer, format: int64, description: Exclusive; 1 s to 10 min after `start_ms`. }
@@ -1827,6 +1829,22 @@ components:
             Where the frame sits along the axis the source is cropped on:
             0 left or top, 0.5 centre, 1 right or bottom.
 
+    RenderComposition:
+      description: The stored composition, with a summary of any captions.
+      allOf:
+        - $ref: "#/components/schemas/Composition"
+        - type: object
+          required: [captions]
+          properties:
+            captions:
+              oneOf:
+                - type: object
+                  required: [style, cue_count]
+                  properties:
+                    style: { type: string, enum: [bold, boxed] }
+                    cue_count: { type: integer }
+                - type: "null"
+
     CreateRenderRequest:
       type: object
       required: [name, composition]
@@ -1834,6 +1852,18 @@ components:
       properties:
         name: { type: string, maxLength: 120, description: Also the download filename. }
         composition: { $ref: "#/components/schemas/Composition" }
+        captions:
+          type: object
+          description: |
+            Burn in captions made from the source's transcript (which must be
+            ready, with speech in the clip; `validation_failed` on `captions`
+            otherwise). The caption text and timing are copied into the
+            composition when the render is created. `bold` is white text with
+            a black outline; `boxed` is white text on a black box.
+          required: [style]
+          additionalProperties: false
+          properties:
+            style: { type: string, enum: [bold, boxed] }
 
     Render:
       type: object
@@ -1846,7 +1876,7 @@ components:
           format: uuid
           description: Null once the source file is deleted; the clip remains.
         name: { type: string }
-        composition: { $ref: "#/components/schemas/Composition" }
+        composition: { $ref: "#/components/schemas/RenderComposition" }
         status: { type: string, enum: [queued, running, ready, failed] }
         error: { type: [string, "null"], description: User-facing reason when failed. }
         requested_by:

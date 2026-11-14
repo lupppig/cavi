@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -66,6 +67,7 @@ func (m *memStore) Delete(_ context.Context, key string) error {
 // request unless told otherwise.
 type fakeFFmpeg struct {
 	mu     sync.Mutex
+	ass    []string // the subtitle file's contents at render time
 	clips  []ffmpeg.Clip
 	inputs []string
 	err    error
@@ -77,6 +79,10 @@ func (f *fakeFFmpeg) Clip(_ context.Context, input, output string, c ffmpeg.Clip
 	defer f.mu.Unlock()
 	f.clips = append(f.clips, c)
 	f.inputs = append(f.inputs, input)
+	if c.Subtitles != "" {
+		b, _ := os.ReadFile(c.Subtitles)
+		f.ass = append(f.ass, string(b))
+	}
 	if f.err != nil {
 		return f.err
 	}
@@ -235,25 +241,25 @@ func TestCreateRenderRules(t *testing.T) {
 	otherProj := w.project(ana, org)
 	elsewhere := w.video(org, otherProj, "video", 1920, 1080, 151_000, true)
 	for _, id := range []string{audio, elsewhere, "not-a-uuid", "00000000-0000-4000-8000-000000000000"} {
-		_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Clip", vertical(id))
+		_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Clip", vertical(id), "")
 		wantField(t, err, "composition.source_asset_id")
 	}
-	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "  ", vertical(src))
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "  ", vertical(src), "")
 	wantField(t, err, "name")
 	c := vertical(src)
 	c.EndMS = 160_000
-	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c)
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, "")
 	wantField(t, err, "composition.end_ms")
 
 	// Viewers and clients can't render.
-	_, err = w.svc.Create(w.ctx, vic.id, org, proj, "Clip", vertical(src))
+	_, err = w.svc.Create(w.ctx, vic.id, org, proj, "Clip", vertical(src), "")
 	wantErr(t, err, ErrForbidden)
-	_, err = w.svc.Create(w.ctx, cli.id, org, proj, "Clip", vertical(src))
+	_, err = w.svc.Create(w.ctx, cli.id, org, proj, "Clip", vertical(src), "")
 	wantErr(t, err, ErrForbidden)
 
 	woke := 0
 	w.svc.OnJobQueued(func() { woke++ })
-	r, err := w.svc.Create(w.ctx, ed.id, org, proj, " Release \t advice ", vertical(src))
+	r, err := w.svc.Create(w.ctx, ed.id, org, proj, " Release \t advice ", vertical(src), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +288,7 @@ func TestCreateRenderRules(t *testing.T) {
 	wantErr(t, err, ErrNotFound)
 	_, err = w.svc.Get(w.ctx, eve.id, evesOrg, proj, r.ID)
 	wantErr(t, err, ErrNotFound)
-	_, err = w.svc.Create(w.ctx, eve.id, evesOrg, w.project(eve, evesOrg), "Steal", vertical(src))
+	_, err = w.svc.Create(w.ctx, eve.id, evesOrg, w.project(eve, evesOrg), "Steal", vertical(src), "")
 	wantField(t, err, "composition.source_asset_id")
 	wantErr(t, w.svc.Delete(w.ctx, eve.id, org, proj, r.ID), ErrNotFound)
 }
@@ -295,13 +301,13 @@ func TestListRenders(t *testing.T) {
 	a := w.video(org, proj, "video", 1920, 1080, 151_000, true)
 	b := w.video(org, proj, "video", 1080, 1920, 60_000, false)
 	for i := range 3 {
-		if _, err := w.svc.Create(w.ctx, ana.id, org, proj, fmt.Sprintf("A%d", i), vertical(a)); err != nil {
+		if _, err := w.svc.Create(w.ctx, ana.id, org, proj, fmt.Sprintf("A%d", i), vertical(a), ""); err != nil {
 			t.Fatal(err)
 		}
 	}
 	c := vertical(b)
 	c.StartMS, c.EndMS = 0, 10_000
-	if _, err := w.svc.Create(w.ctx, ana.id, org, proj, "B", c); err != nil {
+	if _, err := w.svc.Create(w.ctx, ana.id, org, proj, "B", c, ""); err != nil {
 		t.Fatal(err)
 	}
 	page, err := w.svc.List(w.ctx, ana.id, org, proj, a, "", 2)
@@ -328,7 +334,7 @@ func TestRenderClip(t *testing.T) {
 	org := w.team(ana, nil)
 	proj := w.project(ana, org)
 	src := w.video(org, proj, "video", 1920, 1080, 151_000, true)
-	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Release: advice?", vertical(src))
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Release: advice?", vertical(src), "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -395,7 +401,7 @@ func TestRenderFailures(t *testing.T) {
 	}
 
 	// Output that isn't what was asked for is never kept.
-	r, _ := w.svc.Create(w.ctx, ana.id, org, proj, "Wrong size", vertical(src))
+	r, _ := w.svc.Create(w.ctx, ana.id, org, proj, "Wrong size", vertical(src), "")
 	ff := &fakeFFmpeg{probe: func(c ffmpeg.Clip) ffmpeg.Probe {
 		return ffmpeg.Probe{HasVideo: true, Width: 640, Height: 360, Duration: c.Length}
 	}}
@@ -418,14 +424,14 @@ func TestRenderFailures(t *testing.T) {
 	}
 
 	// Storage hiccups retry.
-	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Flaky", vertical(src))
+	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Flaky", vertical(src), "")
 	ff = &fakeFFmpeg{err: errors.New("ffmpeg: ffmpeg could not fetch the input: Server returned 503")}
 	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err == nil || jobs.IsPermanent(err) {
 		t.Fatalf("transient err = %v", err)
 	}
 
 	// Unreadable sources fail for good.
-	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Corrupt", vertical(src))
+	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Corrupt", vertical(src), "")
 	ff = &fakeFFmpeg{err: fmt.Errorf("%w: moov atom not found", ffmpeg.ErrUnreadable)}
 	j = w.job(r.ID)
 	err = w.renderer(ff).Process(w.ctx, j)
@@ -439,7 +445,7 @@ func TestRenderFailures(t *testing.T) {
 
 	// If the source goes before the job runs, it fails with a reason and
 	// never calls FFmpeg.
-	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Orphan", vertical(src))
+	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Orphan", vertical(src), "")
 	j = w.job(r.ID)
 	if _, err := w.db.ExecContext(w.ctx, `DELETE FROM media_assets WHERE id = ?`, src); err != nil {
 		t.Fatal(err)
@@ -452,5 +458,74 @@ func TestRenderFailures(t *testing.T) {
 	_ = w.renderer(ff).Failed(w.ctx, j, err)
 	if s, msg := status(r.ID); s != StatusFailed || msg != msgSourceGone {
 		t.Fatalf("source gone: %s %q", s, msg)
+	}
+}
+
+// transcribe gives a file a ready transcript.
+func (w *world) transcribe(orgID, assetID string, segs ...[3]any) {
+	w.t.Helper()
+	var id string
+	if err := w.db.QueryRowContext(w.ctx, `
+		INSERT INTO transcripts (organisation_id, media_asset_id, status, provider, model, prompt_version, completed_at)
+		VALUES (?, ?, 'ready', 'gemini', 'gemini-3.5-flash-lite', 'transcription-v2', now()) RETURNING id`, orgID, assetID).Scan(&id); err != nil {
+		w.t.Fatal(err)
+	}
+	for i, sg := range segs {
+		if _, err := w.db.ExecContext(w.ctx, `
+			INSERT INTO transcript_segments (transcript_id, position, start_ms, end_ms, speaker, text) VALUES (?, ?, ?, ?, 'Speaker 1', ?)`,
+			id, i, sg[0], sg[1], sg[2]); err != nil {
+			w.t.Fatal(err)
+		}
+	}
+}
+
+func TestRenderWithCaptions(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 151_000, true)
+	c := vertical(src) // 87 s to 150 s
+
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, CaptionsBold)
+	wantField(t, err, "captions") // no transcript yet
+	w.transcribe(org, src,
+		[3]any{80_000, 90_000, "So the power goes out."},
+		[3]any{90_000, 95_000, "I stood on a chair."},
+		[3]any{160_000, 162_000, "After the clip."})
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, "neon")
+	wantField(t, err, "captions.style")
+	quiet := c
+	quiet.StartMS, quiet.EndMS = 100_000, 140_000
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", quiet, CaptionsBold)
+	wantField(t, err, "captions") // no speech in that stretch
+
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Captioned", c, CaptionsBoxed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cap := r.Composition.Captions
+	if r.Composition.Version != CompositionVersion || cap == nil || cap.Style != CaptionsBoxed || len(cap.Cues) != 2 ||
+		cap.Cues[0].StartMS != 0 || cap.Cues[0].EndMS != 3000 || cap.Cues[1].StartMS != 3000 || cap.Cues[1].EndMS != 8000 {
+		t.Fatalf("stored composition = %+v, captions %+v", r.Composition, cap)
+	}
+	// Cues sent by a client are ignored: they only ever come from the transcript.
+	forged := vertical(src)
+	forged.Captions = &Captions{Style: CaptionsBold, Cues: []Cue{{StartMS: 0, EndMS: 1000, Text: "Not what they said"}}}
+	r2, err := w.svc.Create(w.ctx, ana.id, org, proj, "Plain", forged, "")
+	if err != nil || r2.Composition.Captions != nil {
+		t.Fatalf("client cues kept: %+v, %v", r2.Composition.Captions, err)
+	}
+
+	ff := &fakeFFmpeg{}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if len(ff.clips) != 1 || ff.clips[0].FontsDir != DefaultFontsDir || len(ff.ass) != 1 ||
+		!strings.Contains(ff.ass[0], "0:00:00.00,0:00:03.00,Cap,,0,0,0,,So the power goes\\Nout.") {
+		t.Fatalf("clip %+v, ass %q", ff.clips, ff.ass)
+	}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r2.ID)); err != nil || ff.clips[1].Subtitles != "" {
+		t.Fatalf("plain render had subtitles: %+v, %v", ff.clips[1], err)
 	}
 }

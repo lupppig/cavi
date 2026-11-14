@@ -1072,10 +1072,14 @@ export interface components {
                 reason: string;
             }[];
         };
-        /** @description A clip cut from one source file. Versioned: this is version 1. */
+        /**
+         * @description A clip cut from one source file, as sent when creating a render.
+         *     Version 2 adds captions (requested separately; see
+         *     CreateRenderRequest). Version 1 is still accepted.
+         */
         Composition: {
             /** @enum {integer} */
-            version: 1;
+            version: 1 | 2;
             /** Format: uuid */
             source_asset_id: string;
             /** Format: int64 */
@@ -1093,10 +1097,29 @@ export interface components {
              */
             focus: number;
         };
+        /** @description The stored composition, with a summary of any captions. */
+        RenderComposition: components["schemas"]["Composition"] & {
+            captions: {
+                /** @enum {string} */
+                style: "bold" | "boxed";
+                cue_count: number;
+            } | null;
+        };
         CreateRenderRequest: {
             /** @description Also the download filename. */
             name: string;
             composition: components["schemas"]["Composition"];
+            /**
+             * @description Burn in captions made from the source's transcript (which must be
+             *     ready, with speech in the clip; `validation_failed` on `captions`
+             *     otherwise). The caption text and timing are copied into the
+             *     composition when the render is created. `bold` is white text with
+             *     a black outline; `boxed` is white text on a black box.
+             */
+            captions?: {
+                /** @enum {string} */
+                style: "bold" | "boxed";
+            };
         };
         Render: {
             /** Format: uuid */
@@ -1109,7 +1132,7 @@ export interface components {
              */
             source_asset_id: string | null;
             name: string;
-            composition: components["schemas"]["Composition"];
+            composition: components["schemas"]["RenderComposition"];
             /** @enum {string} */
             status: "queued" | "running" | "ready" | "failed";
             /** @description User-facing reason when failed. */

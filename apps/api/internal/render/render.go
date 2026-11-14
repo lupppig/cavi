@@ -17,6 +17,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
+	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/project"
@@ -132,8 +133,10 @@ func Filename(name string) string {
 }
 
 // Create queues a render of composition (render.execute). The source must
-// be a processed video in the same project.
-func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name string, c Composition) (Render, error) {
+// be a processed video in the same project. A non-empty captionStyle
+// burns in captions made from the source's transcript, copied into the
+// composition now so the render can be repeated exactly.
+func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name string, c Composition, captionStyle string) (Render, error) {
 	name = cleanName(name)
 	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxNameRunes {
 		return Render{}, invalid("name", fmt.Sprintf("Give the clip a name of up to %d characters.", MaxNameRunes))
@@ -150,6 +153,21 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		src, _, err := source(ctx, tx, orgID, projectID, c.SourceAssetID)
 		if err != nil {
 			return err
+		}
+		c.Captions = nil // cues only ever come from the transcript, below
+		if captionStyle != "" {
+			if !validStyle(captionStyle) {
+				return invalid("captions.style", "Choose bold or boxed captions.")
+			}
+			segs, err := transcriptSegments(ctx, tx, orgID, c.SourceAssetID)
+			if err != nil {
+				return err
+			}
+			if segs == nil {
+				return invalid("captions", "Transcribe this file first to add captions.")
+			}
+			c.Version = CompositionVersion
+			c.Captions = &Captions{Style: captionStyle, Cues: BuildCues(segs, c.StartMS, c.EndMS, c.Aspect)}
 		}
 		if err := c.Validate(src); err != nil {
 			return err
@@ -169,7 +187,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 			return err
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
-			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.EndMS - c.StartMS})
+			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.EndMS - c.StartMS, "captions": captionStyle})
 	})
 	if err != nil {
 		return Render{}, err
@@ -210,6 +228,38 @@ func source(ctx context.Context, db bun.IDB, orgID, projectID, assetID string) (
 	}
 	src.HasAudio = audio != ""
 	return src, key, nil
+}
+
+// transcriptSegments returns the file's ready transcript in order (empty
+// if no speech was found), or nil if it has no ready transcript.
+func transcriptSegments(ctx context.Context, db bun.IDB, orgID, assetID string) ([]ai.Segment, error) {
+	var ready bool
+	if err := db.QueryRowContext(ctx, `
+		SELECT EXISTS (SELECT 1 FROM transcripts WHERE media_asset_id = ? AND organisation_id = ? AND status = 'ready')`,
+		assetID, orgID).Scan(&ready); err != nil {
+		return nil, fmt.Errorf("load transcript: %w", err)
+	}
+	if !ready {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT s.start_ms, s.end_ms, s.text
+		FROM transcripts tr JOIN transcript_segments s ON s.transcript_id = tr.id
+		WHERE tr.media_asset_id = ? AND tr.organisation_id = ? AND tr.status = 'ready'
+		ORDER BY s.position`, assetID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("load transcript: %w", err)
+	}
+	defer rows.Close()
+	segs := []ai.Segment{}
+	for rows.Next() {
+		var sg ai.Segment
+		if err := rows.Scan(&sg.StartMS, &sg.EndMS, &sg.Text); err != nil {
+			return nil, err
+		}
+		segs = append(segs, sg)
+	}
+	return segs, rows.Err()
 }
 
 const renderColumns = `

@@ -16,8 +16,9 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
 )
 
-// CompositionVersion is the composition schema this code reads and writes.
-const CompositionVersion = 1
+// CompositionVersion is the composition schema this code writes. Version
+// 1 (no captions) is still read.
+const CompositionVersion = 2
 
 // Clip length limits.
 const (
@@ -61,6 +62,8 @@ type Composition struct {
 	// Focus places the frame along the axis the source is cropped on: 0 is
 	// the left (or top) edge, 0.5 the centre, 1 the right (or bottom).
 	Focus float64 `json:"focus"`
+	// Captions (version 2) are burned in when present.
+	Captions *Captions `json:"captions,omitempty"`
 }
 
 // Source is what rendering needs to know about the source file.
@@ -75,8 +78,11 @@ func invalid(field, msg string) error { return &account.ValidationError{Field: f
 // Validate checks c against its source. Field names match the API's
 // composition object.
 func (c Composition) Validate(src Source) error {
-	if c.Version != CompositionVersion {
-		return invalid("composition.version", fmt.Sprintf("Only composition version %d is supported.", CompositionVersion))
+	if c.Version != 1 && c.Version != CompositionVersion {
+		return invalid("composition.version", fmt.Sprintf("Composition version must be 1 or %d.", CompositionVersion))
+	}
+	if c.Version == 1 && c.Captions != nil {
+		return invalid("composition.version", "Captions need composition version 2.")
 	}
 	if src.Width < 2 || src.Height < 2 || src.DurationMS <= 0 {
 		return invalid("composition.source_asset_id", "Choose a processed video file.")
@@ -99,6 +105,9 @@ func (c Composition) Validate(src Source) error {
 	}
 	if math.IsNaN(c.Focus) || c.Focus < 0 || c.Focus > 1 {
 		return invalid("composition.focus", "Framing must be between 0 and 1.")
+	}
+	if c.Captions != nil {
+		return c.Captions.validate(c.EndMS - c.StartMS)
 	}
 	return nil
 }

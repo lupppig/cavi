@@ -13,7 +13,7 @@ import (
 // RenderService is the render behaviour the handlers need. Every method
 // authorises the actor itself.
 type RenderService interface {
-	Create(ctx context.Context, actorID, orgID, projectID, name string, c render.Composition) (render.Render, error)
+	Create(ctx context.Context, actorID, orgID, projectID, name string, c render.Composition, captionStyle string) (render.Render, error)
 	List(ctx context.Context, actorID, orgID, projectID, sourceAssetID, cursor string, limit int) (render.Page, error)
 	Get(ctx context.Context, actorID, orgID, projectID, renderID string) (render.Render, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, renderID string) error
@@ -33,6 +33,18 @@ type compositionBody struct {
 	Focus         float64 `json:"focus"`
 }
 
+// captionsSummary is what responses say about captions; the cues
+// themselves stay server-side.
+type captionsSummary struct {
+	Style    string `json:"style"`
+	CueCount int    `json:"cue_count"`
+}
+
+type compositionResponse struct {
+	compositionBody
+	Captions *captionsSummary `json:"captions"`
+}
+
 type renderOutput struct {
 	URL          string `json:"url"`
 	URLExpiresAt string `json:"url_expires_at"`
@@ -43,18 +55,18 @@ type renderOutput struct {
 }
 
 type renderResponse struct {
-	ID            string          `json:"id"`
-	ProjectID     string          `json:"project_id"`
-	SourceAssetID *string         `json:"source_asset_id"`
-	Name          string          `json:"name"`
-	Composition   compositionBody `json:"composition"`
-	Status        string          `json:"status"`
-	Error         *string         `json:"error"`
-	RequestedBy   *userRef        `json:"requested_by"`
-	CreatedAt     string          `json:"created_at"`
-	CompletedAt   *string         `json:"completed_at"`
-	CanDelete     bool            `json:"can_delete"`
-	Output        *renderOutput   `json:"output"`
+	ID            string              `json:"id"`
+	ProjectID     string              `json:"project_id"`
+	SourceAssetID *string             `json:"source_asset_id"`
+	Name          string              `json:"name"`
+	Composition   compositionResponse `json:"composition"`
+	Status        string              `json:"status"`
+	Error         *string             `json:"error"`
+	RequestedBy   *userRef            `json:"requested_by"`
+	CreatedAt     string              `json:"created_at"`
+	CompletedAt   *string             `json:"completed_at"`
+	CanDelete     bool                `json:"can_delete"`
+	Output        *renderOutput       `json:"output"`
 }
 
 type renderPage struct {
@@ -66,9 +78,12 @@ func toRenderResponse(r render.Render) renderResponse {
 	c := r.Composition
 	out := renderResponse{
 		ID: r.ID, ProjectID: r.ProjectID, SourceAssetID: ptr(r.SourceAssetID), Name: r.Name,
-		Composition: compositionBody{Version: c.Version, SourceAssetID: c.SourceAssetID, StartMS: c.StartMS,
-			EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus},
+		Composition: compositionResponse{compositionBody: compositionBody{Version: c.Version, SourceAssetID: c.SourceAssetID,
+			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus}},
 		Status: r.Status, Error: ptr(r.Error), CreatedAt: ts(r.CreatedAt), CanDelete: r.CanDelete,
+	}
+	if c.Captions != nil {
+		out.Composition.Captions = &captionsSummary{Style: c.Captions.Style, CueCount: len(c.Captions.Cues)}
 	}
 	if r.RequestedByID != "" {
 		out.RequestedBy = &userRef{ID: r.RequestedByID, Name: r.RequestedByName}
@@ -87,6 +102,9 @@ func toRenderResponse(r render.Render) renderResponse {
 type createRenderRequest struct {
 	Name        string          `json:"name"`
 	Composition compositionBody `json:"composition"`
+	Captions    *struct {
+		Style string `json:"style"`
+	} `json:"captions"`
 }
 
 func (h renderHandler) create(c *gin.Context) {
@@ -95,9 +113,16 @@ func (h renderHandler) create(c *gin.Context) {
 		return
 	}
 	b := req.Composition
+	style := ""
+	if req.Captions != nil {
+		style = req.Captions.Style
+		if style == "" {
+			style = "-" // present but empty: rejected by the service as an unknown style
+		}
+	}
 	r, err := h.svc.Create(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Name,
 		render.Composition{Version: b.Version, SourceAssetID: b.SourceAssetID, StartMS: b.StartMS, EndMS: b.EndMS,
-			Aspect: b.Aspect, Focus: b.Focus})
+			Aspect: b.Aspect, Focus: b.Focus}, style)
 	if err != nil {
 		h.fail(c, err)
 		return
