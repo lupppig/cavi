@@ -1,26 +1,59 @@
 @import "tailwindcss";
 
 /* ==================================================================
-   CAVI design tokens: black and white, shared by the whole site. The
-   homepage adds its motion and section polarity in app/home.css.
+   CAVI design system: light and clean, one signal-orange accent.
+   Contrast: text and buttons meet 4.5:1. The bright brand orange is for
+   marks and indicators; buttons and orange text use deeper shades.
    ================================================================== */
 
 :root {
-  --paper: #f7f7f4;
-  --paper-deep: #e6e6e0;
-  --ink: #050505;
-  --ink-soft: #45453f;
-  --white: #ffffff;
+  --canvas: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f1f1f3;
+  --line: #e4e4e7;
+  --line-strong: #d4d4d8;
+  --ink: #111113;
+  --subtle: #52525b;
+  --muted: #6b6b73;
+
+  --accent: #ff5a1f; /* brand: marks, dots, indicators */
+  --accent-strong: #d63f0f; /* buttons with white text (4.6:1) */
+  --accent-strong-hover: #bc370d;
+  --accent-text: #c2410c; /* orange text on light (4.8:1) */
+  --accent-soft: #fff1eb;
+  --accent-line: #ffd3c2;
+
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --success: #067647;
+  --success-soft: #ecfdf3;
+
+  --stage: #0e0e10; /* behind video and stills */
 }
 
 @theme inline {
-  --color-paper: var(--paper);
-  --color-paper-deep: var(--paper-deep);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
-  --color-ink-soft: var(--ink-soft);
-  --color-white: var(--white);
+  --color-subtle: var(--subtle);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-strong-hover: var(--accent-strong-hover);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-stage: var(--stage);
 
-  --font-sans: var(--font-archivo);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-instrument);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -29,64 +62,155 @@ html {
 }
 
 body {
-  background: var(--paper);
+  background: var(--canvas);
   color: var(--ink);
+  font-feature-settings: "cv11", "ss01";
 }
 
 ::selection {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--accent-soft);
+  color: var(--ink);
 }
 
 :focus-visible {
-  outline: 3px solid var(--ink);
-  outline-offset: 3px;
-}
-
-/* Headings in the signed-in app use the homepage's wide display cut. */
-.app h1,
-.app h2 {
-  font-stretch: 125%;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: -0.01em;
-  line-height: 0.95;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ------------------------------------------------------------------
-   Stickers and buttons
+   Components
    ------------------------------------------------------------------ */
 
-.sticker,
-.sticker-lg {
-  border: 2px solid var(--ink);
-}
-
-.btn-pop {
-  border: 2px solid var(--ink);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  transition:
-    transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.btn-pop:hover:not(:disabled) {
-  transform: translate(-2px, -2px);
-  box-shadow: 4px 4px 0 var(--ink);
-}
-.btn-pop:active:not(:disabled) {
-  transform: none;
-  box-shadow: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .tilt-hover {
-    transition:
-      transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
-      box-shadow 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+@layer components {
+  .card {
+    border: 1px solid var(--line);
+    border-radius: 0.875rem;
+    background: var(--surface);
+    box-shadow:
+      0 1px 2px rgb(16 16 20 / 0.04),
+      0 1px 3px rgb(16 16 20 / 0.03);
   }
-  .tilt-hover:hover {
-    transform: translate(-3px, -3px);
-    box-shadow: 6px 6px 0 var(--ink);
+
+  .btn {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 0.625rem;
+    border: 1px solid transparent;
+    padding-inline: 1rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    transition:
+      background-color 0.15s,
+      border-color 0.15s,
+      color 0.15s,
+      box-shadow 0.15s;
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .btn-primary {
+    background: var(--accent-strong);
+    color: #fff;
+    box-shadow: 0 1px 2px rgb(16 16 20 / 0.12);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-strong-hover);
+  }
+  .btn-secondary {
+    border-color: var(--line-strong);
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 1px 2px rgb(16 16 20 / 0.05);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
+  .btn-ghost {
+    color: var(--subtle);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+  .btn-danger {
+    border-color: #fecdca;
+    background: var(--surface);
+    color: var(--danger);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: var(--danger-soft);
+  }
+
+  .field {
+    min-height: 2.75rem;
+    width: 100%;
+    min-width: 0;
+    border-radius: 0.625rem;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    padding-inline: 0.875rem;
+    font-size: 1rem;
+    color: var(--ink);
+    transition:
+      border-color 0.15s,
+      box-shadow 0.15s;
+  }
+  .field::placeholder {
+    color: var(--muted);
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgb(255 90 31 / 0.2);
+  }
+  .field:disabled {
+    opacity: 0.6;
+  }
+
+  /* A choice in a group (radio pills, shape picker). */
+  .choice {
+    border: 1px solid var(--line-strong);
+    border-radius: 0.625rem;
+    background: var(--surface);
+    transition:
+      border-color 0.15s,
+      background-color 0.15s;
+  }
+  .choice:hover {
+    background: var(--surface-2);
+  }
+  .choice:has(:checked),
+  .choice[aria-current="true"],
+  .choice[aria-selected="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-text);
+  }
+  .choice:has(:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .label-caps {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
   }
 }

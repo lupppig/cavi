@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Archivo, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Geist_Mono, Inter, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 
-// One type system for the whole site: Archivo (with its width axis for
-// the wide display cut), Instrument Serif italics and Geist Mono.
-const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], axes: ["wdth"] });
+// One type system for the whole site: Inter for everything, Instrument
+// Serif italics for the odd editorial accent, Geist Mono for timecodes.
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
 const instrument = Instrument_Serif({ variable: "--font-instrument", subsets: ["latin"], weight: "400", style: "italic" });
 
 const geistMono = Geist_Mono({
@@ -19,12 +19,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050505",
+  themeColor: "#f7f7f8",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${archivo.variable} ${instrument.variable} ${geistMono.variable} antialiased`}>
+    <html lang="en" className={`${inter.variable} ${instrument.variable} ${geistMono.variable} antialiased`}>
       <body className="min-h-dvh font-sans">{children}</body>
     </html>
   );

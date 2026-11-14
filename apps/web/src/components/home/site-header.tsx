@@ -9,10 +9,10 @@ const links = [
 /** Logo mark: a frame with a play head cut through it. */
 export function Mark({ className = "size-7" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <rect x="2" y="2" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="3" />
-      <path d="M12 9 L23 16 L12 23 Z" fill="currentColor" />
-      <path d="M2 16 H8" stroke="currentColor" strokeWidth="3" />
+    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
+      <rect width="64" height="64" rx="16" fill="#FF5A1F" />
+      <rect x="14" y="16" width="6" height="32" rx="3" fill="#FFFFFF" />
+      <path d="M27 17.5c0-2.3 2.5-3.7 4.5-2.5l19 12.5c1.8 1.2 1.8 3.8 0 5L31.5 49c-2 1.2-4.5-.2-4.5-2.5z" fill="#FFFFFF" />
     </svg>
   );
 }
