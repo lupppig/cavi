@@ -1,6 +1,6 @@
 // Command media-worker processes uploaded media: it probes each file with
-// FFmpeg and makes thumbnails, and transcribes speech with the
-// organisation's AI model when GEMINI_API_KEY is set. It is deployed
+// FFmpeg and makes thumbnails, and, when GEMINI_API_KEY is set, transcribes
+// speech and finds highlights with the organisation's AI model. It is deployed
 // separately from the API (it needs FFmpeg, more CPU and the AI key) and
 // scales by running more copies.
 package main
@@ -74,21 +74,22 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		// Transcription calls are slow and rate-limited; run fewer at once.
+		// AI calls are slow and rate-limited; run fewer at once.
 		workers = append(workers, jobs.NewWorker(db, bus, jobs.KindMediaTranscribe,
 			media.NewTranscriber(db, store, ff, gemini, logger), logger,
 			jobs.WorkerOptions{
 				Concurrency: max(1, cfg.Concurrency/2),
 				Lease:       45 * time.Minute,
-				// Provider overload ("high demand") usually clears in minutes:
-				// back off longer than for media processing.
-				RetryDelay: func(n int) time.Duration { return min(30*time.Second<<min(n-1, 6), 5*time.Minute) },
-			}))
+				RetryDelay:  providerRetry,
+			}),
+			jobs.NewWorker(db, bus, jobs.KindMediaHighlights,
+				media.NewHighlighter(db, gemini, logger), logger,
+				jobs.WorkerOptions{Concurrency: max(1, cfg.Concurrency/2), Lease: 10 * time.Minute, RetryDelay: providerRetry}))
 	} else {
-		logger.Warn("transcription disabled: GEMINI_API_KEY is not set; transcription jobs will wait")
+		logger.Warn("AI disabled: GEMINI_API_KEY is not set; transcription and highlight jobs will wait")
 	}
 
-	logger.Info("media worker started", slog.Int("concurrency", cfg.Concurrency), slog.Bool("transcription", cfg.GeminiAPIKey != ""))
+	logger.Info("media worker started", slog.Int("concurrency", cfg.Concurrency), slog.Bool("ai", cfg.GeminiAPIKey != ""))
 	var wg sync.WaitGroup
 	errs := make(chan error, len(workers))
 	for _, w := range workers {
@@ -106,6 +107,10 @@ func run() error {
 	logger.Info("media worker stopped")
 	return <-errs
 }
+
+// providerRetry backs off longer than media processing: provider overload
+// ("high demand") usually clears in minutes.
+func providerRetry(n int) time.Duration { return min(30*time.Second<<min(n-1, 6), 5*time.Minute) }
 
 func newLogger(env string) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
