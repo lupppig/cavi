@@ -67,7 +67,7 @@ func (w *world) processed(by person, org, proj, name string, durationMS int64, a
 	return a
 }
 
-func (w *world) transcriber(audio *fakeAudio, provider *fakeAI) *Transcriber {
+func (w *world) transcriber(audio *fakeAudio, provider ai.Transcriber) *Transcriber {
 	return NewTranscriber(w.db, w.store, audio, provider, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
@@ -275,4 +275,79 @@ func TestInvalidSectionRetriedAlone(t *testing.T) {
 	if n := w.count(`SELECT count(*) FROM ai_usage WHERE job_id = ? AND NOT succeeded`, j.ID); n != 2 {
 		t.Errorf("failed usage rows = %d, want 2", n)
 	}
+}
+
+// voicedAI returns, for each section, one segment with word times, spoken
+// by the speaker and voice configured for that section.
+type voicedAI struct {
+	mu       sync.Mutex
+	sections []ai.Speaker
+	calls    int
+}
+
+func (f *voicedAI) Transcribe(_ context.Context, _ ai.Model, _ []byte, _ string, durationMS int64) (ai.Transcript, ai.Usage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	sp := f.sections[f.calls%len(f.sections)]
+	f.calls++
+	seg := ai.Segment{StartMS: 1000, EndMS: 3000, Speaker: sp.Label, Text: "hello there",
+		Words: []ai.Word{{StartMS: 1000, EndMS: 1600, Text: "hello"}, {StartMS: 1600, EndMS: 3000, Text: "there"}}}
+	tr := ai.Transcript{Language: "en", Segments: []ai.Segment{seg}}
+	if sp.Voice != "" {
+		tr.Speakers = []ai.Speaker{sp}
+	}
+	return tr, ai.Usage{InputTokens: 100}, nil
+}
+
+func TestTranscriptWordsAndVoices(t *testing.T) {
+	w := newWorld(t)
+	ana, vic := w.user("Ana"), w.user("Vic")
+	org := w.team(ana, map[string]person{authz.RoleViewer: vic})
+	proj := w.project(ana, org)
+	a := w.processed(ana, org, proj, "podcast.mp4", 25*60_000, "aac") // three sections
+	if _, err := w.svc.RequestTranscript(w.ctx, ana.id, org, proj, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Speaker 1 sounds like a woman in one section and a man in another;
+	// Speaker 2 isn't described.
+	provider := &voicedAI{sections: []ai.Speaker{{Label: "Speaker 1", Voice: ai.VoiceWoman}, {Label: "Speaker 2"}, {Label: "Speaker 1", Voice: ai.VoiceMan}}}
+	if err := w.transcriber(&fakeAudio{}, provider).Process(w.ctx, w.transcribeJob(a.ID)); err != nil {
+		t.Fatal(err)
+	}
+	tr, err := w.svc.Transcript(w.ctx, ana.id, org, proj, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Speaker{{"Speaker 1", ai.VoiceUnclear, "ai"}, {"Speaker 2", ai.VoiceUnclear, "ai"}}
+	if len(tr.Speakers) != 2 || tr.Speakers[0] != want[0] || tr.Speakers[1] != want[1] {
+		t.Fatalf("speakers = %+v", tr.Speakers)
+	}
+	// Word times are stored, offset by their section.
+	var raw []byte
+	if err := w.db.QueryRowContext(w.ctx, `SELECT words FROM transcript_segments WHERE transcript_id = ? AND position = 1`, tr.ID).Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	ws := DecodeWords(raw)
+	if len(ws) != 2 || ws[0].StartMS != 601_000 || ws[1].EndMS != 603_000 || ws[1].Text != "there" {
+		t.Fatalf("section 2 words = %+v", ws)
+	}
+
+	// People can correct a voice; viewers can't; nonsense is refused.
+	_, err = w.svc.SetSpeakerVoice(w.ctx, vic.id, org, proj, a.ID, "Speaker 1", ai.VoiceWoman)
+	wantErr(t, err, ErrForbidden)
+	_, err = w.svc.SetSpeakerVoice(w.ctx, ana.id, org, proj, a.ID, "Speaker 1", "robot")
+	wantField(t, err, "voice")
+	_, err = w.svc.SetSpeakerVoice(w.ctx, ana.id, org, proj, a.ID, "Speaker 9", ai.VoiceMan)
+	wantErr(t, err, ErrNotFound)
+	tr, err = w.svc.SetSpeakerVoice(w.ctx, ana.id, org, proj, a.ID, "Speaker 1", ai.VoiceWoman)
+	if err != nil || tr.Speakers[0] != (Speaker{"Speaker 1", ai.VoiceWoman, "person"}) {
+		t.Fatalf("after correction = %+v, %v", tr.Speakers, err)
+	}
+	if n := w.count(`SELECT count(*) FROM audit_events WHERE target_id = ? AND action = 'media.speaker_voice_set'`, a.ID); n != 1 {
+		t.Errorf("audit events = %d", n)
+	}
+	// Another organisation can't touch it.
+	eve := w.user("Eve")
+	_, err = w.svc.SetSpeakerVoice(w.ctx, eve.id, org, proj, a.ID, "Speaker 1", ai.VoiceMan)
+	wantErr(t, err, ErrNotFound)
 }

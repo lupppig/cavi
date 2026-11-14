@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -56,6 +57,50 @@ type Transcript struct {
 	CreatedAt     time.Time
 	CompletedAt   time.Time
 	Segments      []ai.Segment
+	Speakers      []Speaker
+}
+
+// Speaker is a transcript's speaker label and how their voice sounds.
+type Speaker struct {
+	Label string
+	Voice string
+	// VoiceSetBy is "ai" (suggested) or "person" (corrected by someone).
+	VoiceSetBy string
+}
+
+// storedWord is a word as kept in transcript_segments.words.
+type storedWord struct {
+	S int64  `json:"s"`
+	E int64  `json:"e"`
+	T string `json:"t"`
+}
+
+func encodeWords(ws []ai.Word) any {
+	if len(ws) == 0 {
+		return nil
+	}
+	out := make([]storedWord, len(ws))
+	for i, w := range ws {
+		out[i] = storedWord{S: w.StartMS, E: w.EndMS, T: w.Text}
+	}
+	b, _ := json.Marshal(out)
+	return string(b)
+}
+
+// DecodeWords reads transcript_segments.words (nil for none).
+func DecodeWords(raw []byte) []ai.Word {
+	if len(raw) == 0 {
+		return nil
+	}
+	var in []storedWord
+	if json.Unmarshal(raw, &in) != nil {
+		return nil
+	}
+	out := make([]ai.Word, len(in))
+	for i, w := range in {
+		out[i] = ai.Word{StartMS: w.S, EndMS: w.E, Text: w.T}
+	}
+	return out
 }
 
 // RequestTranscript queues transcription of a file's speech (editing.manage).
@@ -173,7 +218,66 @@ func (s *Service) Transcript(ctx context.Context, actorID, orgID, projectID, ass
 		}
 		t.Segments = append(t.Segments, seg)
 	}
-	return t, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Transcript{}, err
+	}
+	t.Speakers, err = loadSpeakers(ctx, s.db, t.ID)
+	return t, err
+}
+
+func loadSpeakers(ctx context.Context, db bun.IDB, transcriptID string) ([]Speaker, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT label, voice, voice_set_by FROM transcript_speakers WHERE transcript_id = ? ORDER BY position`, transcriptID)
+	if err != nil {
+		return nil, fmt.Errorf("load speakers: %w", err)
+	}
+	defer rows.Close()
+	out := []Speaker{}
+	for rows.Next() {
+		var sp Speaker
+		if err := rows.Scan(&sp.Label, &sp.Voice, &sp.VoiceSetBy); err != nil {
+			return nil, err
+		}
+		out = append(out, sp)
+	}
+	return out, rows.Err()
+}
+
+// SetSpeakerVoice corrects how a speaker's voice is labelled
+// (editing.manage). The change is audited.
+func (s *Service) SetSpeakerVoice(ctx context.Context, actorID, orgID, projectID, assetID, label, voice string) (Transcript, error) {
+	if !ai.ValidVoice(voice) {
+		return Transcript{}, invalid("voice", "Choose woman, man or unclear.")
+	}
+	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		acc, _, err := project.Resolve(ctx, tx, actorID, orgID, projectID, false)
+		if err != nil {
+			return err
+		}
+		if _, err := s.load(ctx, tx, acc, actorID, orgID, projectID, assetID, false); err != nil {
+			return err
+		}
+		if !authz.Can(acc.Role, authz.EditingManage) {
+			return ErrForbidden
+		}
+		res, err := tx.ExecContext(ctx, `
+			UPDATE transcript_speakers sp SET voice = ?, voice_set_by = 'person'
+			FROM transcripts tr
+			WHERE sp.transcript_id = tr.id AND tr.media_asset_id = ? AND tr.organisation_id = ? AND tr.status = 'ready' AND sp.label = ?`,
+			voice, assetID, orgID, label)
+		if err != nil {
+			return fmt.Errorf("set speaker voice: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrNotFound
+		}
+		return account.Audit(ctx, tx, orgID, actorID, "media.speaker_voice_set", "media_asset", assetID,
+			map[string]any{"speaker": label, "voice": voice})
+	})
+	if err != nil {
+		return Transcript{}, err
+	}
+	return s.Transcript(ctx, actorID, orgID, projectID, assetID)
 }
 
 // AudioSource extracts audio for transcription. *ffmpeg.Runner implements it.
@@ -237,6 +341,8 @@ func (t *Transcriber) Process(ctx context.Context, job jobs.Job) error {
 
 	total := time.Duration(durationMS) * time.Millisecond
 	var segments []ai.Segment
+	voices := map[string]string{}
+	var order []string
 	language := ""
 	for offset := time.Duration(0); offset < total; offset += transcriptionChunk {
 		length := min(transcriptionChunk, total-offset)
@@ -273,7 +379,21 @@ func (t *Transcriber) Process(ctx context.Context, job jobs.Job) error {
 		for _, seg := range part.Segments {
 			seg.StartMS += offset.Milliseconds()
 			seg.EndMS += offset.Milliseconds()
+			for i := range seg.Words {
+				seg.Words[i].StartMS += offset.Milliseconds()
+				seg.Words[i].EndMS += offset.Milliseconds()
+			}
 			segments = append(segments, seg)
+		}
+		// Labels are per section; where sections disagree about a voice,
+		// call it unclear rather than pick one.
+		for _, sp := range part.Speakers {
+			if v, ok := voices[sp.Label]; ok && v != sp.Voice {
+				voices[sp.Label] = ai.VoiceUnclear
+			} else if !ok {
+				voices[sp.Label] = sp.Voice
+				order = append(order, sp.Label)
+			}
 		}
 	}
 
@@ -292,10 +412,44 @@ func (t *Transcriber) Process(ctx context.Context, job jobs.Job) error {
 		}
 		for i, seg := range segments {
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO transcript_segments (transcript_id, position, start_ms, end_ms, speaker, text) VALUES (?, ?, ?, ?, ?, ?)`,
-				transcriptID, i, seg.StartMS, seg.EndMS, seg.Speaker, seg.Text); err != nil {
+				INSERT INTO transcript_segments (transcript_id, position, start_ms, end_ms, speaker, text, words)
+				VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)`,
+				transcriptID, i, seg.StartMS, seg.EndMS, seg.Speaker, seg.Text, encodeWords(seg.Words)); err != nil {
 				return fmt.Errorf("save segment: %w", err)
 			}
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM transcript_speakers WHERE transcript_id = ?`, transcriptID); err != nil {
+			return err
+		}
+		used := map[string]bool{}
+		for _, seg := range segments {
+			used[seg.Speaker] = true
+		}
+		pos := 0
+		for _, label := range order {
+			if !used[label] {
+				continue
+			}
+			delete(used, label)
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO transcript_speakers (transcript_id, position, label, voice) VALUES (?, ?, ?, ?)`,
+				transcriptID, pos, label, voices[label]); err != nil {
+				return fmt.Errorf("save speaker: %w", err)
+			}
+			pos++
+		}
+		// Labels the model didn't describe.
+		for _, seg := range segments {
+			if !used[seg.Speaker] {
+				continue
+			}
+			delete(used, seg.Speaker)
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO transcript_speakers (transcript_id, position, label, voice) VALUES (?, ?, ?, 'unclear')`,
+				transcriptID, pos, seg.Speaker); err != nil {
+				return fmt.Errorf("save speaker: %w", err)
+			}
+			pos++
 		}
 		return nil
 	})
