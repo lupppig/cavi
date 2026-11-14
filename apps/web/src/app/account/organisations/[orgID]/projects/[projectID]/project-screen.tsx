@@ -100,9 +100,11 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
         project={project}
         canUpload={!!org && can(org, "media.upload")}
         canTranscribe={!!org && can(org, "editing.manage")}
+        canRender={!!org && can(org, "render.execute")}
       />
       <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
-        Editing and renders aren’t available yet. They’re next, and they’ll work from the media in this project.
+        You can cut single clips from a video above. The timeline editor, captions and multi-clip edits aren’t available
+        yet.
       </p>
       {org && !org.personal && can(project, "project.access.manage") && <ClientAccess project={project} />}
       {can(project, "project.delete") && <DeleteProject project={project} />}

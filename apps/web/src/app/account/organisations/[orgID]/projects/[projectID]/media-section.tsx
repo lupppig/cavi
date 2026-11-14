@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, raise, type MediaAsset, type Project } from "@/lib/queries";
 import { acceptedFiles, formatBytes, maxUploadBytes, sendFile, UploadAborted } from "@/lib/upload";
+import { ClipsPanel } from "./clips";
 import { HighlightsPanel } from "./highlights-panel";
 import { TranscriptPanel } from "./transcript-panel";
 
@@ -24,10 +25,12 @@ export function MediaSection({
   project,
   canUpload,
   canTranscribe,
+  canRender,
 }: {
   project: Project;
   canUpload: boolean;
   canTranscribe: boolean;
+  canRender: boolean;
 }) {
   const id = useId();
   const qc = useQueryClient();
@@ -108,7 +111,7 @@ export function MediaSection({
   const visibleJobs = jobs.filter((j) => j.state !== "done");
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg rounded-[28px] bg-white p-5 sm:p-7">
+    <section aria-labelledby={`${id}-h`} className="sticker-lg rounded-[28px] bg-white p-3.5 sm:p-7">
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 id={`${id}-h`} className="mr-auto text-2xl font-extrabold tracking-tight">
           Media {items.length > 0 && <span className="text-ink-soft">· {items.length}{media.hasNextPage ? "+" : ""}</span>}
@@ -146,7 +149,13 @@ export function MediaSection({
         <ul className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
           {items.map((a) => (
             <li key={a.id}>
-              <MediaCard asset={a} project={project} canUpload={canUpload} canTranscribe={canTranscribe} />
+              <MediaCard
+                asset={a}
+                project={project}
+                canUpload={canUpload}
+                canTranscribe={canTranscribe}
+                canRender={canRender}
+              />
             </li>
           ))}
         </ul>
@@ -290,11 +299,13 @@ function MediaCard({
   project,
   canUpload,
   canTranscribe,
+  canRender,
 }: {
   asset: MediaAsset;
   project: Project;
   canUpload: boolean;
   canTranscribe: boolean;
+  canRender: boolean;
 }) {
   const qc = useQueryClient();
   const player = useRef<HTMLMediaElement>(null);
@@ -392,7 +403,7 @@ function MediaCard({
           </span>
         )}
       </div>
-      <div className="flex flex-1 flex-col p-4">
+      <div className="flex flex-1 flex-col p-3 sm:p-4">
         <p className="font-extrabold break-all">{asset.filename}</p>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-soft">
           {asset.kind && (
@@ -426,8 +437,25 @@ function MediaCard({
         {status === "ready" && asset.metadata?.audio_codec && (asset.kind === "video" || asset.kind === "audio") && (
           <>
             <TranscriptPanel asset={asset} project={project} canTranscribe={canTranscribe} onSeek={seek} />
-            <HighlightsPanel asset={asset} project={project} canEdit={canTranscribe} onPlay={playClip} />
+            <HighlightsPanel
+              asset={asset}
+              project={project}
+              canEdit={canTranscribe}
+              canRender={canRender}
+              url={url}
+              onPlay={playClip}
+            />
           </>
+        )}
+        {status === "ready" && asset.kind === "video" && url && (
+          <ClipsPanel
+            asset={asset}
+            project={project}
+            url={url}
+            canRender={canRender}
+            playheadMS={() => (player.current?.currentTime ?? 0) * 1000}
+            onPreview={playClip}
+          />
         )}
         {remove.isError && <div className="mt-3"><Banner>{remove.error.message}</Banner></div>}
         {retry.isError && <div className="mt-3"><Banner>{retry.error.message}</Banner></div>}

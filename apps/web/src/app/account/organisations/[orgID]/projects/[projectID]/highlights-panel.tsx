@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, NotFound, raise, useAIModelSettings, type Highlights, type MediaAsset, type Project } from "@/lib/queries";
+import { ClipComposer } from "./clips";
 import { stamp, useTranscript } from "./transcript-panel";
 
 /** Clip length choices, roughly matching where the clips are headed. */
@@ -29,11 +30,16 @@ export function HighlightsPanel({
   asset,
   project,
   canEdit,
+  canRender,
+  url,
   onPlay,
 }: {
   asset: MediaAsset;
   project: Project;
   canEdit: boolean;
+  /** Whether the viewer may render clips; needs a video and its URL. */
+  canRender: boolean;
+  url: string | null;
   onPlay: (startMS: number, endMS: number) => void;
 }) {
   const id = useId();
@@ -63,6 +69,8 @@ export function HighlightsPanel({
   const model = settings.data?.find((s) => s.task === "highlights")?.model;
 
   const [editing, setEditing] = useState(false);
+  const [composing, setComposing] = useState<number | null>(null);
+  const renderable = canRender && asset.kind === "video" && !!url;
   const [objective, setObjective] = useState("");
   const [length, setLength] = useState(defaultLength);
 
@@ -84,6 +92,7 @@ export function HighlightsPanel({
 
   if (!hasTranscript || highlights.isPending) return null;
   const h = highlights.data;
+  const composingClip = renderable && composing !== null ? h?.clips[composing] : undefined;
   if (h === null && !(canEdit && transcriptReady)) return null;
 
   const busy = h && (h.status === "queued" || h.status === "running");
@@ -134,7 +143,22 @@ export function HighlightsPanel({
 
       {h?.status === "ready" && !editing && (
         <>
-          {h.clips.length === 0 ? (
+          {composingClip && url ? (
+            // The composer replaces the list: it needs the panel's full width.
+            <div className="px-3 pb-3">
+              <p className="mb-2 text-sm font-semibold text-ink-soft">
+                Making a clip from highlight {composing! + 1}: “{composingClip.title}”
+              </p>
+              <ClipComposer
+                asset={asset}
+                project={project}
+                url={url}
+                initial={{ name: composingClip.title, startMS: composingClip.start_ms, endMS: composingClip.end_ms }}
+                onPreview={onPlay}
+                onClose={() => setComposing(null)}
+              />
+            </div>
+          ) : h.clips.length === 0 ? (
             <p className="px-3 pb-2 text-sm font-semibold text-ink-soft">
               No moments fit this brief. Try a different objective or clip length.
             </p>
@@ -155,21 +179,33 @@ export function HighlightsPanel({
                         {stamp(c.start_ms)}–{stamp(c.end_ms)} · {seconds(c.end_ms - c.start_ms)}
                       </p>
                       <p className="mt-1 text-sm font-medium break-words">{c.reason}</p>
-                      <button
-                        type="button"
-                        onClick={() => onPlay(c.start_ms, c.end_ms)}
-                        className="btn-pop mt-2 min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold"
-                        aria-label={`Play clip ${i + 1}: ${c.title}`}
-                      >
-                        ▶ Play clip
-                      </button>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onPlay(c.start_ms, c.end_ms)}
+                          className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold"
+                          aria-label={`Play clip ${i + 1}: ${c.title}`}
+                        >
+                          ▶ Play clip
+                        </button>
+                        {renderable && (
+                          <button
+                            type="button"
+                            onClick={() => setComposing(i)}
+                            className="btn-pop min-h-11 rounded-xl bg-tomato px-3 text-sm font-extrabold text-white"
+                            aria-label={`Make clip ${i + 1}: ${c.title}`}
+                          >
+                            Make clip
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </li>
               ))}
             </ol>
           )}
-          <div className="flex flex-wrap items-center gap-2 border-t-2 border-ink/10 px-3 py-2">
+          <div className={`flex flex-wrap items-center gap-2 border-t-2 border-ink/10 px-3 py-2 ${composingClip ? "hidden" : ""}`}>
             {canEdit && transcriptReady && (
               <button type="button" onClick={edit} className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold">
                 Find again
@@ -212,7 +248,7 @@ export function HighlightsPanel({
               {lengths.map((l, i) => (
                 <label
                   key={l.label}
-                  className={`flex min-h-11 cursor-pointer flex-col justify-center rounded-xl border-2 border-ink px-2.5 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                  className={`flex min-h-11 min-w-0 cursor-pointer flex-col justify-center rounded-xl border-2 border-ink px-2.5 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
                     length === i ? "bg-sky" : "bg-white"
                   }`}
                 >
