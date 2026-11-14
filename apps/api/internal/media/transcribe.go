@@ -26,6 +26,9 @@ const (
 	// transcriptionChunk is how much audio goes to the model per call, so
 	// output stays well within the model's limits on long media.
 	transcriptionChunk = 10 * time.Minute
+	// sectionTries is how many times one section is sent before invalid
+	// output fails the job attempt.
+	sectionTries = 3
 )
 
 // Transcript statuses.
@@ -244,8 +247,20 @@ func (t *Transcriber) Process(ctx context.Context, job jobs.Job) error {
 			}
 			return err
 		}
-		part, usage, err := t.ai.Transcribe(ctx, model, audio, "audio/mpeg", length.Milliseconds())
-		t.recordUsage(ctx, job, model, usage, length, err == nil)
+		// Invalid output is often a one-off: retry this section alone a
+		// couple of times before failing the attempt (which would re-send
+		// every section).
+		var part ai.Transcript
+		for try := 1; ; try++ {
+			var usage ai.Usage
+			part, usage, err = t.ai.Transcribe(ctx, model, audio, "audio/mpeg", length.Milliseconds())
+			t.recordUsage(ctx, job, model, usage, length, err == nil)
+			if err == nil || !errors.Is(err, ai.ErrInvalidOutput) || try == sectionTries {
+				break
+			}
+			t.logger.WarnContext(ctx, "transcription section output invalid; retrying the section",
+				slog.String("job_id", job.ID), slog.Duration("offset", offset), slog.Int("try", try), slog.String("error", err.Error()))
+		}
 		if err != nil {
 			if errors.Is(err, ai.ErrPermanent) {
 				return jobs.Permanent(err)

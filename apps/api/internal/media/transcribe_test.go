@@ -32,6 +32,10 @@ type fakeAI struct {
 	mu     sync.Mutex
 	models []string
 	err    error
+	// failOn makes the call at this offset (in ms) return invalid output
+	// that many times before succeeding.
+	failOn    int64
+	failTimes int
 }
 
 func (f *fakeAI) Transcribe(_ context.Context, m ai.Model, audio []byte, _ string, durationMS int64) (ai.Transcript, ai.Usage, error) {
@@ -40,6 +44,10 @@ func (f *fakeAI) Transcribe(_ context.Context, m ai.Model, audio []byte, _ strin
 	f.models = append(f.models, m.ID)
 	if f.err != nil {
 		return ai.Transcript{}, ai.Usage{InputTokens: 10}, f.err
+	}
+	if f.failTimes > 0 && string(audio) == fmt.Sprintf("audio@%d", f.failOn) {
+		f.failTimes--
+		return ai.Transcript{}, ai.Usage{InputTokens: 10}, fmt.Errorf("%w: segment ends after the audio", ai.ErrInvalidOutput)
 	}
 	return ai.Transcript{Language: "en", Segments: []ai.Segment{
 		{StartMS: 1000, EndMS: min(4000, durationMS), Speaker: "Speaker 1", Text: "chunk " + string(audio)},
@@ -189,14 +197,15 @@ func TestTranscriptionFailures(t *testing.T) {
 	}
 	j := w.transcribeJob(a.ID)
 
-	// Invalid output is retried, and the failed call is still counted.
+	// Invalid output is tried three times per section, then the attempt
+	// fails (to be retried by the job system); every call is counted.
 	provider := &fakeAI{err: fmt.Errorf("%w: segment 2 ends after the audio", ai.ErrInvalidOutput)}
 	tx := w.transcriber(&fakeAudio{}, provider)
 	if err := tx.Process(w.ctx, j); err == nil || jobs.IsPermanent(err) {
 		t.Fatalf("invalid output err = %v", err)
 	}
-	if n := w.count(`SELECT count(*) FROM ai_usage WHERE job_id = ? AND NOT succeeded`, j.ID); n != 1 {
-		t.Errorf("failed usage rows = %d", n)
+	if n := w.count(`SELECT count(*) FROM ai_usage WHERE job_id = ? AND NOT succeeded`, j.ID); n != sectionTries {
+		t.Errorf("failed usage rows = %d, want %d", n, sectionTries)
 	}
 
 	// A rejected request is permanent and explained.
@@ -225,7 +234,7 @@ func TestTranscriptionFailures(t *testing.T) {
 	if err := tx.Process(w.ctx, w.transcribeJob(a.ID)); !jobs.IsPermanent(err) || !errors.Is(err, ai.ErrPermanent) {
 		t.Fatalf("retired model err = %v", err)
 	}
-	if len(provider.models) != 2 {
+	if len(provider.models) != sectionTries+1 { // the invalid tries and the rejected call, nothing more
 		t.Fatalf("provider called %d times; the retired model must not be called", len(provider.models))
 	}
 
@@ -238,5 +247,32 @@ func TestTranscriptionFailures(t *testing.T) {
 	}
 	if err := tx.Process(w.ctx, j); err != nil {
 		t.Fatalf("job for deleted media: %v", err)
+	}
+}
+
+func TestInvalidSectionRetriedAlone(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	a := w.processed(ana, org, proj, "podcast.mp4", 25*60_000, "aac") // three sections
+	if _, err := w.svc.RequestTranscript(w.ctx, ana.id, org, proj, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// The middle section comes back invalid twice, then fine.
+	provider := &fakeAI{failOn: 600_000, failTimes: 2}
+	j := w.transcribeJob(a.ID)
+	if err := w.transcriber(&fakeAudio{}, provider).Process(w.ctx, j); err != nil {
+		t.Fatal(err)
+	}
+	if len(provider.models) != 5 {
+		t.Errorf("provider called %d times, want 5 (only the bad section repeated)", len(provider.models))
+	}
+	tr, _ := w.svc.Transcript(w.ctx, ana.id, org, proj, a.ID)
+	if tr.Status != TranscriptReady || len(tr.Segments) != 3 {
+		t.Fatalf("transcript = %s with %d segments", tr.Status, len(tr.Segments))
+	}
+	if n := w.count(`SELECT count(*) FROM ai_usage WHERE job_id = ? AND NOT succeeded`, j.ID); n != 2 {
+		t.Errorf("failed usage rows = %d, want 2", n)
 	}
 }
