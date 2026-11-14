@@ -21,6 +21,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
+	"github.com/lupppig/cavi/apps/api/internal/render"
 	"github.com/lupppig/cavi/apps/api/internal/session"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 	"github.com/lupppig/cavi/apps/api/internal/waitlist"
@@ -72,13 +73,16 @@ func run() error {
 	// Media needs object storage. Without it (development only) the media
 	// endpoints answer 503.
 	var mediaService httpapi.MediaService
+	var renderService httpapi.RenderService
 	if cfg.StorageEnabled() {
 		st := cfg.Storage
-		svc := media.NewService(db, storage.NewS3(storage.S3Config{
+		store := storage.NewS3(storage.S3Config{
 			Endpoint: st.Endpoint, PublicEndpoint: st.PublicEndpoint, Region: st.Region, Bucket: st.Bucket,
 			AccessKeyID: st.AccessKeyID, SecretAccessKey: st.SecretAccessKey, PathStyle: st.PathStyle,
-		}), logger)
-		mediaService = svc
+		})
+		svc := media.NewService(db, store, logger)
+		renders := render.NewService(db, store, logger)
+		mediaService, renderService = svc, renders
 		go sweepMedia(ctx, logger, svc)
 
 		// Jobs are always recorded; with NATS they are also delivered.
@@ -90,9 +94,10 @@ func run() error {
 			defer bus.Close()
 			relay := jobs.NewRelay(db, bus, logger)
 			svc.OnJobQueued(relay.Wake)
+			renders.OnJobQueued(relay.Wake)
 			go relay.Run(ctx)
 		} else {
-			logger.Warn("job delivery disabled: CAVI_NATS_URL is not set; media will wait in processing")
+			logger.Warn("job delivery disabled: CAVI_NATS_URL is not set; media and renders will wait in the queue")
 		}
 	} else {
 		logger.Warn("media disabled: CAVI_STORAGE_ENDPOINT is not set")
@@ -106,6 +111,7 @@ func run() error {
 		Organisations:  accounts,
 		Projects:       project.NewService(db),
 		Media:          mediaService,
+		Renders:        renderService,
 		AISettings:     ai.NewSettingsService(db),
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,

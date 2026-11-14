@@ -1053,6 +1053,147 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/renders:
+    get:
+      operationId: listRenders
+      summary: List a project's rendered clips
+      description: |
+        Renders in a project the caller can see, newest first, optionally
+        only those made from one source file. Ready renders carry a signed
+        `output.url` valid for about an hour. Paged like media.
+      tags: [renders]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - name: source_asset_id
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: A page of renders.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderPage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      operationId: createRender
+      summary: Render a clip
+      description: |
+        Requires `render.execute`. Queues a render of the composition: the
+        source must be a processed video in this project
+        (`validation_failed` on `composition.source_asset_id` otherwise), the
+        clip 1 second to 10 minutes long and inside the file. Output is
+        H.264/AAC MP4 at the shape's platform size (9:16 1080x1920, 1:1
+        1080x1080, 4:5 1080x1350, 16:9 1920x1080), scaling up smaller
+        sources. The request is recorded in the audit log.
+      tags: [renders]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRenderRequest"
+      responses:
+        "202":
+          description: Render queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Render"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/renders/{renderID}:
+    get:
+      operationId: getRender
+      summary: Get a rendered clip
+      tags: [renders]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/RenderID"
+      responses:
+        "200":
+          description: The render.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Render"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      operationId: deleteRender
+      summary: Delete a rendered clip
+      description: |
+        Requires `render.execute`. Removes the clip and its file; a render
+        still in progress is cancelled. Recorded in the audit log.
+      tags: [renders]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - $ref: "#/components/parameters/RenderID"
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/ai-models:
     get:
       operationId: listAIModelSettings
@@ -1216,6 +1357,11 @@ components:
       schema: { type: string, format: uuid }
     AssetID:
       name: assetID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RenderID:
+      name: renderID
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -1660,6 +1806,79 @@ components:
               last_segment: { type: integer }
               title: { type: string }
               reason: { type: string, description: Why the model chose the moment. }
+
+    Composition:
+      type: object
+      description: |
+        A clip cut from one source file. Versioned: this is version 1.
+      required: [version, source_asset_id, start_ms, end_ms, aspect, focus]
+      additionalProperties: false
+      properties:
+        version: { type: integer, enum: [1] }
+        source_asset_id: { type: string, format: uuid }
+        start_ms: { type: integer, format: int64, minimum: 0 }
+        end_ms: { type: integer, format: int64, description: Exclusive; 1 s to 10 min after `start_ms`. }
+        aspect: { type: string, enum: ["9:16", "1:1", "4:5", "16:9"] }
+        focus:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: |
+            Where the frame sits along the axis the source is cropped on:
+            0 left or top, 0.5 centre, 1 right or bottom.
+
+    CreateRenderRequest:
+      type: object
+      required: [name, composition]
+      additionalProperties: false
+      properties:
+        name: { type: string, maxLength: 120, description: Also the download filename. }
+        composition: { $ref: "#/components/schemas/Composition" }
+
+    Render:
+      type: object
+      required: [id, project_id, source_asset_id, name, composition, status, error, requested_by, created_at, completed_at, can_delete, output]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        source_asset_id:
+          type: [string, "null"]
+          format: uuid
+          description: Null once the source file is deleted; the clip remains.
+        name: { type: string }
+        composition: { $ref: "#/components/schemas/Composition" }
+        status: { type: string, enum: [queued, running, ready, failed] }
+        error: { type: [string, "null"], description: User-facing reason when failed. }
+        requested_by:
+          oneOf:
+            - $ref: "#/components/schemas/UserRef"
+            - type: "null"
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        can_delete: { type: boolean }
+        output:
+          description: The finished file, once `status` is `ready`.
+          oneOf:
+            - type: object
+              required: [url, url_expires_at, size_bytes, duration_ms, width, height]
+              properties:
+                url: { type: string, description: Signed; plays inline and downloads under the clip's name. }
+                url_expires_at: { type: string, format: date-time }
+                size_bytes: { type: integer, format: int64 }
+                duration_ms: { type: integer, format: int64 }
+                width: { type: integer }
+                height: { type: integer }
+            - type: "null"
+
+    RenderPage:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Render" }
+        next_cursor:
+          type: [string, "null"]
 
     AIModel:
       type: object

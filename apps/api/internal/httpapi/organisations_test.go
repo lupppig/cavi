@@ -14,12 +14,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/uptrace/bun"
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
 	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
+	"github.com/lupppig/cavi/apps/api/internal/render"
 	"github.com/lupppig/cavi/apps/api/internal/session"
 	"github.com/lupppig/cavi/apps/api/internal/testdb"
 )
@@ -32,6 +34,7 @@ type orgWorld struct {
 	accounts *account.Service
 	sessions *session.Store
 	store    *fakeStore
+	db       *bun.DB
 }
 
 func newOrgWorld(t *testing.T) *orgWorld {
@@ -47,6 +50,7 @@ func newOrgWorld(t *testing.T) *orgWorld {
 		Organisations:  accounts,
 		Projects:       project.NewService(db),
 		Media:          media.NewService(db, store, slog.New(slog.NewTextHandler(io.Discard, nil))),
+		Renders:        render.NewService(db, store, slog.New(slog.NewTextHandler(io.Discard, nil))),
 		AISettings:     ai.NewSettingsService(db),
 	})
 	if err != nil {
@@ -55,7 +59,7 @@ func newOrgWorld(t *testing.T) *orgWorld {
 	t.Cleanup(func() {
 		_, _ = db.ExecContext(context.Background(), `DELETE FROM organisations WHERE name LIKE 'httptest-%'`)
 	})
-	return &orgWorld{t: t, router: r, accounts: accounts, sessions: sessions, store: store}
+	return &orgWorld{t: t, router: r, accounts: accounts, sessions: sessions, store: store, db: db}
 }
 
 type person struct {

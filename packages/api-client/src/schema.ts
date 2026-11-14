@@ -586,6 +586,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/renders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a project's rendered clips
+         * @description Renders in a project the caller can see, newest first, optionally
+         *     only those made from one source file. Ready renders carry a signed
+         *     `output.url` valid for about an hour. Paged like media.
+         */
+        get: operations["listRenders"];
+        put?: never;
+        /**
+         * Render a clip
+         * @description Requires `render.execute`. Queues a render of the composition: the
+         *     source must be a processed video in this project
+         *     (`validation_failed` on `composition.source_asset_id` otherwise), the
+         *     clip 1 second to 10 minutes long and inside the file. Output is
+         *     H.264/AAC MP4 at the shape's platform size (9:16 1080x1920, 1:1
+         *     1080x1080, 4:5 1080x1350, 16:9 1920x1080), scaling up smaller
+         *     sources. The request is recorded in the audit log.
+         */
+        post: operations["createRender"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/renders/{renderID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a rendered clip */
+        get: operations["getRender"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a rendered clip
+         * @description Requires `render.execute`. Removes the clip and its file; a render
+         *     still in progress is cancelled. Recorded in the audit log.
+         */
+        delete: operations["deleteRender"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/ai-models": {
         parameters: {
             query?: never;
@@ -1018,6 +1072,72 @@ export interface components {
                 reason: string;
             }[];
         };
+        /** @description A clip cut from one source file. Versioned: this is version 1. */
+        Composition: {
+            /** @enum {integer} */
+            version: 1;
+            /** Format: uuid */
+            source_asset_id: string;
+            /** Format: int64 */
+            start_ms: number;
+            /**
+             * Format: int64
+             * @description Exclusive; 1 s to 10 min after `start_ms`.
+             */
+            end_ms: number;
+            /** @enum {string} */
+            aspect: "9:16" | "1:1" | "4:5" | "16:9";
+            /**
+             * @description Where the frame sits along the axis the source is cropped on:
+             *     0 left or top, 0.5 centre, 1 right or bottom.
+             */
+            focus: number;
+        };
+        CreateRenderRequest: {
+            /** @description Also the download filename. */
+            name: string;
+            composition: components["schemas"]["Composition"];
+        };
+        Render: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /**
+             * Format: uuid
+             * @description Null once the source file is deleted; the clip remains.
+             */
+            source_asset_id: string | null;
+            name: string;
+            composition: components["schemas"]["Composition"];
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed";
+            /** @description User-facing reason when failed. */
+            error: string | null;
+            requested_by: components["schemas"]["UserRef"] | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            can_delete: boolean;
+            /** @description The finished file, once `status` is `ready`. */
+            output: {
+                /** @description Signed; plays inline and downloads under the clip's name. */
+                url: string;
+                /** Format: date-time */
+                url_expires_at: string;
+                /** Format: int64 */
+                size_bytes: number;
+                /** Format: int64 */
+                duration_ms: number;
+                width: number;
+                height: number;
+            } | null;
+        };
+        RenderPage: {
+            data: components["schemas"]["Render"][];
+            next_cursor: string | null;
+        };
         AIModel: {
             provider: string;
             id: string;
@@ -1163,6 +1283,7 @@ export interface components {
         InvitationID: string;
         ProjectID: string;
         AssetID: string;
+        RenderID: string;
     };
     requestBodies: never;
     headers: never;
@@ -2114,6 +2235,127 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listRenders: {
+        parameters: {
+            query?: {
+                source_asset_id?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of renders. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RenderPage"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createRender: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Render queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Render"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getRender: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                renderID: components["parameters"]["RenderID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The render. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Render"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deleteRender: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                renderID: components["parameters"]["RenderID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };
