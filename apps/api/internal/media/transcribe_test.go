@@ -167,7 +167,7 @@ func TestTranscribeLongMediaInChunks(t *testing.T) {
 			t.Errorf("segment %d = %+v", i, seg)
 		}
 	}
-	if n := w.count(`SELECT count(*) FROM ai_usage WHERE job_id = ? AND succeeded AND input_tokens = 300 AND model = 'gemini-3.5-flash'`, j.ID); n != 3 {
+	if n := w.count(`SELECT count(*) FROM ai_usage WHERE job_id = ? AND succeeded AND input_tokens = 300 AND model = 'gemini-3.5-flash-lite'`, j.ID); n != 3 {
 		t.Errorf("usage rows = %d, want 3", n)
 	}
 	if n := w.count(`SELECT coalesce(sum(audio_ms), 0) FROM ai_usage WHERE job_id = ?`, j.ID); n != 25*60_000 {

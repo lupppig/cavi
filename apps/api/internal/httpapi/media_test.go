@@ -165,17 +165,17 @@ func TestAIModelSettingsOverHTTP(t *testing.T) {
 
 	list := decode[listResponse[aiTaskSettingResponse]](t, w.call(ana, "GET", base, ""))
 	if len(list.Data) != 2 || list.Data[0].Task != "transcription" || list.Data[1].Task != "highlights" ||
-		list.Data[0].Custom || !list.Data[0].Model.Default || len(list.Data[0].Options) < 2 {
+		list.Data[0].Custom || !list.Data[0].Model.Default || len(list.Data[1].Options) < 2 {
 		t.Fatalf("settings = %+v", list)
 	}
 	expect(t, w.call(eve, "GET", base, ""), http.StatusNotFound, CodeNotFound)
 	expect(t, w.call(eve, "PUT", base+"/transcription", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`), http.StatusNotFound, CodeNotFound)
 	expect(t, w.call(ana, "PUT", base+"/transcription", `{"provider":"gemini","model":"gpt-9"}`), http.StatusUnprocessableEntity, CodeValidation)
 	expect(t, w.call(ana, "PUT", base+"/telepathy", `{"provider":"gemini","model":"gemini-3.5-flash"}`), http.StatusUnprocessableEntity, CodeValidation)
-	expect(t, w.call(ana, "PUT", base+"/transcription", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`, "https://evil.example"), http.StatusForbidden, CodeForbidden)
-	expect(t, w.call(ana, "PUT", base+"/transcription", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`), http.StatusNoContent, "")
+	expect(t, w.call(ana, "PUT", base+"/highlights", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`, "https://evil.example"), http.StatusForbidden, CodeForbidden)
+	expect(t, w.call(ana, "PUT", base+"/highlights", `{"provider":"gemini","model":"gemini-3.5-flash-lite"}`), http.StatusNoContent, "")
 	list = decode[listResponse[aiTaskSettingResponse]](t, w.call(ana, "GET", base, ""))
-	if !list.Data[0].Custom || list.Data[0].Model.ID != "gemini-3.5-flash-lite" {
-		t.Fatalf("after set = %+v", list.Data[0])
+	if !list.Data[1].Custom || list.Data[1].Model.ID != "gemini-3.5-flash-lite" {
+		t.Fatalf("after set = %+v", list.Data[1])
 	}
 }

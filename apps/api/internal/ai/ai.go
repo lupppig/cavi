@@ -36,9 +36,12 @@ type Model struct {
 // the evaluation fixtures (see gemini_test.go) and produced valid
 // structured output. Add a model only after it passes them.
 var catalogue = map[string][]Model{
+	// Transcription models must also pass the timing evaluation
+	// (timing_test.go). Gemini 3.5 Flash is left out until it has: it
+	// produced drifting timestamps with the v1 prompt and its quota ran out
+	// before v2 could be evaluated.
 	TaskTranscription: {
-		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
-		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (lower cost)"},
+		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite", Default: true},
 	},
 	TaskHighlights: {
 		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
@@ -118,4 +121,8 @@ type Transcriber interface {
 
 // TranscriptionPromptVersion identifies the prompt and schema used, so
 // results can be traced and compared when the prompt changes.
-const TranscriptionPromptVersion = "transcription-v1"
+//
+// v2 asks for clock times (M:SS.s): with millisecond integers the models
+// sometimes wrote seconds or minutes-and-seconds ("226" for 2:26), which
+// stayed within the audio and so passed validation with wrong times.
+const TranscriptionPromptVersion = "transcription-v2"

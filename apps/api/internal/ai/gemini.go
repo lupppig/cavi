@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"google.golang.org/genai"
@@ -30,7 +32,8 @@ func NewGemini(ctx context.Context, apiKey string) (*Gemini, error) {
 
 const transcriptionPrompt = "Transcribe this audio verbatim in its original language. " +
 	"Split it into segments of one sentence or short phrase spoken by a single speaker. " +
-	"Give start_ms and end_ms in milliseconds from the start of this audio. " +
+	"Give start and end as clock times from the start of this audio, minutes:seconds with one decimal, " +
+	"for example 0:07.4 or 12:31.0. " +
 	"Label speakers 'Speaker 1', 'Speaker 2', ... in order of first appearance. " +
 	"Give the main spoken language as a BCP-47 code in language. " +
 	"Do not summarise, translate, correct or invent words. If there is no speech, return no segments."
@@ -44,12 +47,13 @@ var transcriptionSchema = &genai.Schema{
 			Items: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"start_ms": {Type: genai.TypeInteger},
-					"end_ms":   {Type: genai.TypeInteger},
-					"speaker":  {Type: genai.TypeString},
-					"text":     {Type: genai.TypeString},
+					"start":   {Type: genai.TypeString, Description: "M:SS.s from the start of the audio"},
+					"end":     {Type: genai.TypeString, Description: "M:SS.s from the start of the audio"},
+					"speaker": {Type: genai.TypeString},
+					"text":    {Type: genai.TypeString},
 				},
-				Required: []string{"start_ms", "end_ms", "speaker", "text"},
+				Required:         []string{"start", "end", "speaker", "text"},
+				PropertyOrdering: []string{"start", "end", "speaker", "text"},
 			},
 		},
 	},
@@ -59,8 +63,8 @@ var transcriptionSchema = &genai.Schema{
 type transcriptionJSON struct {
 	Language string `json:"language"`
 	Segments []struct {
-		StartMS int64  `json:"start_ms"`
-		EndMS   int64  `json:"end_ms"`
+		Start   string `json:"start"`
+		End     string `json:"end"`
 		Speaker string `json:"speaker"`
 		Text    string `json:"text"`
 	} `json:"segments"`
@@ -82,7 +86,12 @@ func (g *Gemini) Transcribe(ctx context.Context, model Model, audio []byte, mime
 	}
 	t := Transcript{Language: out.Language, Segments: make([]Segment, len(out.Segments))}
 	for i, s := range out.Segments {
-		t.Segments[i] = Segment{StartMS: s.StartMS, EndMS: s.EndMS, Speaker: s.Speaker, Text: s.Text}
+		start, ok1 := parseClock(s.Start)
+		end, ok2 := parseClock(s.End)
+		if !ok1 || !ok2 {
+			return Transcript{}, usage, fmt.Errorf("%w: segment %d has times %q-%q, not M:SS.s", ErrInvalidOutput, i, s.Start, s.End)
+		}
+		t.Segments[i] = Segment{StartMS: start, EndMS: end, Speaker: s.Speaker, Text: s.Text}
 	}
 	t, err = ValidateTranscript(t, durationMS)
 	return t, usage, err
@@ -205,6 +214,27 @@ func (g *Gemini) Highlights(ctx context.Context, model Model, segments []Segment
 	}
 	hs, err = ValidateHighlights(hs, segments, brief)
 	return hs, usage, err
+}
+
+// clockPattern is [H:]M:SS[.s…]: the format transcription asks for.
+var clockPattern = regexp.MustCompile(`^(?:(\d+):)?(\d{1,3}):([0-5]?\d)(?:\.(\d{1,3}))?$`)
+
+// parseClock reads a clock time into milliseconds. Bare numbers are
+// refused: "226" could mean 226 ms, 226 s or 2:26.
+func parseClock(s string) (int64, bool) {
+	m := clockPattern.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return 0, false
+	}
+	n := func(v string) int64 {
+		x, _ := strconv.ParseInt(v, 10, 64)
+		return x
+	}
+	ms := (n(m[1])*3600 + n(m[2])*60 + n(m[3])) * 1000
+	if f := m[4]; f != "" {
+		ms += n((f + "00")[:3])
+	}
+	return ms, true
 }
 
 func usageOf(resp *genai.GenerateContentResponse) Usage {

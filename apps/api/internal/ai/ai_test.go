@@ -40,6 +40,11 @@ func TestValidateTranscript(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A zero-length segment gets a minimal length rather than failing.
+	if z, err := ValidateTranscript(Transcript{Segments: []Segment{{StartMS: 500, EndMS: 500, Text: "hm"}}}, 10000); err != nil ||
+		z.Segments[0].EndMS != 500+minSegmentMS {
+		t.Errorf("zero-length segment = %+v, %v", z.Segments, err)
+	}
 	if len(got.Segments) != 3 || got.Segments[0].Text != "first" || got.Segments[0].Speaker != "Speaker 1" ||
 		got.Segments[1].Text != "second" || got.Segments[2].EndMS != 10000 {
 		t.Fatalf("normalised = %+v", got.Segments)
@@ -48,13 +53,28 @@ func TestValidateTranscript(t *testing.T) {
 	bad := []Transcript{
 		{Language: "english please", Segments: nil},
 		{Segments: []Segment{{StartMS: -1, EndMS: 100, Text: "x"}}},
-		{Segments: []Segment{{StartMS: 500, EndMS: 500, Text: "x"}}},
+		{Segments: []Segment{{StartMS: 500, EndMS: 400, Text: "x"}}},
 		{Segments: []Segment{{StartMS: 10000, EndMS: 10100, Text: "after the end"}}},
 		{Segments: []Segment{{StartMS: 0, EndMS: 30000, Text: "far past the end"}}},
 	}
 	for i, b := range bad {
 		if _, err := ValidateTranscript(b, 10000); !errors.Is(err, ErrInvalidOutput) {
 			t.Errorf("case %d: err = %v", i, err)
+		}
+	}
+}
+
+func TestParseClock(t *testing.T) {
+	for in, want := range map[string]int64{
+		"0:07.4": 7400, "0:7.4": 7400, "12:31.0": 751000, "2:26": 146000, "1:02:03.25": 3723250, " 0:00.0 ": 0, "90:00.5": 5400500,
+	} {
+		if got, ok := parseClock(in); !ok || got != want {
+			t.Errorf("parseClock(%q) = %d, %v; want %d", in, got, ok, want)
+		}
+	}
+	for _, bad := range []string{"226", "2.26", "7.4", "1:60.0", "1:7a", "abc", "", "-0:01.0"} {
+		if _, ok := parseClock(bad); ok {
+			t.Errorf("parseClock(%q) accepted", bad)
 		}
 	}
 }

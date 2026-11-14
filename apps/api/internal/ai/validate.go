@@ -13,6 +13,7 @@ const (
 	maxSegmentRunes  = 4000
 	maxSpeakerRunes  = 40
 	timestampSlackMS = 2000
+	minSegmentMS     = 300
 )
 
 var languagePattern = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
@@ -48,7 +49,12 @@ func ValidateTranscript(t Transcript, durationMS int64) (Transcript, error) {
 		if len([]rune(s.Speaker)) > maxSpeakerRunes {
 			return bad("segment %d speaker label is too long", i)
 		}
-		if s.StartMS < 0 || s.EndMS <= s.StartMS {
+		// Equal times are a rounding artefact on very short speech; give
+		// the segment a minimal length. Ends before starts are invalid.
+		if s.EndMS == s.StartMS {
+			s.EndMS = s.StartMS + minSegmentMS
+		}
+		if s.StartMS < 0 || s.EndMS < s.StartMS {
 			return bad("segment %d has times %d-%d", i, s.StartMS, s.EndMS)
 		}
 		if durationMS > 0 {
