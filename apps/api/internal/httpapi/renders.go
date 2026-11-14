@@ -13,7 +13,7 @@ import (
 // RenderService is the render behaviour the handlers need. Every method
 // authorises the actor itself.
 type RenderService interface {
-	Create(ctx context.Context, actorID, orgID, projectID, name string, c render.Composition, captionStyle string) (render.Render, error)
+	Create(ctx context.Context, actorID, orgID, projectID, name string, c render.Composition, captions *render.CaptionOptions) (render.Render, error)
 	List(ctx context.Context, actorID, orgID, projectID, sourceAssetID, cursor string, limit int) (render.Page, error)
 	Get(ctx context.Context, actorID, orgID, projectID, renderID string) (render.Render, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, renderID string) error
@@ -33,11 +33,43 @@ type compositionBody struct {
 	Focus         float64 `json:"focus"`
 }
 
-// captionsSummary is what responses say about captions; the cues
-// themselves stay server-side.
+// captionOptions are the caption choices, in requests and responses.
+type captionOptions struct {
+	Style     string `json:"style"`
+	Mode      string `json:"mode,omitempty"`
+	Position  string `json:"position,omitempty"`
+	Uppercase bool   `json:"uppercase,omitempty"`
+	Colors    *struct {
+		Text      string `json:"text"`
+		Highlight string `json:"highlight"`
+		Stroke    string `json:"stroke"`
+	} `json:"colors,omitempty"`
+	SpeakerColors map[string]string `json:"speaker_colors,omitempty"`
+}
+
+func (o captionOptions) toRender() *render.CaptionOptions {
+	out := &render.CaptionOptions{Style: o.Style, Mode: o.Mode, Position: o.Position, Uppercase: o.Uppercase, SpeakerColors: o.SpeakerColors}
+	if o.Colors != nil {
+		out.Colors = render.CaptionColors{Text: o.Colors.Text, Highlight: o.Colors.Highlight, Stroke: o.Colors.Stroke}
+	}
+	return out
+}
+
+// captionsSummary is what responses say about captions: the choices and
+// how many cues were made. The cues themselves stay server-side.
 type captionsSummary struct {
-	Style    string `json:"style"`
-	CueCount int    `json:"cue_count"`
+	captionOptions
+	CueCount int `json:"cue_count"`
+}
+
+func summarise(c *render.Captions) *captionsSummary {
+	o := captionOptions{Style: c.Style, Mode: c.Mode, Position: c.Position, Uppercase: c.Uppercase, SpeakerColors: c.SpeakerColors}
+	o.Colors = &struct {
+		Text      string `json:"text"`
+		Highlight string `json:"highlight"`
+		Stroke    string `json:"stroke"`
+	}{c.Colors.Text, c.Colors.Highlight, c.Colors.Stroke}
+	return &captionsSummary{captionOptions: o, CueCount: len(c.Cues)}
 }
 
 type compositionResponse struct {
@@ -83,7 +115,7 @@ func toRenderResponse(r render.Render) renderResponse {
 		Status: r.Status, Error: ptr(r.Error), CreatedAt: ts(r.CreatedAt), CanDelete: r.CanDelete,
 	}
 	if c.Captions != nil {
-		out.Composition.Captions = &captionsSummary{Style: c.Captions.Style, CueCount: len(c.Captions.Cues)}
+		out.Composition.Captions = summarise(c.Captions)
 	}
 	if r.RequestedByID != "" {
 		out.RequestedBy = &userRef{ID: r.RequestedByID, Name: r.RequestedByName}
@@ -102,9 +134,7 @@ func toRenderResponse(r render.Render) renderResponse {
 type createRenderRequest struct {
 	Name        string          `json:"name"`
 	Composition compositionBody `json:"composition"`
-	Captions    *struct {
-		Style string `json:"style"`
-	} `json:"captions"`
+	Captions    *captionOptions `json:"captions"`
 }
 
 func (h renderHandler) create(c *gin.Context) {
@@ -113,16 +143,13 @@ func (h renderHandler) create(c *gin.Context) {
 		return
 	}
 	b := req.Composition
-	style := ""
+	var captions *render.CaptionOptions
 	if req.Captions != nil {
-		style = req.Captions.Style
-		if style == "" {
-			style = "-" // present but empty: rejected by the service as an unknown style
-		}
+		captions = req.Captions.toRender()
 	}
 	r, err := h.svc.Create(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Name,
 		render.Composition{Version: b.Version, SourceAssetID: b.SourceAssetID, StartMS: b.StartMS, EndMS: b.EndMS,
-			Aspect: b.Aspect, Focus: b.Focus}, style)
+			Aspect: b.Aspect, Focus: b.Focus}, captions)
 	if err != nil {
 		h.fail(c, err)
 		return

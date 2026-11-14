@@ -20,6 +20,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
+	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 )
@@ -135,8 +136,9 @@ func Filename(name string) string {
 // Create queues a render of composition (render.execute). The source must
 // be a processed video in the same project. A non-empty captionStyle
 // burns in captions made from the source's transcript, copied into the
-// composition now so the render can be repeated exactly.
-func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name string, c Composition, captionStyle string) (Render, error) {
+// composition now so the render can be repeated exactly. captions is nil
+// for none.
+func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name string, c Composition, captions *CaptionOptions) (Render, error) {
 	name = cleanName(name)
 	if name == "" || !utf8.ValidString(name) || utf8.RuneCountInString(name) > MaxNameRunes {
 		return Render{}, invalid("name", fmt.Sprintf("Give the clip a name of up to %d characters.", MaxNameRunes))
@@ -155,9 +157,10 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 			return err
 		}
 		c.Captions = nil // cues only ever come from the transcript, below
-		if captionStyle != "" {
-			if !validStyle(captionStyle) {
-				return invalid("captions.style", "Choose bold or boxed captions.")
+		if captions != nil {
+			opts, err := captions.Normalize()
+			if err != nil {
+				return err
 			}
 			segs, err := transcriptSegments(ctx, tx, orgID, c.SourceAssetID)
 			if err != nil {
@@ -167,7 +170,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 				return invalid("captions", "Transcribe this file first to add captions.")
 			}
 			c.Version = CompositionVersion
-			c.Captions = &Captions{Style: captionStyle, Cues: BuildCues(segs, c.StartMS, c.EndMS, c.Aspect)}
+			c.Captions = &Captions{CaptionOptions: opts, Cues: BuildCues(segs, c.StartMS, c.EndMS, c.Aspect, opts.Mode)}
 		}
 		if err := c.Validate(src); err != nil {
 			return err
@@ -187,7 +190,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 			return err
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
-			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.EndMS - c.StartMS, "captions": captionStyle})
+			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.EndMS - c.StartMS, "captions": captions != nil})
 	})
 	if err != nil {
 		return Render{}, err
@@ -243,7 +246,7 @@ func transcriptSegments(ctx context.Context, db bun.IDB, orgID, assetID string) 
 		return nil, nil
 	}
 	rows, err := db.QueryContext(ctx, `
-		SELECT s.start_ms, s.end_ms, s.text
+		SELECT s.start_ms, s.end_ms, s.speaker, s.text, s.words
 		FROM transcripts tr JOIN transcript_segments s ON s.transcript_id = tr.id
 		WHERE tr.media_asset_id = ? AND tr.organisation_id = ? AND tr.status = 'ready'
 		ORDER BY s.position`, assetID, orgID)
@@ -254,9 +257,11 @@ func transcriptSegments(ctx context.Context, db bun.IDB, orgID, assetID string) 
 	segs := []ai.Segment{}
 	for rows.Next() {
 		var sg ai.Segment
-		if err := rows.Scan(&sg.StartMS, &sg.EndMS, &sg.Text); err != nil {
+		var words []byte
+		if err := rows.Scan(&sg.StartMS, &sg.EndMS, &sg.Speaker, &sg.Text, &words); err != nil {
 			return nil, err
 		}
+		sg.Words = media.DecodeWords(words)
 		segs = append(segs, sg)
 	}
 	return segs, rows.Err()

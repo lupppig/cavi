@@ -241,25 +241,25 @@ func TestCreateRenderRules(t *testing.T) {
 	otherProj := w.project(ana, org)
 	elsewhere := w.video(org, otherProj, "video", 1920, 1080, 151_000, true)
 	for _, id := range []string{audio, elsewhere, "not-a-uuid", "00000000-0000-4000-8000-000000000000"} {
-		_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Clip", vertical(id), "")
+		_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Clip", vertical(id), nil)
 		wantField(t, err, "composition.source_asset_id")
 	}
-	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "  ", vertical(src), "")
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "  ", vertical(src), nil)
 	wantField(t, err, "name")
 	c := vertical(src)
 	c.EndMS = 160_000
-	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, "")
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, nil)
 	wantField(t, err, "composition.end_ms")
 
 	// Viewers and clients can't render.
-	_, err = w.svc.Create(w.ctx, vic.id, org, proj, "Clip", vertical(src), "")
+	_, err = w.svc.Create(w.ctx, vic.id, org, proj, "Clip", vertical(src), nil)
 	wantErr(t, err, ErrForbidden)
-	_, err = w.svc.Create(w.ctx, cli.id, org, proj, "Clip", vertical(src), "")
+	_, err = w.svc.Create(w.ctx, cli.id, org, proj, "Clip", vertical(src), nil)
 	wantErr(t, err, ErrForbidden)
 
 	woke := 0
 	w.svc.OnJobQueued(func() { woke++ })
-	r, err := w.svc.Create(w.ctx, ed.id, org, proj, " Release \t advice ", vertical(src), "")
+	r, err := w.svc.Create(w.ctx, ed.id, org, proj, " Release \t advice ", vertical(src), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestCreateRenderRules(t *testing.T) {
 	wantErr(t, err, ErrNotFound)
 	_, err = w.svc.Get(w.ctx, eve.id, evesOrg, proj, r.ID)
 	wantErr(t, err, ErrNotFound)
-	_, err = w.svc.Create(w.ctx, eve.id, evesOrg, w.project(eve, evesOrg), "Steal", vertical(src), "")
+	_, err = w.svc.Create(w.ctx, eve.id, evesOrg, w.project(eve, evesOrg), "Steal", vertical(src), nil)
 	wantField(t, err, "composition.source_asset_id")
 	wantErr(t, w.svc.Delete(w.ctx, eve.id, org, proj, r.ID), ErrNotFound)
 }
@@ -301,13 +301,13 @@ func TestListRenders(t *testing.T) {
 	a := w.video(org, proj, "video", 1920, 1080, 151_000, true)
 	b := w.video(org, proj, "video", 1080, 1920, 60_000, false)
 	for i := range 3 {
-		if _, err := w.svc.Create(w.ctx, ana.id, org, proj, fmt.Sprintf("A%d", i), vertical(a), ""); err != nil {
+		if _, err := w.svc.Create(w.ctx, ana.id, org, proj, fmt.Sprintf("A%d", i), vertical(a), nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 	c := vertical(b)
 	c.StartMS, c.EndMS = 0, 10_000
-	if _, err := w.svc.Create(w.ctx, ana.id, org, proj, "B", c, ""); err != nil {
+	if _, err := w.svc.Create(w.ctx, ana.id, org, proj, "B", c, nil); err != nil {
 		t.Fatal(err)
 	}
 	page, err := w.svc.List(w.ctx, ana.id, org, proj, a, "", 2)
@@ -334,7 +334,7 @@ func TestRenderClip(t *testing.T) {
 	org := w.team(ana, nil)
 	proj := w.project(ana, org)
 	src := w.video(org, proj, "video", 1920, 1080, 151_000, true)
-	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Release: advice?", vertical(src), "")
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Release: advice?", vertical(src), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +401,7 @@ func TestRenderFailures(t *testing.T) {
 	}
 
 	// Output that isn't what was asked for is never kept.
-	r, _ := w.svc.Create(w.ctx, ana.id, org, proj, "Wrong size", vertical(src), "")
+	r, _ := w.svc.Create(w.ctx, ana.id, org, proj, "Wrong size", vertical(src), nil)
 	ff := &fakeFFmpeg{probe: func(c ffmpeg.Clip) ffmpeg.Probe {
 		return ffmpeg.Probe{HasVideo: true, Width: 640, Height: 360, Duration: c.Length}
 	}}
@@ -424,14 +424,14 @@ func TestRenderFailures(t *testing.T) {
 	}
 
 	// Storage hiccups retry.
-	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Flaky", vertical(src), "")
+	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Flaky", vertical(src), nil)
 	ff = &fakeFFmpeg{err: errors.New("ffmpeg: ffmpeg could not fetch the input: Server returned 503")}
 	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err == nil || jobs.IsPermanent(err) {
 		t.Fatalf("transient err = %v", err)
 	}
 
 	// Unreadable sources fail for good.
-	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Corrupt", vertical(src), "")
+	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Corrupt", vertical(src), nil)
 	ff = &fakeFFmpeg{err: fmt.Errorf("%w: moov atom not found", ffmpeg.ErrUnreadable)}
 	j = w.job(r.ID)
 	err = w.renderer(ff).Process(w.ctx, j)
@@ -445,7 +445,7 @@ func TestRenderFailures(t *testing.T) {
 
 	// If the source goes before the job runs, it fails with a reason and
 	// never calls FFmpeg.
-	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Orphan", vertical(src), "")
+	r, _ = w.svc.Create(w.ctx, ana.id, org, proj, "Orphan", vertical(src), nil)
 	j = w.job(r.ID)
 	if _, err := w.db.ExecContext(w.ctx, `DELETE FROM media_assets WHERE id = ?`, src); err != nil {
 		t.Fatal(err)
@@ -487,32 +487,35 @@ func TestRenderWithCaptions(t *testing.T) {
 	src := w.video(org, proj, "video", 1920, 1080, 151_000, true)
 	c := vertical(src) // 87 s to 150 s
 
-	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, CaptionsBold)
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, &CaptionOptions{Style: CaptionsBold})
 	wantField(t, err, "captions") // no transcript yet
 	w.transcribe(org, src,
 		[3]any{80_000, 90_000, "So the power goes out."},
 		[3]any{90_000, 95_000, "I stood on a chair."},
 		[3]any{160_000, 162_000, "After the clip."})
-	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, "neon")
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", c, &CaptionOptions{Style: "neon"})
 	wantField(t, err, "captions.style")
 	quiet := c
 	quiet.StartMS, quiet.EndMS = 100_000, 140_000
-	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", quiet, CaptionsBold)
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Clip", quiet, &CaptionOptions{Style: CaptionsBold})
 	wantField(t, err, "captions") // no speech in that stretch
 
-	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Captioned", c, CaptionsBoxed)
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Captioned", c, &CaptionOptions{Style: CaptionsBoxed})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cap := r.Composition.Captions
+	// The clip starts at 87 s, inside "So the power goes out." (80-90 s):
+	// only the words spoken inside the clip are captioned.
 	if r.Composition.Version != CompositionVersion || cap == nil || cap.Style != CaptionsBoxed || len(cap.Cues) != 2 ||
-		cap.Cues[0].StartMS != 0 || cap.Cues[0].EndMS != 3000 || cap.Cues[1].StartMS != 3000 || cap.Cues[1].EndMS != 8000 {
+		cap.Cues[0].Text != "out." || cap.Cues[0].StartMS < 500 || cap.Cues[0].EndMS != 3000 ||
+		cap.Cues[1].StartMS != 3000 || cap.Cues[1].EndMS != 8000 || cap.Cues[1].Speaker != "Speaker 1" {
 		t.Fatalf("stored composition = %+v, captions %+v", r.Composition, cap)
 	}
 	// Cues sent by a client are ignored: they only ever come from the transcript.
 	forged := vertical(src)
-	forged.Captions = &Captions{Style: CaptionsBold, Cues: []Cue{{StartMS: 0, EndMS: 1000, Text: "Not what they said"}}}
-	r2, err := w.svc.Create(w.ctx, ana.id, org, proj, "Plain", forged, "")
+	forged.Captions = &Captions{CaptionOptions: CaptionOptions{Style: CaptionsBold}, Cues: []Cue{{StartMS: 0, EndMS: 1000, Text: "Not what they said"}}}
+	r2, err := w.svc.Create(w.ctx, ana.id, org, proj, "Plain", forged, nil)
 	if err != nil || r2.Composition.Captions != nil {
 		t.Fatalf("client cues kept: %+v, %v", r2.Composition.Captions, err)
 	}
@@ -522,7 +525,7 @@ func TestRenderWithCaptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(ff.clips) != 1 || ff.clips[0].FontsDir != DefaultFontsDir || len(ff.ass) != 1 ||
-		!strings.Contains(ff.ass[0], "0:00:00.00,0:00:03.00,Cap,,0,0,0,,So the power goes\\Nout.") {
+		!strings.Contains(ff.ass[0], ",0:00:03.00,Cap,,0,0,0,,{\\1c&H00FFFFFF&}out.\n") {
 		t.Fatalf("clip %+v, ass %q", ff.clips, ff.ass)
 	}
 	if err := w.renderer(ff).Process(w.ctx, w.job(r2.ID)); err != nil || ff.clips[1].Subtitles != "" {

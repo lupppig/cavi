@@ -31,7 +31,8 @@ func TestBurnCaptions(t *testing.T) {
 		t.Fatalf("make source: %v %s", err, out)
 	}
 	c := Composition{Version: 2, SourceAssetID: "x", StartMS: 0, EndMS: 3000, Aspect: "9:16", Focus: 0.5,
-		Captions: &Captions{Style: CaptionsBoxed, Cues: []Cue{{StartMS: 200, EndMS: 1500, Text: "Burned in\ncaptions"}}}}
+		Captions: &Captions{CaptionOptions: CaptionOptions{Style: CaptionsBoxed}, Cues: []Cue{{StartMS: 200, EndMS: 1500, Text: "Burned in\ncaptions",
+			Words: []CueWord{{StartMS: 200, EndMS: 500, Text: "Burned"}, {StartMS: 500, EndMS: 800, Text: "in"}, {StartMS: 800, EndMS: 1500, Text: "captions"}}}}}}
 	srcInfo := Source{Width: 640, Height: 360, DurationMS: 4000, HasAudio: true}
 	if err := c.Validate(srcInfo); err != nil {
 		t.Fatal(err)
@@ -64,5 +65,34 @@ func TestBurnCaptions(t *testing.T) {
 	t.Logf("bright pixels while captioned: %d, after: %d", during, after)
 	if during < 500 || after > 20 {
 		t.Fatalf("captions not burned in as expected (during %d, after %d)", during, after)
+	}
+
+	// Word by word, the spoken word in green.
+	c.Captions.Mode, c.Captions.Style = ModeWords, CaptionsBold
+	c.Captions.Colors = CaptionColors{Text: "#FFFFFF", Highlight: "#00FF00", Stroke: "#000000"}
+	if err := os.WriteFile(plan.Subtitles, []byte(ASS(*c.Captions, c.Aspect)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Clip(context.Background(), srv.URL+"/src.mp4", out, plan, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	green := func(at string) int {
+		raw, err := exec.Command("ffmpeg", "-v", "error", "-ss", at, "-i", out, "-frames:v", "1",
+			"-vf", "crop=1080:960:0:960,scale=270:240", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for i := 0; i+2 < len(raw); i += 3 {
+			if raw[i+1] > 180 && raw[i] < 90 && raw[i+2] < 90 {
+				n++
+			}
+		}
+		return n
+	}
+	g := green("0.3")
+	t.Logf("green (highlighted word) pixels: %d", g)
+	if g < 50 {
+		t.Fatalf("highlighted word not drawn in green (%d pixels)", g)
 	}
 }
