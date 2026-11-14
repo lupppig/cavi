@@ -6,14 +6,14 @@ CAVI is a creative production and content distribution platform. See [`AGENTS.md
 
 Foundation phase. What exists today:
 
-- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, an audit log, projects (with client sharing), media uploads to S3-compatible object storage, and background jobs (Postgres + NATS JetStream) that the media worker uses to probe files, make thumbnails with FFmpeg, transcribe speech with Gemini and find candidate clips (highlights) in transcripts, with the AI model chosen per organisation.
+- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, an audit log, projects (with client sharing), media uploads to S3-compatible object storage, and background jobs (Postgres + NATS JetStream) that the media worker uses to probe files, make thumbnails with FFmpeg, transcribe speech with Gemini and find candidate clips (highlights) in transcripts, with the AI model chosen per organisation, and render clips (cut, cropped to 9:16, 1:1, 4:5 or 16:9) with FFmpeg.
 - `apps/web`: Next.js landing page with a working waitlist signup, an `/account` page (profile, invitations, organisations, team creation) and an organisation page (projects, rename, members and roles, invitations) and a project page (details, editing, media upload and playback, client sharing, deletion). Product visuals on the landing page are labelled illustrations, not screenshots.
 - `packages/contracts`: OpenAPI contract, the source of truth for the HTTP API.
 - `packages/api-client`: typed TypeScript client generated from the contract.
 - `migrations/`: versioned SQL migrations, applied with `make migrate-up`.
 - `infrastructure/docker`: local PostgreSQL, SeaweedFS object storage, NATS JetStream and the media worker image.
 
-Not built yet: invitation emails, workspace management, client workspaces (restricting team members to particular clients), the Creative Director, highlights that use more than the transcript (visual and audio signals), turning a highlight into an edit, transcript editing, consistent speaker labels across 10-minute sections, live job updates over WebSockets (the page polls), resumable uploads over 5 GB, storage quotas, the editor, rendering, and publishing.
+Not built yet: invitation emails, workspace management, client workspaces (restricting team members to particular clients), the Creative Director, highlights that use more than the transcript (visual and audio signals), the timeline editor (multi-clip edits, captions, overlays), speaker-aware reframing, transcript editing, consistent speaker labels across 10-minute sections, live job updates over WebSockets (the page polls), resumable uploads over 5 GB, storage quotas, and publishing.
 
 ## Repository layout
 
@@ -36,6 +36,7 @@ apps/
     internal/jobs/     Background jobs: Postgres outbox, NATS relay, worker loop
     internal/ffmpeg/   FFprobe/FFmpeg runner (probe, frame grabs, audio extraction)
     internal/ai/       AI provider boundary (Gemini), model catalogue and per-organisation settings
+    internal/render/   Clip compositions, renders and the render job
     internal/session/  Server-side browser sessions
     internal/waitlist/ Waitlist service and Postgres store
   web/                 Next.js frontend
@@ -139,6 +140,8 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/process` | Retry processing that failed. |
 | `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript` | Read a transcript, or request one (sends audio to the organisation's AI provider). |
 | `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/highlights` | Read a file's candidate clips, or find them in its transcript (sends transcript text to the organisation's AI provider). |
+| `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/renders` | List a project's rendered clips (optionally for one source file), or render one from a composition. |
+| `GET`, `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}/renders/{renderID}` | Read or delete a rendered clip. |
 | `GET` | `/api/v1/organisations/{orgID}/ai-models` | The organisation's AI model for each task, with the supported options. |
 | `PUT` | `/api/v1/organisations/{orgID}/ai-models/{task}` | Choose the model for a task (`organisation.manage`). |
 | `POST` | `/api/v1/waitlist` | Join the early-access waitlist. Same `202` response for new and existing addresses. Rate limited to 10 requests per IP per hour. |
@@ -191,7 +194,7 @@ WorkOS dashboard (Applications → your app → Redirects) needs the callback UR
 
 ## Background jobs
 
-Work that shouldn't run inside a request (media processing, transcription and highlight detection now; rendering later) runs as jobs.
+Work that shouldn't run inside a request (media processing, transcription, highlight detection and rendering) runs as jobs.
 
 - **Postgres is the source of truth.** Each job is a row in `jobs` with status (`queued`, `running`, `succeeded`, `failed`), attempts, last error, lease and timestamps. The row is written in the same transaction as the change that needs it, so a job can't be lost or created for a change that rolled back.
 - **NATS JetStream delivers jobs.** A relay in the API publishes queued rows to a work-queue stream (`CAVI_JOBS`, subjects `cavi.jobs.<kind>`) and republishes any that stay queued too long. Messages carry only IDs (job, organisation, media) and a correlation ID (the request ID), never file contents.
@@ -212,6 +215,16 @@ AI is behind a provider boundary (`internal/ai`): product code asks for a task w
 - **Evaluation:** `make ai-eval` runs every catalogue model against synthetic speech fixtures (`internal/ai/testdata`) with the real API: word error rate under 10%, two speakers told apart, the second speaker's start time within a second, and no words invented from a tone. For highlights, a synthetic podcast transcript checks that a story is found whole (setup to payoff, not starting in small talk), show admin isn't picked, an objective changes the top clip, and an objective trying to override the instructions still yields valid clips. Add a model to the catalogue only after it passes. (Gemini 3.5 Transcribe doesn't support JSON output, Gemini 2.5 Flash isn't available to new accounts, and 3.6/3.8 Flash were overloaded when evaluated.)
 
 Known limits: speaker labels are per 10-minute section, so on longer media "Speaker 1" in one section may be "Speaker 2" in the next; transcripts can't be edited yet.
+
+## Clips and rendering
+
+A clip is described by a **composition** (`internal/render`), a small versioned JSON document stored with each render: the source file, `start_ms`/`end_ms`, an output shape (`aspect`) and `focus`. Compositions are the contract between whatever plans a clip (the clip composer today; the editor and Creative Director later) and the renderer, so the renderer never takes raw FFmpeg arguments.
+
+- **Shapes** render at fixed platform sizes: 9:16 at 1080x1920, 1:1 at 1080x1080, 4:5 at 1080x1350, 16:9 at 1920x1080. Smaller sources are scaled up, so the output is always a standard size.
+- **Framing:** the renderer takes the largest region of the source with the output's shape and places it along the cropped axis by `focus` (0 left or top, 1 right or bottom). The web preview uses CSS `object-position` with the same value, which follows the same formula, so the preview matches the render.
+- **Rules:** rendering needs `render.execute` (editors and above). The source must be a processed video in the same project, and the clip 1 second to 10 minutes long and inside the file. Anyone who can see the project can watch and download clips.
+- **The render job** (`render.clip`, in the media worker) cuts with a frame-accurate seek and re-encodes to H.264/AAC MP4 (`veryfast`, CRF 20, faststart). Before keeping the output it checks it: size, length (within 0.2 s) and audio must match what was asked. Output that fails isn't stored. Sources that are deleted or unreadable fail at once with a message; storage or network errors retry (3 attempts). Render time is recorded on each render (`render_ms`) for cost accounting. Work files are deleted when each job ends.
+- **Storage:** outputs live at `organisations/{org}/projects/{project}/renders/{render}/clip.mp4` and download under the clip's name. A clip outlives its source file; deleting a clip, its project or its organisation deletes its file (a database trigger queues it for the sweep).
 
 ## Media
 
