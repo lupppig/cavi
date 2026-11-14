@@ -6,14 +6,14 @@ CAVI is a creative production and content distribution platform. See [`AGENTS.md
 
 Foundation phase. What exists today:
 
-- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, an audit log, projects (with client sharing), media uploads to S3-compatible object storage, and background jobs (Postgres + NATS JetStream) that the media worker uses to probe files, make thumbnails with FFmpeg and transcribe speech with Gemini, with the AI model chosen per organisation.
+- `apps/api`: Go HTTP API (Gin, Bun, PostgreSQL) with configuration, structured logging, request IDs, a consistent error envelope, an explicit CORS allowlist, graceful shutdown, health endpoints, the early-access waitlist, Google sign-in through WorkOS (server-side sessions), and organisations: personal and team organisations, workspaces, members, roles and permissions, invitations, an audit log, projects (with client sharing), media uploads to S3-compatible object storage, and background jobs (Postgres + NATS JetStream) that the media worker uses to probe files, make thumbnails with FFmpeg, transcribe speech with Gemini and find candidate clips (highlights) in transcripts, with the AI model chosen per organisation.
 - `apps/web`: Next.js landing page with a working waitlist signup, an `/account` page (profile, invitations, organisations, team creation) and an organisation page (projects, rename, members and roles, invitations) and a project page (details, editing, media upload and playback, client sharing, deletion). Product visuals on the landing page are labelled illustrations, not screenshots.
 - `packages/contracts`: OpenAPI contract, the source of truth for the HTTP API.
 - `packages/api-client`: typed TypeScript client generated from the contract.
 - `migrations/`: versioned SQL migrations, applied with `make migrate-up`.
 - `infrastructure/docker`: local PostgreSQL, SeaweedFS object storage, NATS JetStream and the media worker image.
 
-Not built yet: invitation emails, workspace management, client workspaces (restricting team members to particular clients), highlight detection and the Creative Director, transcript editing, consistent speaker labels across 10-minute sections, live job updates over WebSockets (the page polls), resumable uploads over 5 GB, storage quotas, AI, the editor, and publishing.
+Not built yet: invitation emails, workspace management, client workspaces (restricting team members to particular clients), the Creative Director, highlights that use more than the transcript (visual and audio signals), turning a highlight into an edit, transcript editing, consistent speaker labels across 10-minute sections, live job updates over WebSockets (the page polls), resumable uploads over 5 GB, storage quotas, the editor, rendering, and publishing.
 
 ## Repository layout
 
@@ -101,7 +101,7 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `CAVI_STORAGE_ACCESS_KEY_ID` | with storage | | Storage access key. Secret outside local development. |
 | `CAVI_STORAGE_SECRET_ACCESS_KEY` | with storage | | Storage secret key. Secret: never commit (the local SeaweedFS ones in `.env.example` are dev-only). |
 | `CAVI_STORAGE_PATH_STYLE` | no | `false` | `true` for SeaweedFS; `false` for R2. |
-| `GEMINI_API_KEY` | for transcription | | Gemini API key, used by the media worker. Secret: never commit. Without it, transcription jobs wait. |
+| `GEMINI_API_KEY` | for AI features | | Gemini API key, used by the media worker. Secret: never commit. Without it, transcription and highlight jobs wait. |
 | `CAVI_NATS_URL` | outside dev | | NATS server for background jobs (`nats://` or `tls://`). Without it in development, jobs are recorded but wait. |
 
 ### Web (`apps/web/.env.local`)
@@ -138,6 +138,7 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `GET`, `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}` | Get one file (fresh signed URLs) or delete it. |
 | `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/process` | Retry processing that failed. |
 | `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript` | Read a transcript, or request one (sends audio to the organisation's AI provider). |
+| `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/highlights` | Read a file's candidate clips, or find them in its transcript (sends transcript text to the organisation's AI provider). |
 | `GET` | `/api/v1/organisations/{orgID}/ai-models` | The organisation's AI model for each task, with the supported options. |
 | `PUT` | `/api/v1/organisations/{orgID}/ai-models/{task}` | Choose the model for a task (`organisation.manage`). |
 | `POST` | `/api/v1/waitlist` | Join the early-access waitlist. Same `202` response for new and existing addresses. Rate limited to 10 requests per IP per hour. |
@@ -190,7 +191,7 @@ WorkOS dashboard (Applications → your app → Redirects) needs the callback UR
 
 ## Background jobs
 
-Work that shouldn't run inside a request (media processing now; transcription, analysis and rendering later) runs as jobs.
+Work that shouldn't run inside a request (media processing, transcription and highlight detection now; rendering later) runs as jobs.
 
 - **Postgres is the source of truth.** Each job is a row in `jobs` with status (`queued`, `running`, `succeeded`, `failed`), attempts, last error, lease and timestamps. The row is written in the same transaction as the change that needs it, so a job can't be lost or created for a change that rolled back.
 - **NATS JetStream delivers jobs.** A relay in the API publishes queued rows to a work-queue stream (`CAVI_JOBS`, subjects `cavi.jobs.<kind>`) and republishes any that stay queued too long. Messages carry only IDs (job, organisation, media) and a correlation ID (the request ID), never file contents.
@@ -198,16 +199,17 @@ Work that shouldn't run inside a request (media processing now; transcription, a
 - **Failures retry with backoff** (15 s doubling, capped at 5 min) up to the job's limit (5 by default). Failures that retrying can't fix, such as an undecodable file, fail at once. The user-visible resource (the media file) records the outcome.
 - **The media worker** (`cmd/media-worker`) is deployed separately from the API because it needs FFmpeg and CPU. Scale it by running more copies; `CAVI_WORKER_CONCURRENCY` sets jobs per copy (default 2). It needs `CAVI_DATABASE_URL`, `CAVI_NATS_URL` and the `CAVI_STORAGE_*` variables. Locally it runs in Docker (`make media-worker`, logs with `make media-worker-logs`), so FFmpeg doesn't need installing.
 
-## AI and transcription
+## AI: transcription and highlights
 
 AI is behind a provider boundary (`internal/ai`): product code asks for a task with a resolved model and gets validated, structured results. Gemini is the only provider so far.
 
-- **Models are chosen per organisation** from a catalogue of models CAVI has validated (`ai.catalogue`). For transcription: Gemini 3.5 Flash (platform default) and Gemini 3.5 Flash-Lite (lower cost). Owners and admins change it on the organisation page; arbitrary model IDs are rejected, and a stored model that leaves the catalogue falls back to the default.
-- **The model is fixed when work is requested.** A transcript records its provider, model and prompt version (`transcription-v1`); retries use the same model even if the organisation changes its setting, and never switch models silently.
-- **Consent:** transcription only happens when someone with `editing.manage` asks for it. The confirmation names the provider and model the audio goes to, and the request is recorded in the audit log with the model.
+- **Models are chosen per organisation** from a catalogue of models CAVI has validated (`ai.catalogue`). For transcription and highlights: Gemini 3.5 Flash (platform default) and Gemini 3.5 Flash-Lite (lower cost). Owners and admins change it on the organisation page; arbitrary model IDs are rejected, and a stored model that leaves the catalogue falls back to the default.
+- **The model is fixed when work is requested.** A transcript or highlight run records its provider, model and prompt version (`transcription-v1`, `highlights-v1`); retries use the same model even if the organisation changes its setting, and never switch models silently.
+- **Consent:** AI work only happens when someone with `editing.manage` asks for it. The confirmation names the provider and model the audio (transcription) or transcript text (highlights) goes to, and the request is recorded in the audit log with the model.
 - **How it runs:** the media worker cuts the audio into 10-minute mono MP3 sections, sends each with a JSON schema, and validates the result (times inside the audio, non-empty text, sane language code) before saving. Invalid output and provider overload (Gemini's 503 "high demand") retry for about 15 minutes; rejected or blocked requests fail at once with a clear message. Files must have audio and be at most 3 hours long.
-- **Cost accounting:** every provider call records input and output tokens, audio length, model and success in `ai_usage`, attributed to the organisation.
-- **Evaluation:** `make ai-eval` runs every catalogue model against synthetic speech fixtures (`internal/ai/testdata`) with the real API: word error rate under 10%, two speakers told apart, the second speaker's start time within a second, and no words invented from a tone. Add a model to the catalogue only after it passes. (Gemini 3.5 Transcribe doesn't support JSON output, Gemini 2.5 Flash isn't available to new accounts, and 3.6/3.8 Flash were overloaded when evaluated.)
+- **Highlights** are found in a ready transcript. The editor gives an optional objective ("the funniest exchange, for TikTok") and a clip length range (5 s to 10 min). The transcript goes to the model as numbered lines, and the model returns up to 10 clips as ranges of line numbers, with a title and a reason, best first. Times come from the transcript, never from the model, so clips start and end on whole lines of speech. Line numbers that don't exist fail validation (and retry); clips outside the requested length (±5 s) or mostly overlapping a better-ranked clip are dropped. The objective is fenced off in the prompt so it can't change the instructions or output format. One run per file is kept; running again replaces it. If the transcript is redone while a run is waiting, the run fails with a message instead of using stale lines. Highlights are suggestions for the editor to review: they use only the transcript, not the picture or sound.
+- **Cost accounting:** every provider call records task, input and output tokens, audio length, model and success in `ai_usage`, attributed to the organisation.
+- **Evaluation:** `make ai-eval` runs every catalogue model against synthetic speech fixtures (`internal/ai/testdata`) with the real API: word error rate under 10%, two speakers told apart, the second speaker's start time within a second, and no words invented from a tone. For highlights, a synthetic podcast transcript checks that a story is found whole (setup to payoff, not starting in small talk), show admin isn't picked, an objective changes the top clip, and an objective trying to override the instructions still yields valid clips. Add a model to the catalogue only after it passes. (Gemini 3.5 Transcribe doesn't support JSON output, Gemini 2.5 Flash isn't available to new accounts, and 3.6/3.8 Flash were overloaded when evaluated.)
 
 Known limits: speaker labels are per 10-minute section, so on longer media "Speaker 1" in one section may be "Speaker 2" in the next; transcripts can't be edited yet.
 
