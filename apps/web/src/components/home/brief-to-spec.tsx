@@ -68,7 +68,7 @@ export function BriefToSpec() {
   return (
     <div ref={root} className="grid grid-cols-1 border-2 border-current lg:grid-cols-2">
       <div className="border-b-2 border-current p-5 sm:p-8 lg:border-r-2 lg:border-b-0">
-        <p className="mono text-xs uppercase opacity-60">Your brief</p>
+        <p className="mono text-xs uppercase opacity-80">Your brief</p>
         <p className="serif mt-4 text-3xl leading-tight sm:text-4xl">
           <span className="sr-only">{brief}</span>
           <span aria-hidden="true">
@@ -78,21 +78,21 @@ export function BriefToSpec() {
         </p>
       </div>
       <div className="p-5 sm:p-8">
-        <p className="mono text-xs uppercase opacity-60">The plan · you can edit every line</p>
+        <p className="mono text-xs uppercase opacity-80">The plan · you can edit every line</p>
         <dl className="mono mt-4 space-y-2 text-sm sm:text-base">
           {spec.map(([k, v], i) => (
             <div
               key={k}
-              className={`grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 border-b border-current/25 pb-2 transition-[opacity,transform] duration-500 ${
+              className={`grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 border-b border-current/40 pb-2 transition-[opacity,transform] duration-500 ${
                 i < lines ? "opacity-100" : "translate-x-4 opacity-0"
               }`}
             >
-              <dt className="uppercase opacity-60">{k}</dt>
+              <dt className="uppercase opacity-80">{k}</dt>
               <dd className={k === "status" ? "font-bold" : ""}>{v}</dd>
             </div>
           ))}
         </dl>
-        <p className="mono mt-5 text-[11px] uppercase opacity-60">Illustration · the Creative Director is in development</p>
+        <p className="mono mt-5 text-xs uppercase opacity-80">Illustration · the Creative Director is in development</p>
       </div>
     </div>
   );

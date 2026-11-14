@@ -73,7 +73,7 @@ function Kicker({ n, children }: { n: string; children: string }) {
   return (
     <p className="mono flex items-center gap-3 text-xs uppercase">
       <span className="border-2 border-current px-1.5 py-0.5 font-bold">{n}</span>
-      <span className="opacity-70">{children}</span>
+      <span className="opacity-85">{children}</span>
     </p>
   );
 }
@@ -118,7 +118,7 @@ export default function Home() {
                 <span aria-hidden="true" className="rec size-2.5 rounded-full bg-current" />
                 Rec <Timecode />
               </p>
-              <p className="opacity-70">Creative production · in development</p>
+              <p className="opacity-85">Creative production · in development</p>
             </div>
 
             <h1 className="display relative z-10 mt-8 text-[clamp(2.6rem,9.5vw,9.5rem)] mix-blend-difference sm:mt-12">
@@ -149,7 +149,7 @@ export default function Home() {
             </div>
 
             <div className="mono mt-6 flex flex-wrap items-center justify-between gap-3 border-t-2 border-current pt-4 text-xs uppercase">
-              <span className="opacity-70">Scroll to roll ↓</span>
+              <span className="opacity-85">Scroll to roll ↓</span>
               <a href="#game" className="flex min-h-11 items-center gap-2 font-bold underline-offset-4 hover:underline">
                 ▶ Play “Cut the moment”
               </a>
@@ -301,7 +301,7 @@ export default function Home() {
             <a href={signInHref()} className="flex min-h-11 items-center underline-offset-4 hover:underline">
               Already have an account? Sign in
             </a>
-            <span className="opacity-60">© 2026 CAVI · In development</span>
+            <span className="opacity-80">© 2026 CAVI · In development</span>
           </div>
         </div>
       </footer>

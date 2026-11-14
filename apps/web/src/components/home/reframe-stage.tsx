@@ -68,7 +68,7 @@ export function ReframeStage() {
           className="reframe-box absolute inset-y-0 border-2 border-current shadow-[0_0_0_100vmax_color-mix(in_srgb,var(--bg)_78%,transparent)]"
           style={{ width: `${width}%`, left: `${left}%` }}
         >
-          <span className="mono absolute top-1.5 left-1.5 bg-[var(--fg)] px-1.5 text-[10px] font-bold text-[var(--bg)] sm:text-xs">
+          <span className="mono absolute top-1.5 left-1.5 bg-[var(--fg)] px-1.5 text-[11px] font-bold text-[var(--bg)] sm:text-xs">
             {s.aspect}
           </span>
           {["top-0 left-0 border-t-4 border-l-4", "top-0 right-0 border-t-4 border-r-4", "bottom-0 left-0 border-b-4 border-l-4", "right-0 bottom-0 border-r-4 border-b-4"].map((c) => (
@@ -78,7 +78,7 @@ export function ReframeStage() {
       </div>
 
       <fieldset className="mt-4">
-        <legend className="mono text-xs uppercase opacity-70">Pick a shape</legend>
+        <legend className="mono text-xs uppercase opacity-85">Pick a shape</legend>
         <div className="mt-2 grid grid-cols-4 gap-2">
           {shapes.map((sh, i) => (
             <label
@@ -103,7 +103,7 @@ export function ReframeStage() {
           ))}
         </div>
       </fieldset>
-      <p className="mono mt-2 text-[11px] uppercase opacity-60">
+      <p className="mono mt-2 text-xs uppercase opacity-80">
         {s.use} · {auto ? "Auto-cycling" : "Your pick"} · Illustration
       </p>
     </div>

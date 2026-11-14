@@ -67,6 +67,14 @@
   -webkit-text-stroke: 2px var(--fg);
 }
 
+/* Native dropdowns draw their option list with the browser's default
+   background; set both colours so options are always readable. */
+.home select,
+.home select option {
+  background-color: var(--bg);
+  color: var(--fg);
+}
+
 /* Buttons: hard-edged, inverting on hover. */
 .home .btn {
   display: inline-flex;
@@ -258,12 +266,13 @@
     .home .reveal {
       animation: reveal linear both;
       animation-timeline: view();
-      animation-range: entry 0% cover 30%;
+      /* Fully visible by the time it has entered the screen. */
+      animation-range: entry 0% entry 85%;
     }
     .home .reveal-3d {
       animation: reveal-3d linear both;
       animation-timeline: view();
-      animation-range: entry 0% cover 35%;
+      animation-range: entry 0% entry 90%;
     }
     .home .skew-band {
       animation: skew-band linear both;

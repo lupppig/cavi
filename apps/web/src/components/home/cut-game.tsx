@@ -264,19 +264,19 @@ export function CutGame() {
   return (
     <div className="border-2 border-current">
       {/* HUD */}
-      <div className="mono grid grid-cols-3 border-b-2 border-current text-[11px] uppercase sm:text-xs">
+      <div className="mono grid grid-cols-3 border-b-2 border-current text-xs uppercase sm:text-xs">
         <div className="border-r-2 border-current p-3">
-          <p className="opacity-60">Round</p>
+          <p className="opacity-80">Round</p>
           <p className="mt-0.5 text-base font-bold sm:text-lg">
             {round + 1}/{rounds.length} · {rounds[round].name}
           </p>
         </div>
         <div className="border-r-2 border-current p-3">
-          <p className="opacity-60">Score</p>
+          <p className="opacity-80">Score</p>
           <p className="mt-0.5 text-base font-bold tabular-nums sm:text-lg">{total}</p>
         </div>
         <div className="p-3">
-          <p className="opacity-60">Best</p>
+          <p className="opacity-80">Best</p>
           <p className="mt-0.5 text-base font-bold tabular-nums sm:text-lg">{best || "—"}</p>
         </div>
       </div>
@@ -286,11 +286,11 @@ export function CutGame() {
         {phase === "playing" &&
           (caption ? (
             <p className="text-2xl leading-tight font-bold sm:text-4xl">
-              <span className="mono mr-2 align-middle text-xs font-normal uppercase opacity-60">{caption.who}</span>
+              <span className="mono mr-2 align-middle text-xs font-normal uppercase opacity-80">{caption.who}</span>
               {caption.text}
             </p>
           ) : (
-            <p className="mono text-sm uppercase opacity-60">Rolling…</p>
+            <p className="mono text-sm uppercase opacity-80">Rolling…</p>
           ))}
         {phase === "intro" && (
           <div>
@@ -311,7 +311,7 @@ export function CutGame() {
         )}
         {phase === "done" && (
           <div role="status">
-            <p className="mono text-xs uppercase opacity-60">{newBest ? "New personal best" : "Final score"}</p>
+            <p className="mono text-xs uppercase opacity-80">{newBest ? "New personal best" : "Final score"}</p>
             <p className="display mt-1 text-6xl tabular-nums sm:text-8xl">
               {total}
               <span className="text-2xl opacity-50 sm:text-4xl">/300</span>
@@ -336,7 +336,7 @@ export function CutGame() {
                     key={i}
                     className={`absolute inset-y-0 overflow-hidden border-2 border-current px-2 py-1.5 ${
                       revealed && l.kind === "payoff" ? "bg-[var(--fg)] text-[var(--bg)]" : ""
-                    } ${revealed && l.kind === "filler" ? "opacity-35" : ""}`}
+                    } ${revealed && l.kind === "filler" ? "opacity-50" : ""}`}
                     style={{
                       left: x(l.start) + 2,
                       width: x(l.end - l.start) - 4,
@@ -346,18 +346,18 @@ export function CutGame() {
                           : undefined,
                     }}
                   >
-                    <p className="mono line-clamp-2 text-[10px] leading-tight sm:text-[11px]">{l.text}</p>
-                    {revealed && <p className="mono mt-1 text-[10px] font-bold uppercase">{l.kind}</p>}
+                    <p className="mono line-clamp-2 text-[11px] leading-tight sm:text-xs">{l.text}</p>
+                    {revealed && <p className="mono mt-1 text-[11px] font-bold uppercase">{l.kind}</p>}
                   </div>
                 ))}
                 {marks.in !== null && (
                   <div className="absolute -inset-y-3 w-1 bg-[var(--fg)]" style={{ left: x(marks.in) }}>
-                    <span className="mono absolute -top-0.5 left-1.5 bg-[var(--fg)] px-1 text-[10px] font-bold text-[var(--bg)]">IN</span>
+                    <span className="mono absolute -top-0.5 left-1.5 bg-[var(--fg)] px-1 text-[11px] font-bold text-[var(--bg)]">IN</span>
                   </div>
                 )}
                 {marks.out !== null && (
                   <div className="absolute -inset-y-3 w-1 bg-[var(--fg)]" style={{ left: x(marks.out) }}>
-                    <span className="mono absolute right-1.5 -bottom-0.5 bg-[var(--fg)] px-1 text-[10px] font-bold text-[var(--bg)]">OUT</span>
+                    <span className="mono absolute right-1.5 -bottom-0.5 bg-[var(--fg)] px-1 text-[11px] font-bold text-[var(--bg)]">OUT</span>
                   </div>
                 )}
               </div>
@@ -372,7 +372,7 @@ export function CutGame() {
         </div>
       </div>
       {revealed && (
-        <p className="mono flex flex-wrap gap-x-4 gap-y-1 border-b-2 border-current px-4 py-2 text-[11px] uppercase sm:px-8">
+        <p className="mono flex flex-wrap gap-x-4 gap-y-1 border-b-2 border-current px-4 py-2 text-xs uppercase sm:px-8">
           <span>
             <span className="mr-1 inline-block size-2.5 border border-current bg-[repeating-linear-gradient(135deg,currentColor_0_1px,transparent_1px_4px)] align-middle" />
             Setup
@@ -380,7 +380,7 @@ export function CutGame() {
           <span>
             <span className="mr-1 inline-block size-2.5 bg-current align-middle" /> Payoff
           </span>
-          <span className="opacity-60">Faded: dead air</span>
+          <span className="opacity-80">Faded: dead air</span>
         </p>
       )}
 
@@ -423,7 +423,7 @@ export function CutGame() {
           </button>
         )}
         {phase === "playing" && (
-          <p className="mono w-full text-[11px] uppercase opacity-60">Space or Enter also cuts · {speed}× speed</p>
+          <p className="mono w-full text-xs uppercase opacity-80">Space or Enter also cuts · {speed}× speed</p>
         )}
       </div>
     </div>

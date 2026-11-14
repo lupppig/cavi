@@ -11,7 +11,7 @@ function Frame({ i, children, invert }: { i: number; children: ReactNode; invert
       }`}
       style={{ "--i": i } as CSSProperties}
     >
-      <div className="mono flex justify-between text-[10px] uppercase">
+      <div className="mono flex justify-between text-[11px] uppercase">
         <span>F{String(i + 1).padStart(2, "0")}</span>
         <span>●</span>
       </div>
@@ -40,7 +40,7 @@ const frames: { invert?: boolean; body: ReactNode }[] = [
     body: (
       <div className="relative mx-auto h-12 w-20 border-2 border-current sm:h-20 sm:w-36">
         <div className="absolute inset-y-0 left-1/2 w-[30%] -translate-x-1/2 bg-current" />
-        <span className="mono absolute -bottom-4 left-0 text-[9px] sm:-bottom-5 sm:text-[10px]">16:9 → 9:16</span>
+        <span className="mono absolute -bottom-4 left-0 text-[10px] sm:-bottom-5 sm:text-[11px]">16:9 → 9:16</span>
       </div>
     ),
   },
@@ -59,7 +59,7 @@ const frames: { invert?: boolean; body: ReactNode }[] = [
   {
     invert: true,
     body: (
-      <div className="mono flex items-center justify-between text-[10px] font-bold sm:text-sm">
+      <div className="mono flex items-center justify-between text-[11px] font-bold sm:text-sm">
         <span className="border-2 border-current px-1.5">IN</span>
         <span className="mx-2 h-0.5 flex-1 bg-current" />
         <span className="border-2 border-current px-1.5">OUT</span>

@@ -73,7 +73,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
       <div role="status" className="[perspective:900px]">
         <div className="ticket flipped relative flex max-w-xl items-stretch border-2 border-current bg-[var(--fg)] text-[var(--bg)]">
           <div className="flex-1 p-5 sm:p-6">
-            <p className="mono text-[11px] uppercase opacity-70">Access ticket · early access</p>
+            <p className="mono text-xs uppercase opacity-85">Access ticket · early access</p>
             <p className="display mt-2 text-3xl sm:text-4xl">You&rsquo;re on the list.</p>
             <p className="mt-2 font-medium">We&rsquo;ll email you when early access opens.</p>
           </div>
@@ -91,7 +91,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
   const emailInvalid = state.kind === "error" && state.field === "email";
 
   const field =
-    "min-h-13 w-full min-w-0 border-2 border-current bg-transparent px-4 text-base font-medium text-current placeholder:text-current placeholder:opacity-50 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-current focus:ring-offset-2 focus:ring-offset-[var(--bg)] disabled:opacity-50";
+    "min-h-13 w-full min-w-0 border-2 border-current bg-transparent px-4 text-base font-medium text-current placeholder:text-current placeholder:opacity-75 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-current focus:ring-offset-2 focus:ring-offset-[var(--bg)] disabled:opacity-50";
 
   return (
     <form onSubmit={onSubmit}>
@@ -163,7 +163,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
           </span>
         )}
       </p>
-      <p className="text-sm font-medium opacity-70">
+      <p className="text-sm font-medium opacity-85">
         We&rsquo;ll only use your email to contact you about CAVI early access.
       </p>
     </form>

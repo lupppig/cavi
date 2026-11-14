@@ -108,12 +108,12 @@ export function StagePrism({ stages }: { stages: Stage[] }) {
         <div className="sticky top-0 flex h-dvh items-center overflow-hidden">
           <div className="mx-auto grid w-full max-w-[90rem] grid-cols-1 items-center gap-24 px-4 sm:gap-28 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
             <div>
-              <p className="mono text-xs uppercase opacity-70" aria-live="polite">
+              <p className="mono text-xs uppercase opacity-85" aria-live="polite">
                 Scenes unlocked {unlocked}/{stages.length}
               </p>
               <div className="mt-2 flex gap-1.5" aria-hidden="true">
                 {stages.map((s, i) => (
-                  <span key={s.title} className={`h-1.5 flex-1 ${i < unlocked ? "bg-current" : "bg-current/20"}`} />
+                  <span key={s.title} className={`h-1.5 flex-1 ${i < unlocked ? "bg-current" : "bg-current/30"}`} />
                 ))}
               </div>
               <ol className="mt-6 hidden space-y-1 lg:block">
