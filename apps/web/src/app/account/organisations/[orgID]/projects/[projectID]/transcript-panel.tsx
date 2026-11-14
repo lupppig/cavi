@@ -32,6 +32,32 @@ export function useTranscript(project: Project, asset: MediaAsset) {
   });
 }
 
+/**
+ * Starts transcription after asking for consent: the confirmation names
+ * the provider and model the audio goes to.
+ */
+export function useRequestTranscript(project: Project, asset: MediaAsset) {
+  const qc = useQueryClient();
+  const settings = useAIModelSettings(project.organisation_id);
+  const model = settings.data?.find((s) => s.task === "transcription")?.model;
+  const request = useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await client().POST(
+        "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript",
+        { params: { path: { orgID: project.organisation_id, projectID: project.id, assetID: asset.id } } },
+      );
+      if (!data) raise(error, response.status, "Could not start transcription.");
+      return data;
+    },
+    onSuccess: (t) => qc.setQueryData(["media", asset.id, "transcript"], t),
+  });
+  const start = () => {
+    const where = model ? `${model.provider === "gemini" ? "Google " : ""}${model.label}` : "your organisation’s AI provider";
+    if (window.confirm(`To transcribe “${asset.filename}”, its audio will be sent to ${where}. Continue?`)) request.mutate();
+  };
+  return { request, start };
+}
+
 export function TranscriptPanel({
   asset,
   project,
@@ -43,31 +69,10 @@ export function TranscriptPanel({
   canTranscribe: boolean;
   onSeek: (ms: number) => void;
 }) {
-  const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
-  const path = { orgID: project.organisation_id, projectID: project.id, assetID: asset.id };
-  const key = ["media", asset.id, "transcript"];
 
   const transcript = useTranscript(project, asset);
-  const settings = useAIModelSettings(project.organisation_id);
-  const model = settings.data?.find((s) => s.task === "transcription")?.model;
-
-  const request = useMutation({
-    mutationFn: async () => {
-      const { data, error, response } = await client().POST(
-        "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript",
-        { params: { path } },
-      );
-      if (!data) raise(error, response.status, "Could not start transcription.");
-      return data;
-    },
-    onSuccess: (t) => qc.setQueryData(key, t),
-  });
-
-  function start() {
-    const where = model ? `${model.provider === "gemini" ? "Google " : ""}${model.label}` : "your organisation’s AI provider";
-    if (window.confirm(`To transcribe “${asset.filename}”, its audio will be sent to ${where}. Continue?`)) request.mutate();
-  }
+  const { request, start } = useRequestTranscript(project, asset);
 
   const t = transcript.data;
   const busy = t && (t.status === "queued" || t.status === "running");
@@ -115,6 +120,7 @@ export function TranscriptPanel({
             <p className="px-3 pb-3 text-sm font-semibold text-ink-soft">No speech was found.</p>
           ) : (
             <>
+              {t.speakers.length > 0 && <Speakers transcript={t} project={project} asset={asset} canEdit={canTranscribe} />}
               <ol className="max-h-80 space-y-2 overflow-y-auto px-3 pb-3">
                 {t.segments.map((s, i) => (
                   <li key={i} className="text-sm">
@@ -153,6 +159,65 @@ export function TranscriptPanel({
           )}
         </details>
       )}
+    </div>
+  );
+}
+
+const voiceOptions = [
+  { value: "woman", label: "Woman’s voice" },
+  { value: "man", label: "Man’s voice" },
+  { value: "unclear", label: "Unclear" },
+] as const;
+
+/**
+ * Who speaks, and how each voice sounds. CAVI suggests this from the audio
+ * alone; editors can correct it. It describes a voice, not who someone is.
+ */
+function Speakers({ transcript, project, asset, canEdit }: { transcript: Transcript; project: Project; asset: MediaAsset; canEdit: boolean }) {
+  const qc = useQueryClient();
+  const set = useMutation({
+    mutationFn: async ({ label, voice }: { label: string; voice: "woman" | "man" | "unclear" }) => {
+      const { data, error, response } = await client().PATCH(
+        "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript/speakers/{label}",
+        { params: { path: { orgID: project.organisation_id, projectID: project.id, assetID: asset.id, label } }, body: { voice } },
+      );
+      if (!data) raise(error, response.status, "Could not change the voice.");
+      return data;
+    },
+    onSuccess: (t) => qc.setQueryData(["media", asset.id, "transcript"], t),
+  });
+  return (
+    <div className="border-b-2 border-ink/10 px-3 pb-3">
+      <p className="text-xs font-extrabold uppercase text-ink-soft">Speakers</p>
+      <ul className="mt-1 space-y-1">
+        {transcript.speakers.map((sp) => {
+          const label = voiceOptions.find((v) => v.value === sp.voice)?.label ?? sp.voice;
+          return (
+            <li key={sp.label} className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-extrabold">{sp.label}</span>
+              {canEdit ? (
+                <select
+                  value={sp.voice}
+                  disabled={set.isPending}
+                  onChange={(e) => set.mutate({ label: sp.label, voice: e.target.value as "woman" | "man" | "unclear" })}
+                  aria-label={`How ${sp.label}’s voice sounds`}
+                  className="min-h-11 border-2 border-ink bg-white px-2 text-sm font-bold disabled:opacity-60"
+                >
+                  {voiceOptions.map((v) => (
+                    <option key={v.value} value={v.value}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="font-semibold">{label}</span>
+              )}
+              <span className="text-xs font-semibold text-ink-soft">{sp.voice_set_by === "ai" ? "suggested by AI" : "set by a person"}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {set.isError && <p className="mt-1 text-sm font-bold">{set.error.message}</p>}
     </div>
   );
 }

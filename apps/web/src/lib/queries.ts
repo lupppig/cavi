@@ -16,6 +16,7 @@ export type Transcript = components["schemas"]["Transcript"];
 export type Highlights = components["schemas"]["Highlights"];
 export type Render = components["schemas"]["Render"];
 export type Composition = components["schemas"]["Composition"];
+export type CaptionOptions = components["schemas"]["CaptionOptions"];
 
 export class NotSignedIn extends Error {}
 export class NotFound extends Error {}

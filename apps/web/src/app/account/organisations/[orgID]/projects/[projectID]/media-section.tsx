@@ -457,6 +457,7 @@ function MediaCard({
             project={project}
             url={url}
             canRender={canRender}
+            canTranscribe={canTranscribe}
             playheadMS={() => (player.current?.currentTime ?? 0) * 1000}
             onPreview={playClip}
           />

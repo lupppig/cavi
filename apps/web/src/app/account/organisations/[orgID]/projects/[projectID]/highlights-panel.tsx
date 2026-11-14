@@ -154,6 +154,7 @@ export function HighlightsPanel({
                 project={project}
                 url={url}
                 initial={{ name: composingClip.title, startMS: composingClip.start_ms, endMS: composingClip.end_ms }}
+                canTranscribe={canEdit}
                 onPreview={onPlay}
                 onClose={() => setComposing(null)}
               />
