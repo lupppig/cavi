@@ -25,7 +25,7 @@ function useSignOut() {
   });
 }
 
-export function Avatar({ user, size = "size-9", onDark = true }: { user: Me["user"]; size?: string; onDark?: boolean }) {
+export function Avatar({ user, size = "size-9" }: { user: Me["user"]; size?: string }) {
   return user.avatar_url ? (
     // Avatars come from the identity provider's CDN; a plain img avoids
     // configuring every possible remote host for next/image.
@@ -34,7 +34,7 @@ export function Avatar({ user, size = "size-9", onDark = true }: { user: Me["use
   ) : (
     <span
       aria-hidden="true"
-      className={`${size} grid shrink-0 place-items-center rounded-full font-extrabold ${onDark ? "bg-paper text-ink" : "bg-ink text-paper"}`}
+      className={`${size} grid shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent-text`}
     >
       {initials(user)}
     </span>
@@ -42,8 +42,8 @@ export function Avatar({ user, size = "size-9", onDark = true }: { user: Me["use
 }
 
 const navLink = (active: boolean) =>
-  `flex min-h-11 items-center gap-2 px-3 text-sm font-extrabold transition-colors ${
-    active ? "bg-paper text-ink" : "text-paper hover:bg-paper/15"
+  `flex min-h-11 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors ${
+    active ? "bg-accent-soft text-accent-text" : "text-subtle hover:bg-surface-2 hover:text-ink"
   }`;
 
 /** Where you can go: home, each organisation and its sections, and you. */
@@ -56,31 +56,30 @@ function Nav({ me }: { me: Me }) {
   const inProject = pathname.includes("/projects/");
 
   return (
-    <nav aria-label="App" className="flex h-full flex-col">
-      <Link href="/account" className="flex min-h-16 items-center gap-2.5 px-3 text-xl font-black tracking-tight [font-stretch:125%]">
-        <Mark />
+    <nav aria-label="App" className="flex h-full flex-col px-3">
+      <Link href="/account" className="flex min-h-16 items-center gap-2.5 px-2 text-lg font-semibold tracking-tight">
+        <Mark className="size-7" />
         CAVI
       </Link>
       <div className="mt-2 flex-1 overflow-y-auto">
         <Link href="/account" aria-current={pathname === "/account" ? "page" : undefined} className={navLink(pathname === "/account")}>
           Home
         </Link>
-        <p className="mt-5 px-3 font-mono text-[11px] font-semibold tracking-wider uppercase opacity-80">Organisations</p>
-        <ul className="mt-1">
+        <p className="label-caps mt-6 px-3">Organisations</p>
+        <ul className="mt-1 space-y-0.5">
           {me.organisations.map((o) => {
             const current = params.orgID === o.id;
             return (
               <li key={o.id}>
                 <Link
                   href={`/account/organisations/${o.id}`}
-                  aria-current={current && !inProject && tab === "projects" ? "page" : undefined}
-                  className={`${navLink(current && !inProject && tab === "projects")} justify-between`}
+                  className={`${navLink(false)} justify-between ${current ? "font-semibold text-ink" : ""}`}
                 >
                   <span className="truncate">{o.name}</span>
-                  {o.personal && <span className="font-mono text-[11px] font-semibold opacity-80">YOU</span>}
+                  {o.personal && <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium text-muted">You</span>}
                 </Link>
                 {current && (
-                  <ul className="mb-2 ml-3 border-l-2 border-paper/30">
+                  <ul className="mt-0.5 mb-2 ml-4 space-y-0.5 border-l border-line pl-2">
                     {orgTabs.map((t) => {
                       const active = !inProject && tab === t.tab;
                       return (
@@ -102,27 +101,27 @@ function Nav({ me }: { me: Me }) {
           })}
         </ul>
       </div>
-      <div className="border-t-2 border-paper/30 p-2">
+      <div className="-mx-3 border-t border-line p-3">
         <Link
           href="/account/profile"
           aria-current={pathname === "/account/profile" ? "page" : undefined}
           className={`${navLink(pathname === "/account/profile")} min-h-14`}
         >
-          <Avatar user={me.user} size="size-8" onDark={pathname !== "/account/profile"} />
+          <Avatar user={me.user} size="size-8" />
           <span className="min-w-0">
-            <span className="block truncate">{displayName(me.user)}</span>
-            <span className="block truncate font-mono text-[11px] font-semibold opacity-80">Profile</span>
+            <span className="block truncate font-semibold text-ink">{displayName(me.user)}</span>
+            <span className="block truncate text-xs text-muted">Profile</span>
           </span>
         </Link>
         <button
           type="button"
           onClick={() => signOut.mutate()}
           disabled={signOut.isPending}
-          className="mt-1 flex min-h-11 w-full items-center px-3 text-sm font-extrabold text-paper hover:bg-paper/15 disabled:opacity-60"
+          className="mt-1 flex min-h-11 w-full items-center rounded-lg px-3 text-sm font-medium text-subtle hover:bg-surface-2 hover:text-ink disabled:opacity-60"
         >
           {signOut.isPending ? "Signing out…" : "Sign out"}
         </button>
-        {signOut.isError && <p className="px-3 pb-2 text-sm font-bold">{signOut.error.message}</p>}
+        {signOut.isError && <p className="px-3 pb-2 text-sm font-medium text-danger">{signOut.error.message}</p>}
       </div>
     </nav>
   );
@@ -159,9 +158,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!me.data) {
     return (
       <div className="app min-h-dvh">
-        <header className="flex min-h-16 items-center bg-ink px-4 text-paper sm:px-8">
-          <Link href="/" className="flex min-h-11 items-center gap-2.5 text-xl font-black tracking-tight [font-stretch:125%]">
-            <Mark />
+        <header className="flex min-h-16 items-center border-b border-line bg-surface px-4 sm:px-8">
+          <Link href="/" className="flex min-h-11 items-center gap-2.5 text-lg font-semibold tracking-tight">
+            <Mark className="size-7" />
             CAVI
           </Link>
         </header>
@@ -176,16 +175,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="app min-h-dvh lg:grid lg:grid-cols-[15rem_minmax(0,1fr)]">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-paper focus:px-4 focus:py-3 focus:font-extrabold focus:text-ink"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-3 focus:font-semibold focus:text-ink focus:shadow"
       >
         Skip to content
       </a>
-      <aside className="sticky top-0 hidden h-dvh bg-ink text-paper lg:block">
+      <aside className="sticky top-0 hidden h-dvh border-r border-line bg-surface lg:block">
         <Nav me={me.data} />
       </aside>
 
-      <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between bg-ink px-3 text-paper lg:hidden">
-        <Link href="/account" className="flex min-h-11 items-center gap-2 text-lg font-black tracking-tight [font-stretch:125%]">
+      <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between border-b border-line bg-surface/90 px-3 backdrop-blur lg:hidden">
+        <Link href="/account" className="flex min-h-11 items-center gap-2 text-lg font-semibold tracking-tight">
           <Mark className="size-6" />
           CAVI
         </Link>
@@ -195,21 +194,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           onClick={() => setOpen(true)}
           aria-expanded={open}
           aria-controls="app-menu"
-          className="flex min-h-11 items-center gap-2 border-2 border-paper px-3 text-xs font-extrabold tracking-wider uppercase"
+          className="btn btn-secondary"
         >
           Menu
         </button>
       </header>
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="absolute inset-0 bg-ink/60" />
+          <button type="button" aria-label="Close menu" onClick={() => setOpen(false)} className="absolute inset-0 bg-ink/30" />
           <div
             id="app-menu"
             ref={drawer}
             role="dialog"
             aria-modal="true"
             aria-label="Menu"
-            className="absolute inset-y-0 left-0 flex w-[min(20rem,85vw)] flex-col bg-ink text-paper"
+            className="absolute inset-y-0 left-0 flex w-[min(20rem,85vw)] flex-col bg-surface shadow-xl"
           >
             <button
               type="button"
@@ -217,7 +216,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 setOpen(false);
                 menuButton.current?.focus();
               }}
-              className="absolute top-2.5 right-2.5 z-10 min-h-11 border-2 border-paper px-3 text-xs font-extrabold tracking-wider uppercase"
+              className="btn btn-ghost absolute top-2.5 right-2.5 z-10"
             >
               Close
             </button>

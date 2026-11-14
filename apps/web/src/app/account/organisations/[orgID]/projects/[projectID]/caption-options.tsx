@@ -180,7 +180,7 @@ export function CaptionPreview({
 
 function Swatch({ colors, label }: { colors: Colors; label: string }) {
   return (
-    <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center border-2 border-ink" style={{ background: colors.stroke }} title={label}>
+    <span aria-hidden="true" className="flex size-7 shrink-0 items-center justify-center border border-line" style={{ background: colors.stroke }} title={label}>
       <span className={`${inter.className} text-sm font-black`} style={{ color: colors.text }}>
         A
       </span>
@@ -202,13 +202,13 @@ function Segmented<T extends string>({
   const id = useId();
   return (
     <fieldset>
-      <legend className="text-xs font-extrabold uppercase text-ink-soft">{legend}</legend>
+      <legend className="text-xs font-semibold uppercase text-muted">{legend}</legend>
       {/* Three choices stack when the composer is very narrow. */}
       <div className={`mt-1 grid gap-1.5 ${options.length > 2 ? "grid-cols-1 @[14rem]:grid-cols-3" : "grid-cols-2"}`}>
         {options.map((o) => (
           <label
             key={o.value}
-            className={`flex min-h-11 min-w-0 cursor-pointer items-center justify-center border-2 border-ink px-1 text-center text-sm font-extrabold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${value === o.value ? "bg-ink text-white" : "bg-white"}`}
+            className={`flex min-h-11 min-w-0 cursor-pointer items-center justify-center border border-line px-1 text-center text-sm font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${value === o.value ? "bg-accent-soft text-accent-text" : "bg-white"}`}
           >
             <input type="radio" name={id} checked={value === o.value} onChange={() => onChange(o.value)} className="sr-only" />
             {o.label}
@@ -239,7 +239,7 @@ export function CaptionOptionsPicker({
   const bySpeaker = !!value.speaker_colors && Object.keys(value.speaker_colors).length > 0;
 
   return (
-    <div className="space-y-3 border-2 border-ink p-2.5">
+    <div className="space-y-3 border border-line p-2.5">
       <Segmented legend="Look" value={value.style} options={[{ value: "bold", label: "Outline" }, { value: "boxed", label: "Box" }]} onChange={(style) => set({ style })} />
       <Segmented
         legend="Timing"
@@ -251,15 +251,15 @@ export function CaptionOptionsPicker({
         onChange={(mode) => set({ mode })}
       />
       <fieldset>
-        <legend className="text-xs font-extrabold uppercase text-ink-soft">
+        <legend className="text-xs font-semibold uppercase text-muted">
           Colours <span className="font-semibold normal-case">· {preset >= 0 ? colorPresets[preset].name : "Custom"}</span>
         </legend>
         <div className="mt-1 grid grid-cols-3 gap-1.5 @[13rem]:grid-cols-5 @[32rem]:grid-cols-10">
           {colorPresets.map((p, i) => (
             <label
               key={p.name}
-              className={`flex min-h-11 min-w-11 cursor-pointer items-center justify-center border-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
-                preset === i ? "border-ink bg-ink" : "border-transparent"
+              className={`flex min-h-11 min-w-11 cursor-pointer items-center justify-center border has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                preset === i ? "rounded-lg border-accent bg-accent-soft" : "rounded-lg border-transparent"
               }`}
             >
               <input type="radio" name={`${id}-preset`} checked={preset === i} onChange={() => set({ colors: p.colors })} aria-label={p.name} className="sr-only" />
@@ -275,7 +275,7 @@ export function CaptionOptionsPicker({
               ["stroke", value.style === "boxed" ? "Box" : "Outline"],
             ] as const
           ).map(([k, label]) => (
-            <label key={k} className="flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 border-2 border-ink bg-white px-1.5 text-xs font-extrabold">
+            <label key={k} className="flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 border border-line bg-white px-1.5 text-xs font-semibold">
               <input
                 type="color"
                 value={colors[k].toLowerCase()}
@@ -297,13 +297,13 @@ export function CaptionOptionsPicker({
         ]}
         onChange={(position) => set({ position })}
       />
-      <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-extrabold">
+      <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
         <input type="checkbox" checked={value.uppercase} onChange={(e) => set({ uppercase: e.target.checked })} className="size-5 accent-[var(--ink)]" />
         ALL CAPS
       </label>
       {speakers.length > 1 && (
         <div>
-          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-extrabold">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
             <input
               type="checkbox"
               checked={bySpeaker}
@@ -331,10 +331,10 @@ export function CaptionOptionsPicker({
             <ul className="mt-1 space-y-1.5">
               {speakers.map((s) => (
                 <li key={s.label} className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 text-sm font-extrabold">
-                    {s.label} <span className="font-semibold text-ink-soft">· {voiceNames[s.voice]}</span>
+                  <span className="min-w-0 text-sm font-semibold">
+                    {s.label} <span className="font-semibold text-muted">· {voiceNames[s.voice]}</span>
                   </span>
-                  <label className="ml-auto flex min-h-11 cursor-pointer items-center gap-1.5 border-2 border-ink bg-white px-1.5 text-xs font-extrabold">
+                  <label className="ml-auto flex min-h-11 cursor-pointer items-center gap-1.5 border border-line bg-white px-1.5 text-xs font-semibold">
                     <input
                       type="color"
                       value={(value.speaker_colors?.[s.label] ?? colors.text).toLowerCase()}

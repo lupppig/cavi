@@ -54,7 +54,7 @@ export default function AccountPage() {
       {me.isError && !(me.error instanceof NotSignedIn) && (
         <StatePanel title="We couldn’t load your account">
           <p>{me.error.message}</p>
-          <button type="button" onClick={() => me.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
+          <button type="button" onClick={() => me.refetch()} className="btn btn-primary mt-6 min-h-12 px-6">
             Try again
           </button>
         </StatePanel>
@@ -68,8 +68,8 @@ function Loading() {
   return (
     <div aria-busy="true" className="space-y-6">
       <span className="sr-only">Loading your account…</span>
-      <div className="h-24 w-2/3 animate-pulse bg-paper-deep" />
-      <div className="h-48 animate-pulse bg-paper-deep" />
+      <div className="h-24 w-2/3 animate-pulse bg-surface-2" />
+      <div className="h-48 animate-pulse bg-surface-2" />
     </div>
   );
 }
@@ -92,20 +92,20 @@ function SignedIn({ me }: { me: Me }) {
         <h2 id="orgs-heading" className="text-2xl">
           Your organisations
         </h2>
-        <ul className="mt-4 border-b-2 border-ink">
+        <ul className="card mt-4 divide-y divide-line overflow-hidden">
           {me.organisations.map((o) => (
             <li key={o.id}>
               <Link
                 href={`/account/organisations/${o.id}`}
-                className="group flex min-h-16 items-center gap-4 border-t-2 border-ink px-2 py-3 transition-colors hover:bg-ink hover:text-paper sm:px-4"
+                className="group flex min-h-16 items-center gap-4 px-4 py-3 transition-colors hover:bg-surface-2 sm:px-5"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-lg font-extrabold">{o.name}</span>
-                  <span className="block truncate font-mono text-xs font-semibold uppercase opacity-80">
+                  <span className="block truncate text-lg font-semibold">{o.name}</span>
+                  <span className="block truncate text-sm text-muted capitalize">
                     {o.personal ? "Personal studio" : "Team"} · {o.role}
                   </span>
                 </span>
-                <span aria-hidden="true" className="text-xl font-black transition-transform group-hover:translate-x-1">
+                <span aria-hidden="true" className="text-lg text-muted transition-transform group-hover:translate-x-1">
                   →
                 </span>
               </Link>
@@ -138,7 +138,7 @@ function PendingInvitations() {
 
   if (!invitations.data?.length) return null;
   return (
-    <section aria-labelledby="inv-heading" className="border-2 border-ink bg-white p-5 sm:p-7">
+    <section aria-labelledby="inv-heading" className="card p-5 sm:p-7">
       <h2 id="inv-heading" className="text-2xl">
         You’ve been invited
       </h2>
@@ -147,10 +147,10 @@ function PendingInvitations() {
         {invitations.data.map((inv) => {
           const busy = respond.isPending && respond.variables?.inv.id === inv.id;
           return (
-            <li key={inv.id} className="flex flex-col gap-3 border-2 border-ink bg-white p-4 sm:flex-row sm:items-center">
+            <li key={inv.id} className="flex flex-col gap-3 border border-line bg-white p-4 sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 font-semibold">
-                <span className="font-extrabold">{inv.invited_by_name || "Someone"}</span> invited you to{" "}
-                <span className="font-extrabold">{inv.organisation_name}</span> as{" "}
+                <span className="font-semibold">{inv.invited_by_name || "Someone"}</span> invited you to{" "}
+                <span className="font-semibold">{inv.organisation_name}</span> as{" "}
                 <span className="capitalize">{inv.role}</span>.
               </p>
               <div className="flex gap-2">
@@ -158,7 +158,7 @@ function PendingInvitations() {
                   type="button"
                   disabled={busy}
                   onClick={() => respond.mutate({ inv, accept: true })}
-                  className="btn-pop min-h-11 flex-1 bg-ink px-4 font-extrabold text-white disabled:opacity-60 sm:flex-none"
+                  className="btn btn-primary min-h-11 flex-1 px-4 disabled:opacity-60 sm:flex-none"
                 >
                   Join
                 </button>
@@ -166,7 +166,7 @@ function PendingInvitations() {
                   type="button"
                   disabled={busy}
                   onClick={() => respond.mutate({ inv, accept: false })}
-                  className="btn-pop min-h-11 flex-1 bg-white px-4 font-extrabold disabled:opacity-60 sm:flex-none"
+                  className="btn btn-secondary min-h-11 flex-1 px-4 disabled:opacity-60 sm:flex-none"
                 >
                   Decline
                 </button>
@@ -202,11 +202,11 @@ function CreateTeam() {
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className="border-2 border-ink bg-white p-5 sm:p-7">
+    <section aria-labelledby={`${id}-h`} className="card p-5 sm:p-7">
       <h2 id={`${id}-h`} className="text-2xl">
         Start a team
       </h2>
-      <p className="mt-1 font-medium text-ink-soft">
+      <p className="mt-1 font-medium text-muted">
         Teams let you invite collaborators and clients. Your personal studio stays just yours.
       </p>
       <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -221,12 +221,12 @@ function CreateTeam() {
           required
           placeholder="e.g. Night Shift Studio"
           disabled={create.isPending}
-          className="min-h-12 w-full min-w-0 flex-1 border-2 border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-ink/30 focus:outline-none"
+          className="field min-h-12 flex-1"
         />
         <button
           type="submit"
           disabled={create.isPending || !name.trim()}
-          className="btn-pop min-h-12 bg-ink px-6 font-extrabold whitespace-nowrap text-white disabled:opacity-60"
+          className="btn btn-primary min-h-12 px-6 whitespace-nowrap disabled:opacity-60"
         >
           {create.isPending ? "Creating…" : "Create team"}
         </button>

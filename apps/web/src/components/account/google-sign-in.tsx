@@ -17,7 +17,7 @@ export function GoogleSignIn({ className = "" }: { className?: string }) {
   return (
     <a
       href={signInHref()}
-      className={`btn-pop inline-flex min-h-12 items-center justify-center gap-3 bg-white px-4 font-extrabold whitespace-nowrap sm:px-6 ${className}`}
+      className={`btn btn-secondary inline-flex min-h-12 items-center justify-center gap-3 px-4 whitespace-nowrap sm:px-6 ${className}`}
     >
       <GoogleG />
       Continue with Google

@@ -116,11 +116,11 @@ export function HighlightsPanel({
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className="mt-3 border-2 border-ink bg-white">
+    <section aria-labelledby={`${id}-h`} className="mt-3 card">
       <div className="flex min-h-11 items-center gap-2 px-3 pt-2">
-        <h3 id={`${id}-h`} className="font-extrabold">Highlights</h3>
+        <h3 id={`${id}-h`} className="font-semibold">Highlights</h3>
         {h?.status === "ready" && (
-          <span className="text-sm font-semibold text-ink-soft">
+          <span className="text-sm font-semibold text-muted">
             · {h.clips.length} {h.clips.length === 1 ? "clip" : "clips"}
           </span>
         )}
@@ -130,13 +130,13 @@ export function HighlightsPanel({
 
       {busy && (
         <p className="flex items-center gap-2 px-3 pb-3 text-sm font-semibold" role="status">
-          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
+          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
           Reading the transcript with {h.model_label}…
         </p>
       )}
 
       {h?.status === "failed" && (
-        <p className="mx-3 mb-3 border-2 border-ink bg-paper-deep p-2 text-sm font-semibold" role="status">
+        <p className="mx-3 mb-3 border border-line bg-surface-2 p-2 text-sm font-semibold" role="status">
           {h.error ?? "Finding highlights failed."}
         </p>
       )}
@@ -146,7 +146,7 @@ export function HighlightsPanel({
           {composingClip && url ? (
             // The composer replaces the list: it needs the panel's full width.
             <div className="px-3 pb-3">
-              <p className="mb-2 text-sm font-semibold text-ink-soft">
+              <p className="mb-2 text-sm font-semibold text-muted">
                 Making a clip from highlight {composing! + 1}: “{composingClip.title}”
               </p>
               <ClipComposer
@@ -160,23 +160,23 @@ export function HighlightsPanel({
               />
             </div>
           ) : h.clips.length === 0 ? (
-            <p className="px-3 pb-2 text-sm font-semibold text-ink-soft">
+            <p className="px-3 pb-2 text-sm font-semibold text-muted">
               No moments fit this brief. Try a different objective or clip length.
             </p>
           ) : (
             <ol className="max-h-[28rem] space-y-2 overflow-y-auto px-3 pb-2">
               {h.clips.map((c, i) => (
-                <li key={`${c.start_ms}-${i}`} className="border-2 border-ink/15 bg-paper p-2.5">
+                <li key={`${c.start_ms}-${i}`} className="rounded-xl border border-line bg-surface-2 p-2.5">
                   <div className="flex items-start gap-2.5">
                     <span
                       aria-label={`Rank ${i + 1}`}
-                      className="grid size-7 shrink-0 place-items-center rounded-full border-2 border-ink bg-ink text-xs font-extrabold text-white"
+                      className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-semibold text-accent-text"
                     >
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="font-extrabold leading-snug break-words">{c.title}</p>
-                      <p className="mt-0.5 font-mono text-xs font-bold text-ink-soft">
+                      <p className="font-semibold leading-snug break-words">{c.title}</p>
+                      <p className="mt-0.5 font-mono text-xs font-bold text-muted">
                         {stamp(c.start_ms)}–{stamp(c.end_ms)} · {seconds(c.end_ms - c.start_ms)}
                       </p>
                       <p className="mt-1 text-sm font-medium break-words">{c.reason}</p>
@@ -184,7 +184,7 @@ export function HighlightsPanel({
                         <button
                           type="button"
                           onClick={() => onPlay(c.start_ms, c.end_ms)}
-                          className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
+                          className="btn btn-secondary min-h-11 px-3 text-sm"
                           aria-label={`Play clip ${i + 1}: ${c.title}`}
                         >
                           ▶ Play clip
@@ -193,7 +193,7 @@ export function HighlightsPanel({
                           <button
                             type="button"
                             onClick={() => setComposing(i)}
-                            className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white"
+                            className="btn btn-primary min-h-11 px-3 text-sm"
                             aria-label={`Make clip ${i + 1}: ${c.title}`}
                           >
                             Make clip
@@ -206,13 +206,13 @@ export function HighlightsPanel({
               ))}
             </ol>
           )}
-          <div className={`flex flex-wrap items-center gap-2 border-t-2 border-ink/10 px-3 py-2 ${composingClip ? "hidden" : ""}`}>
+          <div className={`flex flex-wrap items-center gap-2 border-t border-line px-3 py-2 ${composingClip ? "hidden" : ""}`}>
             {canEdit && transcriptReady && (
-              <button type="button" onClick={edit} className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold">
+              <button type="button" onClick={edit} className="btn btn-secondary min-h-11 px-3 text-sm">
                 Find again
               </button>
             )}
-            <span className="min-w-0 text-xs font-semibold break-words text-ink-soft">
+            <span className="min-w-0 text-xs font-semibold break-words text-muted">
               {h.objective ? <>Asked for “{h.objective}” · </> : null}
               {lengths.find((l) => l.min === h.min_seconds && l.max === h.max_seconds)?.label ?? `${h.min_seconds}–${h.max_seconds}s`}
               {" "}· Suggested by {h.model_label}. Check each clip before you use it.
@@ -224,14 +224,14 @@ export function HighlightsPanel({
       {showForm && (
         <form onSubmit={submit} className="space-y-3 px-3 pb-3">
           {h === null && (
-            <p className="text-sm font-medium text-ink-soft">
+            <p className="text-sm font-medium text-muted">
               Find moments in the transcript that work as clips on their own. Clips start and end on whole lines of speech.
             </p>
           )}
           {request.isError && <Banner>{request.error.message}</Banner>}
           <div>
-            <label htmlFor={`${id}-objective`} className="text-sm font-extrabold">
-              What are you looking for? <span className="font-semibold text-ink-soft">(optional)</span>
+            <label htmlFor={`${id}-objective`} className="text-sm font-semibold">
+              What are you looking for? <span className="font-semibold text-muted">(optional)</span>
             </label>
             <textarea
               id={`${id}-objective`}
@@ -240,17 +240,17 @@ export function HighlightsPanel({
               maxLength={500}
               rows={2}
               placeholder="e.g. The funniest exchange between the hosts, for TikTok"
-              className="mt-1 block w-full border-2 border-ink bg-paper px-3 py-2 text-base font-medium"
+              className="mt-1 block w-full border border-line bg-surface px-3 py-2 text-base font-medium"
             />
           </div>
           <fieldset>
-            <legend className="text-sm font-extrabold">Clip length</legend>
+            <legend className="text-sm font-semibold">Clip length</legend>
             <div className="mt-1 grid grid-cols-2 gap-2">
               {lengths.map((l, i) => (
                 <label
                   key={l.label}
-                  className={`flex min-h-11 min-w-0 cursor-pointer flex-col justify-center border-2 border-ink px-2.5 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
-                    length === i ? "bg-ink text-white" : "bg-white"
+                  className={`flex min-h-11 min-w-0 cursor-pointer flex-col justify-center border border-line px-2.5 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                    length === i ? "bg-accent-soft text-accent-text" : "bg-white"
                   }`}
                 >
                   <input
@@ -260,8 +260,8 @@ export function HighlightsPanel({
                     onChange={() => setLength(i)}
                     className="sr-only"
                   />
-                  <span className="text-sm font-extrabold">{l.label}</span>
-                  <span className="text-xs font-semibold text-ink-soft">{l.hint}</span>
+                  <span className="text-sm font-semibold">{l.label}</span>
+                  <span className="text-xs font-semibold text-muted">{l.hint}</span>
                 </label>
               ))}
             </div>
@@ -270,7 +270,7 @@ export function HighlightsPanel({
             <button
               type="submit"
               disabled={request.isPending}
-              className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
+              className="btn btn-primary min-h-11 px-3 text-sm disabled:opacity-60"
             >
               {request.isPending ? "Starting…" : h?.status === "failed" ? "Try again" : "Find highlights"}
             </button>
@@ -278,7 +278,7 @@ export function HighlightsPanel({
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
+                className="btn btn-secondary min-h-11 px-3 text-sm"
               >
                 Cancel
               </button>
@@ -288,7 +288,7 @@ export function HighlightsPanel({
       )}
 
       {h && !busy && canEdit && !transcriptReady && (
-        <p className="px-3 pb-3 text-xs font-semibold text-ink-soft">Finish the transcript to find highlights again.</p>
+        <p className="px-3 pb-3 text-xs font-semibold text-muted">Finish the transcript to find highlights again.</p>
       )}
     </section>
   );

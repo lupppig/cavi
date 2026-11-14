@@ -20,7 +20,7 @@ export default function ProfilePage() {
     onSuccess: (url) => window.location.assign(url),
   });
 
-  if (me.isPending) return <div aria-busy="true" className="mx-auto h-64 max-w-5xl animate-pulse bg-paper-deep" />;
+  if (me.isPending) return <div aria-busy="true" className="mx-auto h-64 max-w-5xl animate-pulse bg-surface-2" />;
   if (me.isError && me.error instanceof NotSignedIn) {
     return (
       <StatePanel title="Sign in to see your profile">
@@ -35,23 +35,23 @@ export default function ProfilePage() {
     <div className="mx-auto max-w-5xl space-y-10">
       <PageHeader crumbs={[{ label: "Home", href: "/account" }]} title="Profile" />
 
-      <section aria-labelledby="you-h" className="grid gap-6 border-2 border-ink bg-white p-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:p-8">
+      <section aria-labelledby="you-h" className="grid gap-6 card p-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:p-8">
         <span className="text-3xl">
-          <Avatar user={user} size="size-24" onDark={false} />
+          <Avatar user={user} size="size-24" />
         </span>
         <div className="min-w-0">
           <h2 id="you-h" className="text-3xl break-words">
             {displayName(user)}
           </h2>
-          <p className="mt-1 font-semibold break-all text-ink-soft">{user.email}</p>
+          <p className="mt-1 font-semibold break-all text-muted">{user.email}</p>
         </div>
-        <dl className="grid gap-4 border-t-2 border-ink pt-5 sm:col-span-2 sm:grid-cols-2">
+        <dl className="grid gap-4 border-t border-line pt-5 sm:col-span-2 sm:grid-cols-2">
           <div>
-            <dt className="font-mono text-xs font-semibold uppercase text-ink-soft">Sign-in</dt>
-            <dd className="mt-1 font-extrabold">Google</dd>
+            <dt className="label-caps">Sign-in</dt>
+            <dd className="mt-1 font-semibold">Google</dd>
           </div>
           <div>
-            <dt className="font-mono text-xs font-semibold uppercase text-ink-soft">Name, email and photo</dt>
+            <dt className="label-caps">Name, email and photo</dt>
             <dd className="mt-1 font-medium">
               Come from your Google account and refresh each time you sign in. Change them in Google.
             </dd>
@@ -63,9 +63,9 @@ export default function ProfilePage() {
         <h2 id="orgs-h" className="text-2xl">
           Organisations
         </h2>
-        <div className="mt-4 overflow-x-auto border-2 border-ink bg-white">
+        <div className="mt-4 overflow-x-auto card">
           <table className="w-full min-w-[28rem] text-left">
-            <thead className="bg-ink font-mono text-xs uppercase text-paper">
+            <thead className="border-b border-line bg-surface-2 text-xs font-semibold uppercase text-muted">
               <tr>
                 <th scope="col" className="px-4 py-3 font-semibold">Organisation</th>
                 <th scope="col" className="px-4 py-3 font-semibold">Your role</th>
@@ -74,15 +74,15 @@ export default function ProfilePage() {
             </thead>
             <tbody>
               {organisations.map((o) => (
-                <tr key={o.id} className="border-t-2 border-ink">
+                <tr key={o.id} className="border-t border-line">
                   <td className="px-4 py-3">
-                    <Link href={`/account/organisations/${o.id}`} className="inline-flex min-h-11 items-center font-extrabold underline-offset-4 hover:underline">
+                    <Link href={`/account/organisations/${o.id}`} className="inline-flex min-h-11 items-center font-semibold underline-offset-4 hover:underline">
                       {o.name}
                     </Link>
-                    {o.personal && <span className="ml-2 font-mono text-xs font-semibold uppercase text-ink-soft">Personal</span>}
+                    {o.personal && <span className="ml-2 label-caps">Personal</span>}
                   </td>
                   <td className="px-4 py-3 font-semibold capitalize">{o.role}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-ink-soft">{roles.find((r) => r.value === o.role)?.hint}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-muted">{roles.find((r) => r.value === o.role)?.hint}</td>
                 </tr>
               ))}
             </tbody>
@@ -90,16 +90,16 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      <section aria-labelledby="session-h" className="border-2 border-ink bg-white p-5 sm:p-8">
+      <section aria-labelledby="session-h" className="card p-5 sm:p-8">
         <h2 id="session-h" className="text-2xl">
           Sign out
         </h2>
-        <p className="mt-1 font-medium text-ink-soft">Signs you out of CAVI on this device.</p>
+        <p className="mt-1 font-medium text-muted">Signs you out of CAVI on this device.</p>
         <button
           type="button"
           onClick={() => signOut.mutate()}
           disabled={signOut.isPending}
-          className="btn-pop mt-4 min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60"
+          className="btn btn-primary mt-4 min-h-12 px-6 disabled:opacity-60"
         >
           {signOut.isPending ? "Signing out…" : "Sign out"}
         </button>

@@ -9,7 +9,7 @@ import { can, client, raise, type Organisation, type Project } from "@/lib/queri
 import { projectHref } from "@/lib/projects";
 
 const field =
-  "w-full min-w-0 border-2 border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-ink/30 focus:outline-none disabled:opacity-60";
+  "field";
 
 export function Projects({ org }: { org: Organisation }) {
   const id = useId();
@@ -35,14 +35,14 @@ export function Projects({ org }: { org: Organisation }) {
   return (
     <section aria-labelledby={`${id}-h`} className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <h2 id={`${id}-h`} className="mr-auto text-3xl font-extrabold tracking-tight">
+        <h2 id={`${id}-h`} className="mr-auto text-3xl font-semibold tracking-tight">
           {isClient ? "Shared with you" : "Projects"}
         </h2>
         {canCreate && !creating && (
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="btn-pop min-h-12 bg-ink px-5 font-extrabold text-white"
+            className="btn btn-primary min-h-12 px-5"
           >
             + New project
           </button>
@@ -54,14 +54,14 @@ export function Projects({ org }: { org: Organisation }) {
       {projects.isPending && (
         <div aria-busy="true" className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <span className="sr-only">Loading projects…</span>
-          <div className="h-40 animate-pulse bg-paper-deep" />
-          <div className="h-40 animate-pulse bg-paper-deep" />
+          <div className="h-40 animate-pulse bg-surface-2" />
+          <div className="h-40 animate-pulse bg-surface-2" />
         </div>
       )}
       {projects.isError && (
         <div className="space-y-3">
           <Banner>{projects.error.message}</Banner>
-          <button type="button" onClick={() => projects.refetch()} className="btn-pop min-h-11 bg-white px-4 font-extrabold">
+          <button type="button" onClick={() => projects.refetch()} className="btn btn-secondary min-h-11 px-4">
             Try again
           </button>
         </div>
@@ -83,7 +83,7 @@ export function Projects({ org }: { org: Organisation }) {
           type="button"
           onClick={() => projects.fetchNextPage()}
           disabled={projects.isFetchingNextPage}
-          className="btn-pop min-h-12 w-full bg-white px-6 font-extrabold disabled:opacity-60 sm:w-auto"
+          className="btn btn-secondary min-h-12 w-full px-6 disabled:opacity-60 sm:w-auto"
         >
           {projects.isFetchingNextPage ? "Loading…" : "Show more projects"}
         </button>
@@ -97,16 +97,16 @@ function ProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={projectHref(project)}
-      className={`tilt-hover sticker-lg block h-full p-2 focus-visible:outline-offset-4 bg-ink`}
+      className="card block h-full transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-md"
     >
-      <span className="flex h-full flex-col border-2 border-ink bg-white p-5">
-        <span className="text-xl font-extrabold tracking-tight break-words">{project.name}</span>
+      <span className="flex h-full flex-col p-5">
+        <span className="text-xl font-semibold tracking-tight break-words">{project.name}</span>
         {project.description ? (
-          <span className="mt-2 line-clamp-2 font-medium break-words text-ink-soft">{project.description}</span>
+          <span className="mt-2 line-clamp-2 font-medium break-words text-muted">{project.description}</span>
         ) : (
-          <span className="mt-2 font-medium text-ink-soft italic">No description</span>
+          <span className="mt-2 font-medium text-muted italic">No description</span>
         )}
-        <span className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-4 text-sm font-semibold text-ink-soft">
+        <span className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-4 text-sm font-semibold text-muted">
           <span>{project.workspace.name}</span>
           {project.created_by && <span>· by {project.created_by.name}</span>}
           <span>· {new Date(project.created_at).toLocaleDateString()}</span>
@@ -119,13 +119,13 @@ function ProjectCard({ project }: { project: Project }) {
 function EmptyProjects({ isClient, canCreate, onCreate }: { isClient: boolean; canCreate: boolean; onCreate: () => void }) {
   if (isClient) {
     return (
-      <p className="border-2 border-dashed border-ink bg-white/60 p-5 font-semibold">
+      <p className="border border-dashed border-line-strong bg-surface-2 p-5 font-semibold">
         Nothing has been shared with you yet. When the team shares a project with you, it’ll show up here.
       </p>
     );
   }
   return (
-    <div className="flex flex-col items-start gap-4 border-2 border-dashed border-ink bg-white/60 p-6">
+    <div className="flex flex-col items-start gap-4 border border-dashed border-line-strong bg-surface-2 p-6">
       <p className="text-lg font-semibold">
         No projects yet.{" "}
         {canCreate
@@ -133,7 +133,7 @@ function EmptyProjects({ isClient, canCreate, onCreate }: { isClient: boolean; c
           : "When someone starts one, it’ll show up here."}
       </p>
       {canCreate && (
-        <button type="button" onClick={onCreate} className="btn-pop min-h-12 bg-ink px-5 font-extrabold text-white">
+        <button type="button" onClick={onCreate} className="btn btn-primary min-h-12 px-5">
           Start your first project
         </button>
       )}
@@ -170,9 +170,9 @@ function CreateProject({ org, onCancel }: { org: Organisation; onCancel: () => v
   }
 
   return (
-    <form onSubmit={onSubmit} aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-5 sm:p-7">
-      <h3 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">New project</h3>
-      <label htmlFor={`${id}-name`} className="mt-4 block font-extrabold">Name</label>
+    <form onSubmit={onSubmit} aria-labelledby={`${id}-h`} className="card bg-white p-5 sm:p-7">
+      <h3 id={`${id}-h`} className="text-2xl font-semibold tracking-tight">New project</h3>
+      <label htmlFor={`${id}-name`} className="mt-4 block font-semibold">Name</label>
       <input
         id={`${id}-name`}
         value={name}
@@ -184,8 +184,8 @@ function CreateProject({ org, onCancel }: { org: Organisation; onCancel: () => v
         disabled={create.isPending}
         className={`${field} mt-2 min-h-12`}
       />
-      <label htmlFor={`${id}-desc`} className="mt-4 block font-extrabold">
-        Description <span className="font-semibold text-ink-soft">(optional)</span>
+      <label htmlFor={`${id}-desc`} className="mt-4 block font-semibold">
+        Description <span className="font-semibold text-muted">(optional)</span>
       </label>
       <textarea
         id={`${id}-desc`}
@@ -202,11 +202,11 @@ function CreateProject({ org, onCancel }: { org: Organisation; onCancel: () => v
         <button
           type="submit"
           disabled={create.isPending || !name.trim()}
-          className="btn-pop min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60"
+          className="btn btn-primary min-h-12 px-6 disabled:opacity-60"
         >
           {create.isPending ? "Creating…" : "Create project"}
         </button>
-        <button type="button" onClick={onCancel} disabled={create.isPending} className="btn-pop min-h-12 bg-white px-6 font-extrabold">
+        <button type="button" onClick={onCancel} disabled={create.isPending} className="btn btn-secondary min-h-12 px-6">
           Cancel
         </button>
       </div>

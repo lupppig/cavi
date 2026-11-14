@@ -24,7 +24,7 @@ import {
 } from "@/lib/queries";
 
 const field =
-  "w-full min-w-0 border-2 border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-ink/30 focus:outline-none disabled:opacity-60";
+  "field";
 
 function useProject(orgID: string, projectID: string) {
   return useQuery({
@@ -49,8 +49,8 @@ export function ProjectScreen() {
     return (
       <div aria-busy="true" className="space-y-6">
         <span className="sr-only">Loading…</span>
-        <div className="h-24 w-2/3 animate-pulse bg-paper-deep" />
-        <div className="h-96 animate-pulse bg-paper-deep" />
+        <div className="h-24 w-2/3 animate-pulse bg-surface-2" />
+        <div className="h-96 animate-pulse bg-surface-2" />
       </div>
     );
   }
@@ -68,7 +68,7 @@ export function ProjectScreen() {
     return (
       <StatePanel title="Something went wrong">
         <p>{project.error.message}</p>
-        <button type="button" onClick={() => project.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
+        <button type="button" onClick={() => project.refetch()} className="btn btn-primary mt-6 min-h-12 px-6">
           Try again
         </button>
       </StatePanel>
@@ -93,7 +93,7 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
           crumbs={[...crumbs, { label: project.name, href: base }]}
           title="Project settings"
           actions={
-            <Link href={base} className="btn-pop flex min-h-11 items-center bg-white px-4 text-sm font-extrabold">
+            <Link href={base} className="btn btn-secondary flex min-h-11 items-center px-4 text-sm">
               ← Back to studio
             </Link>
           }
@@ -112,7 +112,7 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
         title={project.name}
         subtitle={project.description || undefined}
         actions={
-          <Link href={`${base}?view=settings`} className="btn-pop flex min-h-11 items-center bg-white px-4 text-sm font-extrabold">
+          <Link href={`${base}?view=settings`} className="btn btn-secondary flex min-h-11 items-center px-4 text-sm">
             Project settings
           </Link>
         }
@@ -163,11 +163,11 @@ function Details({ project }: { project: Project }) {
   }
 
   return (
-    <section className="sticker-lg bg-ink p-2">
-      <div className="border-2 border-ink bg-white p-5 sm:p-7">
+    <section className="card p-5 sm:p-7">
+      <div>
         {editing ? (
           <form onSubmit={onSubmit}>
-            <label htmlFor={`${id}-name`} className="block font-extrabold">Name</label>
+            <label htmlFor={`${id}-name`} className="block font-semibold">Name</label>
             <input
               id={`${id}-name`}
               value={name}
@@ -178,7 +178,7 @@ function Details({ project }: { project: Project }) {
               disabled={save.isPending}
               className={`${field} mt-2 min-h-12`}
             />
-            <label htmlFor={`${id}-desc`} className="mt-4 block font-extrabold">Description</label>
+            <label htmlFor={`${id}-desc`} className="mt-4 block font-semibold">Description</label>
             <textarea
               id={`${id}-desc`}
               value={description}
@@ -190,10 +190,10 @@ function Details({ project }: { project: Project }) {
             />
             {save.isError && <div className="mt-4"><Banner>{save.error.message}</Banner></div>}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <button type="submit" disabled={save.isPending || !name.trim()} className="btn-pop min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60">
+              <button type="submit" disabled={save.isPending || !name.trim()} className="btn btn-primary min-h-12 px-6 disabled:opacity-60">
                 {save.isPending ? "Saving…" : "Save"}
               </button>
-              <button type="button" onClick={cancel} disabled={save.isPending} className="btn-pop min-h-12 bg-white px-6 font-extrabold">
+              <button type="button" onClick={cancel} disabled={save.isPending} className="btn btn-secondary min-h-12 px-6">
                 Cancel
               </button>
             </div>
@@ -201,7 +201,7 @@ function Details({ project }: { project: Project }) {
         ) : (
           <>
             <div className="flex flex-wrap items-start gap-3">
-              <h1 className="mr-auto min-w-0 text-4xl leading-tight font-extrabold tracking-tight break-words sm:text-5xl">
+              <h1 className="mr-auto min-w-0 text-4xl leading-tight font-semibold tracking-tight break-words sm:text-5xl">
                 {project.name}
               </h1>
               {can(project, "project.update") && (
@@ -212,7 +212,7 @@ function Details({ project }: { project: Project }) {
                     setDescription(project.description);
                     setEditing(true);
                   }}
-                  className="btn-pop min-h-11 bg-white px-4 text-sm font-extrabold"
+                  className="btn btn-secondary min-h-11 px-4 text-sm"
                 >
                   Edit
                 </button>
@@ -221,14 +221,14 @@ function Details({ project }: { project: Project }) {
             {project.description ? (
               <p className="mt-3 max-w-2xl text-lg font-medium break-words whitespace-pre-line">{project.description}</p>
             ) : (
-              <p className="mt-3 font-medium text-ink-soft italic">No description yet.</p>
+              <p className="mt-3 font-medium text-muted italic">No description yet.</p>
             )}
-            <div className="mt-5 flex flex-wrap gap-2 text-sm font-extrabold">
-              <span className="border-2 border-ink bg-paper-deep px-3 py-1">{project.workspace.name}</span>
+            <div className="mt-5 flex flex-wrap gap-2 text-sm font-semibold">
+              <span className="border border-line bg-surface-2 px-3 py-1">{project.workspace.name}</span>
               {project.created_by && (
-                <span className="border-2 border-ink bg-paper px-3 py-1">Started by {project.created_by.name}</span>
+                <span className="border border-line bg-surface px-3 py-1">Started by {project.created_by.name}</span>
               )}
-              <span className="border-2 border-ink bg-paper px-3 py-1">
+              <span className="border border-line bg-surface px-3 py-1">
                 {new Date(project.created_at).toLocaleDateString()}
               </span>
             </div>
@@ -285,14 +285,14 @@ function ClientAccess({ project }: { project: Project }) {
   const error = grant.error ?? revoke.error;
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-5 sm:p-7">
-      <h2 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">Client access</h2>
-      <p className="mt-1 font-medium text-ink-soft">
+    <section aria-labelledby={`${id}-h`} className="card bg-white p-5 sm:p-7">
+      <h2 id={`${id}-h`} className="text-2xl font-semibold tracking-tight">Client access</h2>
+      <p className="mt-1 font-medium text-muted">
         Your team sees every project. Clients only see the projects you share with them here.
       </p>
       {error && <div className="mt-4"><Banner>{error.message}</Banner></div>}
 
-      {(access.isPending || members.isPending) && <div className="mt-4 h-14 animate-pulse bg-paper-deep" />}
+      {(access.isPending || members.isPending) && <div className="mt-4 h-14 animate-pulse bg-surface-2" />}
       {access.isError && <div className="mt-4"><Banner>{access.error.message}</Banner></div>}
       {members.isError && <div className="mt-4"><Banner>{members.error.message}</Banner></div>}
 
@@ -321,15 +321,15 @@ function ClientAccess({ project }: { project: Project }) {
                   </option>
                 ))}
               </select>
-              <button type="submit" disabled={!selected || grant.isPending} className="btn-pop min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60">
+              <button type="submit" disabled={!selected || grant.isPending} className="btn btn-primary min-h-12 px-6 disabled:opacity-60">
                 {grant.isPending ? "Sharing…" : "Share"}
               </button>
             </form>
           ) : (
             access.data.length === 0 && (
-              <p className="mt-4 border-2 border-ink bg-paper p-4 font-semibold">
+              <p className="mt-4 rounded-xl border border-line bg-surface-2 p-4 font-semibold">
                 There are no clients in this team yet. Invite someone with the Client role from the{" "}
-                <Link href={`/account/organisations/${orgID}`} className="font-extrabold underline decoration-2 underline-offset-4">
+                <Link href={`/account/organisations/${orgID}`} className="font-semibold underline decoration-2 underline-offset-4">
                   team page
                 </Link>
                 , then share this project with them.
@@ -338,28 +338,28 @@ function ClientAccess({ project }: { project: Project }) {
           )}
 
           {access.data.length > 0 && (
-            <ul className="mt-4 divide-y-2 divide-ink/10">
+            <ul className="mt-4 divide-y-2 divide-line">
               {access.data.map((a) => (
                 <li key={a.user_id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     {a.avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={a.avatar_url} alt="" referrerPolicy="no-referrer" className="size-11 shrink-0 rounded-full border-2 border-ink object-cover" />
+                      <img src={a.avatar_url} alt="" referrerPolicy="no-referrer" className="size-11 shrink-0 rounded-full border border-line object-cover" />
                     ) : (
-                      <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full border-2 border-ink bg-ink text-sm font-extrabold text-white">
+                      <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent-text">
                         {initials(a)}
                       </span>
                     )}
                     <div className="min-w-0">
-                      <p className="truncate font-extrabold">{displayName(a)}</p>
-                      <p className="truncate text-sm font-medium text-ink-soft">{a.email}</p>
+                      <p className="truncate font-semibold">{displayName(a)}</p>
+                      <p className="truncate text-sm font-medium text-muted">{a.email}</p>
                     </div>
                   </div>
                   <button
                     type="button"
                     disabled={revoke.isPending && revoke.variables === a.user_id}
                     onClick={() => revoke.mutate(a.user_id)}
-                    className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold disabled:opacity-60"
+                    className="btn btn-secondary min-h-11 px-3 text-sm disabled:opacity-60"
                   >
                     Stop sharing
                   </button>
@@ -391,9 +391,9 @@ function DeleteProject({ project }: { project: Project }) {
   });
 
   return (
-    <section className="border-2 border-ink bg-white/60 p-5 sm:p-7">
-      <h2 className="text-xl font-extrabold">Delete project</h2>
-      <p className="mt-1 font-medium text-ink-soft">This removes the project for everyone. It can’t be undone.</p>
+    <section className="border border-line bg-surface-2 p-5 sm:p-7">
+      <h2 className="text-xl font-semibold">Delete project</h2>
+      <p className="mt-1 font-medium text-muted">This removes the project for everyone. It can’t be undone.</p>
       {remove.isError && <div className="mt-4"><Banner>{remove.error.message}</Banner></div>}
       <button
         type="button"
@@ -401,7 +401,7 @@ function DeleteProject({ project }: { project: Project }) {
         onClick={() => {
           if (window.confirm(`Delete “${project.name}”? This can’t be undone.`)) remove.mutate();
         }}
-        className="btn-pop mt-4 min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60"
+        className="btn btn-primary mt-4 min-h-12 px-6 disabled:opacity-60"
       >
         {remove.isPending ? "Deleting…" : "Delete project"}
       </button>

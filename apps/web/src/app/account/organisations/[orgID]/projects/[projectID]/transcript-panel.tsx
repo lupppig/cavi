@@ -82,7 +82,7 @@ export function TranscriptPanel({
         type="button"
         onClick={start}
         disabled={request.isPending}
-        className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
+        className="btn btn-primary min-h-11 px-3 text-sm disabled:opacity-60"
       >
         {request.isPending ? "Starting…" : label}
       </button>
@@ -96,27 +96,27 @@ export function TranscriptPanel({
       {t === null && startButton("Transcribe")}
       {busy && (
         <p className="flex items-center gap-2 text-sm font-semibold" role="status">
-          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
+          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
           Transcribing with {t.model_label}…
         </p>
       )}
       {t?.status === "failed" && (
-        <div className="border-2 border-ink bg-paper-deep p-3 text-sm font-semibold" role="status">
+        <div className="border border-line bg-surface-2 p-3 text-sm font-semibold" role="status">
           <p>{t.error ?? "Transcription failed."}</p>
           <div className="mt-2">{startButton("Try again")}</div>
         </div>
       )}
       {t?.status === "ready" && (
-        <div className="border-2 border-ink bg-white">
-          <div className="flex min-h-11 items-center gap-2 px-3 font-extrabold">
+        <div className="card">
+          <div className="flex min-h-11 items-center gap-2 px-3 font-semibold">
             Transcript
-            <span className="text-sm font-semibold text-ink-soft">
+            <span className="text-sm font-semibold text-muted">
               · {t.segments.length} {t.segments.length === 1 ? "line" : "lines"}
               {t.language ? ` · ${t.language}` : ""}
             </span>
           </div>
           {t.segments.length === 0 ? (
-            <p className="px-3 pb-3 text-sm font-semibold text-ink-soft">No speech was found.</p>
+            <p className="px-3 pb-3 text-sm font-semibold text-muted">No speech was found.</p>
           ) : (
             <>
               {t.speakers.length > 0 && <Speakers transcript={t} project={project} asset={asset} canEdit={canTranscribe} />}
@@ -126,16 +126,16 @@ export function TranscriptPanel({
                     <button
                       type="button"
                       onClick={() => onSeek(s.start_ms)}
-                      className="mr-2 inline-flex min-h-11 min-w-11 items-center justify-center bg-paper px-1.5 font-mono text-xs font-bold underline-offset-2 hover:underline"
+                      className="mr-2 inline-flex min-h-11 min-w-11 items-center justify-center bg-surface px-1.5 font-mono text-xs font-bold underline-offset-2 hover:underline"
                       aria-label={`Play from ${stamp(s.start_ms)}`}
                     >
                       {stamp(s.start_ms)}
                     </button>
-                    <span className="font-extrabold">{s.speaker}:</span> <span className="font-medium">{s.text}</span>
+                    <span className="font-semibold">{s.speaker}:</span> <span className="font-medium">{s.text}</span>
                   </li>
                 ))}
               </ol>
-              <div className="flex flex-wrap items-center gap-2 border-t-2 border-ink/10 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2 border-t border-line px-3 py-2">
                 <button
                   type="button"
                   onClick={async () => {
@@ -147,12 +147,12 @@ export function TranscriptPanel({
                       setCopied(false);
                     }
                   }}
-                  className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
+                  className="btn btn-secondary min-h-11 px-3 text-sm"
                 >
                   {copied ? "Copied!" : "Copy text"}
                 </button>
                 {startButton("Transcribe again")}
-                <span className="text-xs font-semibold text-ink-soft">Made with {t.model_label}. AI transcripts can contain mistakes.</span>
+                <span className="text-xs font-semibold text-muted">Made with {t.model_label}. AI transcripts can contain mistakes.</span>
               </div>
             </>
           )}
@@ -186,21 +186,21 @@ function Speakers({ transcript, project, asset, canEdit }: { transcript: Transcr
     onSuccess: (t) => qc.setQueryData(["media", asset.id, "transcript"], t),
   });
   return (
-    <div className="border-b-2 border-ink/10 px-3 pb-3">
-      <p className="text-xs font-extrabold uppercase text-ink-soft">Speakers</p>
+    <div className="border-b border-line px-3 pb-3">
+      <p className="text-xs font-semibold uppercase text-muted">Speakers</p>
       <ul className="mt-1 space-y-1">
         {transcript.speakers.map((sp) => {
           const label = voiceOptions.find((v) => v.value === sp.voice)?.label ?? sp.voice;
           return (
             <li key={sp.label} className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-extrabold">{sp.label}</span>
+              <span className="font-semibold">{sp.label}</span>
               {canEdit ? (
                 <select
                   value={sp.voice}
                   disabled={set.isPending}
                   onChange={(e) => set.mutate({ label: sp.label, voice: e.target.value as "woman" | "man" | "unclear" })}
                   aria-label={`How ${sp.label}’s voice sounds`}
-                  className="min-h-11 border-2 border-ink bg-white px-2 text-sm font-bold disabled:opacity-60"
+                  className="min-h-11 border border-line bg-white px-2 text-sm font-bold disabled:opacity-60"
                 >
                   {voiceOptions.map((v) => (
                     <option key={v.value} value={v.value}>
@@ -211,7 +211,7 @@ function Speakers({ transcript, project, asset, canEdit }: { transcript: Transcr
               ) : (
                 <span className="font-semibold">{label}</span>
               )}
-              <span className="text-xs font-semibold text-ink-soft">{sp.voice_set_by === "ai" ? "suggested by AI" : "set by a person"}</span>
+              <span className="text-xs font-semibold text-muted">{sp.voice_set_by === "ai" ? "suggested by AI" : "set by a person"}</span>
             </li>
           );
         })}

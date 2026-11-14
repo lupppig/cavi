@@ -35,15 +35,15 @@ export function AIModels({ org }: { org: Organisation }) {
   });
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg bg-ink p-2">
-      <div className="border-2 border-ink bg-white p-5 sm:p-6">
-        <h2 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">AI models</h2>
-        <p className="mt-1 font-medium text-ink-soft">
+    <section aria-labelledby={`${id}-h`} className="card p-5 sm:p-6">
+      <div>
+        <h2 id={`${id}-h`} className="text-2xl font-semibold tracking-tight">AI models</h2>
+        <p className="mt-1 font-medium text-muted">
           Choose which model CAVI uses for this {org.personal ? "studio" : "team"}. When someone uses an AI feature, the
           relevant media is sent to that model’s provider. Work already started keeps the model it began with.
         </p>
         {save.isError && <div className="mt-4"><Banner>{save.error.message}</Banner></div>}
-        {settings.isPending && <div className="mt-4 h-14 animate-pulse bg-paper-deep" />}
+        {settings.isPending && <div className="mt-4 h-14 animate-pulse bg-surface-2" />}
         {settings.isError && <div className="mt-4"><Banner>{settings.error.message}</Banner></div>}
         {settings.data && (
           <ul className="mt-4 space-y-4">
@@ -54,15 +54,15 @@ export function AIModels({ org }: { org: Organisation }) {
               return (
                 <li key={s.task} className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="min-w-0 flex-1">
-                    <label htmlFor={`${id}-${s.task}`} className="font-extrabold">{name.title}</label>
-                    <p className="text-sm font-medium text-ink-soft">{name.hint}</p>
+                    <label htmlFor={`${id}-${s.task}`} className="font-semibold">{name.title}</label>
+                    <p className="text-sm font-medium text-muted">{name.hint}</p>
                   </div>
                   <select
                     id={`${id}-${s.task}`}
                     value={current}
                     disabled={busy}
                     onChange={(e) => save.mutate({ task: s.task, value: e.target.value })}
-                    className="min-h-12 w-full border-2 border-ink bg-paper px-3 font-bold disabled:opacity-60 sm:w-auto"
+                    className="min-h-12 w-full border border-line bg-surface px-3 font-bold disabled:opacity-60 sm:w-auto"
                   >
                     <option value="">
                       Platform default ({s.options.find((o) => o.default)?.label ?? "recommended"})

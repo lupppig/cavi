@@ -174,12 +174,12 @@ export function ClipComposer({
   const edge = (which: "start" | "end", label: string, value: number) => (
     <div className="flex flex-wrap items-center gap-1.5">
       {/* On narrow composers the label sits above its buttons. */}
-      <span className="w-full shrink-0 text-xs font-extrabold uppercase text-ink-soft @[13rem]:w-8">{label}</span>
+      <span className="w-full shrink-0 text-xs font-semibold uppercase text-muted @[13rem]:w-8">{label}</span>
       <button
         type="button"
         onClick={() => nudge(which, -NUDGE_MS)}
         aria-label={`Move ${label.toLowerCase()} half a second earlier`}
-        className="btn-pop grid min-h-11 min-w-11 place-items-center bg-white text-sm font-extrabold"
+        className="btn btn-secondary grid min-h-11 min-w-11 place-items-center text-sm"
       >
         −½s
       </button>
@@ -190,7 +190,7 @@ export function ClipComposer({
         type="button"
         onClick={() => nudge(which, NUDGE_MS)}
         aria-label={`Move ${label.toLowerCase()} half a second later`}
-        className="btn-pop grid min-h-11 min-w-11 place-items-center bg-white text-sm font-extrabold"
+        className="btn btn-secondary grid min-h-11 min-w-11 place-items-center text-sm"
       >
         +½s
       </button>
@@ -198,25 +198,25 @@ export function ClipComposer({
   );
 
   return (
-    <form onSubmit={submit} aria-label="Make a clip" className="@container space-y-3 border-2 border-ink bg-white p-2.5 sm:p-3">
+    <form onSubmit={submit} aria-label="Make a clip" className="@container space-y-3 card p-2.5 sm:p-3">
       {create.isError && <Banner>{create.error.message}</Banner>}
       {/* Two columns when there's room: what you're cutting on the left, how it looks on the right. */}
       <div className="grid gap-3 @[44rem]:grid-cols-2 @[44rem]:gap-6">
         <div className="min-w-0 space-y-3">
           <div>
-            <label htmlFor={`${id}-name`} className="text-sm font-extrabold">Clip name</label>
+            <label htmlFor={`${id}-name`} className="text-sm font-semibold">Clip name</label>
             <input
               id={`${id}-name`}
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={120}
-              className="mt-1 block min-h-11 w-full border-2 border-ink bg-paper px-3 text-base font-semibold"
+              className="mt-1 block min-h-11 w-full border border-line bg-surface px-3 text-base font-semibold"
             />
           </div>
 
           <fieldset className="space-y-1.5">
-            <legend className="text-sm font-extrabold">
-              Trim <span className="font-semibold text-ink-soft">· {length(len)}</span>
+            <legend className="text-sm font-semibold">
+              Trim <span className="font-semibold text-muted">· {length(len)}</span>
             </legend>
             {edge("start", "In", start)}
             {edge("end", "Out", end)}
@@ -225,15 +225,15 @@ export function ClipComposer({
               type="button"
               onClick={() => onPreview(start, end)}
               aria-label="Preview the trimmed clip in the player"
-              className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
+              className="btn btn-secondary min-h-11 px-3 text-sm"
             >
               ▶ Preview
             </button>
           </fieldset>
 
           <div>
-            <p className="text-sm font-extrabold">Framing</p>
-            <div className="mt-1 grid place-items-center bg-ink p-2">
+            <p className="text-sm font-semibold">Framing</p>
+            <div className="mt-1 grid place-items-center bg-stage p-2">
               <div
                 className="relative [container-type:inline-size]"
                 style={{
@@ -250,7 +250,7 @@ export function ClipComposer({
                   playsInline
                   preload="metadata"
                   aria-label="How the clip will be framed"
-                  className="block h-full w-full bg-ink"
+                  className="block h-full w-full bg-stage"
                   style={{ objectFit: "cover", objectPosition: `${focus}% ${focus}%` }}
                 />
                 {captions && spoken && (
@@ -271,7 +271,7 @@ export function ClipComposer({
             </div>
             {crops ? (
               <label className="mt-2 block">
-                <span className="text-xs font-semibold text-ink-soft">
+                <span className="text-xs font-semibold text-muted">
                   Slide to choose what stays in frame ({horizontal ? "left to right" : "top to bottom"})
                 </span>
                 <input
@@ -284,22 +284,22 @@ export function ClipComposer({
                 />
               </label>
             ) : (
-              <p className="mt-1 text-xs font-semibold text-ink-soft">The whole frame fits this shape.</p>
+              <p className="mt-1 text-xs font-semibold text-muted">The whole frame fits this shape.</p>
             )}
           </div>
         </div>
         <div className="min-w-0 space-y-3">
           <fieldset>
-            <legend className="text-sm font-extrabold">
-              Shape <span className="font-semibold text-ink-soft">· {shape.hint}</span>
+            <legend className="text-sm font-semibold">
+              Shape <span className="font-semibold text-muted">· {shape.hint}</span>
             </legend>
             <div className="mt-1 grid grid-cols-2 gap-1.5 @[13rem]:grid-cols-4">
               {shapes.map((s) => (
                 <label
                   key={s.aspect}
                   title={s.hint}
-                  className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 border-2 border-ink px-1 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
-                    aspect === s.aspect ? "bg-ink text-white" : "bg-white"
+                  className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 border border-line px-1 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                    aspect === s.aspect ? "bg-accent-soft text-accent-text" : "bg-white"
                   }`}
                 >
                   <input
@@ -312,20 +312,20 @@ export function ClipComposer({
                   />
                   <span
                     aria-hidden="true"
-                    className="shrink-0 border-2 border-ink bg-white"
+                    className="shrink-0 card"
                     style={{ width: s.w >= s.h ? 22 : (22 * s.w) / s.h, height: s.h >= s.w ? 22 : (22 * s.h) / s.w }}
                   />
-                  <span className="text-xs font-extrabold">{s.aspect}</span>
+                  <span className="text-xs font-semibold">{s.aspect}</span>
                 </label>
               ))}
             </div>
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-extrabold">Captions</legend>
+            <legend className="text-sm font-semibold">Captions</legend>
             {ready && t.segments.length > 0 ? (
               <>
-                <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-extrabold">
+                <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
                   <input
                     type="checkbox"
                     checked={!!captions}
@@ -337,7 +337,7 @@ export function ClipComposer({
                 {captions && (
                   <>
                     <CaptionOptionsPicker value={captions} onChange={setCaptions} speakers={speakersInClip} />
-                    <p className="mt-1 text-xs font-semibold text-ink-soft">
+                    <p className="mt-1 text-xs font-semibold text-muted">
                       {spoken
                         ? "Captions come from the transcript, timed word by word. Check it for mistakes first."
                         : "There’s no speech in this part of the clip, so there’s nothing to caption."}
@@ -346,7 +346,7 @@ export function ClipComposer({
                 )}
               </>
             ) : (
-              <div className="mt-1 border-2 border-dashed border-ink p-2.5 text-sm font-semibold" role="status">
+              <div className="mt-1 border border-dashed border-line-strong p-2.5 text-sm font-semibold" role="status">
                 {transcript.isPending ? (
                   <p>Checking for a transcript…</p>
                 ) : t && (t.status === "queued" || t.status === "running") ? (
@@ -365,12 +365,12 @@ export function ClipComposer({
                         type="button"
                         onClick={transcribe.start}
                         disabled={transcribe.request.isPending}
-                        className="btn-pop mt-2 min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
+                        className="btn btn-primary mt-2 min-h-11 px-3 text-sm disabled:opacity-60"
                       >
                         {transcribe.request.isPending ? "Starting…" : t?.status === "failed" ? "Transcribe again" : "Transcribe now"}
                       </button>
                     ) : (
-                      <p className="mt-1 text-ink-soft">Ask an editor to transcribe it.</p>
+                      <p className="mt-1 text-muted">Ask an editor to transcribe it.</p>
                     )}
                     {transcribe.request.isError && <p className="mt-1">{transcribe.request.error.message}</p>}
                   </>
@@ -383,11 +383,11 @@ export function ClipComposer({
             <button
               type="submit"
               disabled={create.isPending || !!problem || (!!captions && !spoken)}
-              className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
+              className="btn btn-primary min-h-11 px-3 text-sm disabled:opacity-60"
             >
               {create.isPending ? "Starting…" : "Render clip"}
             </button>
-            <button type="button" onClick={onClose} className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold">
+            <button type="button" onClick={onClose} className="btn btn-secondary min-h-11 px-3 text-sm">
               Cancel
             </button>
           </div>
@@ -441,12 +441,12 @@ export function ClipsPanel({
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className="mt-3 border-2 border-ink bg-white">
+    <section aria-labelledby={`${id}-h`} className="mt-3 card">
       <div className="flex min-h-11 flex-wrap items-center gap-2 px-3 pt-2">
-        <h3 id={`${id}-h`} className="font-extrabold">Clips</h3>
-        {list.length > 0 && <span className="text-sm font-semibold text-ink-soft">· {list.length}</span>}
+        <h3 id={`${id}-h`} className="font-semibold">Clips</h3>
+        {list.length > 0 && <span className="text-sm font-semibold text-muted">· {list.length}</span>}
         {canRender && !composing && (
-          <button type="button" onClick={startHere} className="btn-pop ml-auto min-h-11 bg-white px-3 text-sm font-extrabold">
+          <button type="button" onClick={startHere} className="btn btn-secondary ml-auto min-h-11 px-3 text-sm">
             + Clip from playhead
           </button>
         )}
@@ -468,7 +468,7 @@ export function ClipsPanel({
         </div>
       )}
       {list.length === 0 && !composing && (
-        <p className="px-3 pb-3 text-sm font-medium text-ink-soft">
+        <p className="px-3 pb-3 text-sm font-medium text-muted">
           Render a highlight, or pause where you want a clip to start and use “Clip from playhead”.
         </p>
       )}
@@ -479,23 +479,23 @@ export function ClipsPanel({
             const busy = r.status === "queued" || r.status === "running";
             const [w, h] = c.aspect.split(":").map(Number);
             return (
-              <li key={r.id} className="border-2 border-ink/15 bg-paper p-2.5">
+              <li key={r.id} className="rounded-xl border border-line bg-surface-2 p-2.5">
                 <div className="flex flex-wrap items-baseline gap-x-2">
-                  <p className="min-w-0 font-extrabold break-words">{r.name}</p>
-                  <p className="font-mono text-xs font-bold text-ink-soft">
+                  <p className="min-w-0 font-semibold break-words">{r.name}</p>
+                  <p className="font-mono text-xs font-bold text-muted">
                     {c.aspect} · {length(c.end_ms - c.start_ms)} · from {stampTenths(c.start_ms)}
                     {c.captions ? ` · ${c.captions.mode === "words" ? "word-by-word" : "line"} captions` : ""}
                   </p>
                 </div>
                 {busy && (
                   <p className="mt-1 flex items-center gap-2 text-sm font-semibold" role="status">
-                    <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
+                    <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
                     {r.status === "queued" ? "Waiting to render…" : "Rendering…"}
                   </p>
                 )}
                 {r.status === "failed" && (
                   <div className="mt-1 text-sm font-semibold" role="status">
-                    <p className="border-2 border-ink bg-paper-deep p-2">{r.error ?? "Rendering failed."}</p>
+                    <p className="border border-line bg-surface-2 p-2">{r.error ?? "Rendering failed."}</p>
                     {canRender && r.source_asset_id && (
                       <button
                         type="button"
@@ -514,7 +514,7 @@ export function ClipsPanel({
                             : null;
                           retry.mutate({ name: r.name, composition, captions: options });
                         }}
-                        className="btn-pop mt-2 min-h-11 bg-white px-3 font-extrabold disabled:opacity-60"
+                        className="btn btn-secondary mt-2 min-h-11 px-3 disabled:opacity-60"
                       >
                         Render again
                       </button>
@@ -522,7 +522,7 @@ export function ClipsPanel({
                   </div>
                 )}
                 {r.output && (
-                  <div className="mt-2 grid place-items-center bg-ink p-1.5">
+                  <div className="mt-2 grid place-items-center bg-stage p-1.5">
                     <video
                       src={r.output.url}
                       controls
@@ -536,7 +536,7 @@ export function ClipsPanel({
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {r.output && (
-                    <a href={r.output.url} className="btn-pop flex min-h-11 items-center bg-white px-3 text-sm font-extrabold">
+                    <a href={r.output.url} className="btn btn-secondary flex min-h-11 items-center px-3 text-sm">
                       Download
                     </a>
                   )}
@@ -547,13 +547,13 @@ export function ClipsPanel({
                       onClick={() => {
                         if (window.confirm(`Delete the clip “${r.name}”? This can’t be undone.`)) remove.mutate(r);
                       }}
-                      className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold disabled:opacity-60"
+                      className="btn btn-secondary min-h-11 px-3 text-sm disabled:opacity-60"
                     >
                       Delete
                     </button>
                   )}
                   {r.output && (
-                    <span className="text-xs font-semibold text-ink-soft">
+                    <span className="text-xs font-semibold text-muted">
                       {r.output.width}×{r.output.height} · {(r.output.size_bytes / 1_000_000).toFixed(1)} MB
                     </span>
                   )}
