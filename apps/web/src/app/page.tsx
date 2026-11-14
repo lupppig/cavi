@@ -1,6 +1,5 @@
 import { Fragment, type CSSProperties } from "react";
 import type { Viewport } from "next";
-import { Archivo, Instrument_Serif } from "next/font/google";
 import { BriefToSpec } from "@/components/home/brief-to-spec";
 import { CutGame } from "@/components/home/cut-game";
 import { ReframeStage } from "@/components/home/reframe-stage";
@@ -12,8 +11,6 @@ import { WaitlistForm } from "@/components/home/waitlist-form";
 import { signInHref } from "@/lib/api";
 import "./home.css";
 
-const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], axes: ["wdth"] });
-const instrument = Instrument_Serif({ variable: "--font-instrument", subsets: ["latin"], weight: "400", style: "italic" });
 
 export const viewport: Viewport = {
   themeColor: "#050505",
@@ -100,7 +97,7 @@ function Band({ items, invert, reverse }: { items: string[]; invert?: boolean; r
 
 export default function Home() {
   return (
-    <div className={`home ${archivo.variable} ${instrument.variable}`}>
+    <div className="home">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:bg-white focus:px-4 focus:py-3 focus:text-black"
@@ -282,8 +279,8 @@ export default function Home() {
             <p className="mt-6 max-w-2xl text-lg sm:text-xl">
               CAVI isn&rsquo;t open yet. Join the waitlist and we&rsquo;ll tell you the moment early access begins.
             </p>
-            <div className="mt-10 max-w-4xl">
-              <WaitlistForm layout="row" />
+            <div className="mt-10 max-w-xl">
+              <WaitlistForm />
             </div>
           </div>
         </section>

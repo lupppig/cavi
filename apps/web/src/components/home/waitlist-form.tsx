@@ -21,7 +21,7 @@ type State =
   | { kind: "joined" }
   | { kind: "error"; message: string; field?: "email" | "discipline" };
 
-export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row" }) {
+export function WaitlistForm() {
   const id = useId();
   const [state, setState] = useState<State>({ kind: "idle" });
 
@@ -97,11 +97,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
   return (
     <form onSubmit={onSubmit}>
       <div
-        className={`grid grid-cols-1 gap-3 ${
-          layout === "row"
-            ? "md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto]"
-            : "sm:grid-cols-[minmax(0,1fr)_auto]"
-        }`}
+        className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
       >
         <label htmlFor={`${id}-email`} className="sr-only">
           Email address
@@ -118,13 +114,14 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
           disabled={unavailable || submitting}
           aria-invalid={emailInvalid || undefined}
           aria-describedby={emailInvalid ? errorId : undefined}
-          className={`${field} aria-invalid:border-[3px] aria-invalid:border-dashed ${layout === "row" ? "" : "sm:col-span-2"}`}
+          className={`${field} aria-invalid:border-[3px] aria-invalid:border-dashed sm:col-span-2`}
         />
 
         <Listbox
           name="discipline"
           label="What do you make? (optional)"
           placeholder="What do you make? (optional)"
+          noneLabel="Prefer not to say"
           options={disciplines}
           disabled={unavailable || submitting}
         />

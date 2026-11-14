@@ -15,6 +15,7 @@ export function Listbox({
   name,
   label,
   placeholder,
+  noneLabel,
   options,
   disabled,
   className = "",
@@ -23,6 +24,8 @@ export function Listbox({
   /** Accessible name. */
   label: string;
   placeholder: string;
+  /** How the "no answer" choice reads in the list. */
+  noneLabel: string;
   options: ListboxOption[];
   disabled?: boolean;
   className?: string;
@@ -35,8 +38,9 @@ export function Listbox({
   const button = useRef<HTMLButtonElement>(null);
   const typed = useRef({ text: "", at: 0 });
   // The placeholder is a real choice: "no answer" (the field is optional).
-  const all: ListboxOption[] = [{ value: "", label: placeholder }, ...options];
+  const all: ListboxOption[] = [{ value: "", label: noneLabel }, ...options];
   const selected = all.find((o) => o.value === value) ?? all[0];
+  const shown = value ? selected.label : placeholder;
 
   useEffect(() => {
     if (!open) return;
@@ -130,7 +134,7 @@ export function Listbox({
         onKeyDown={onKey}
         className="flex min-h-13 w-full min-w-0 items-center justify-between gap-3 border-2 border-current bg-[var(--bg)] px-4 text-left text-base font-medium text-[var(--fg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] disabled:opacity-50"
       >
-        <span className={`truncate ${value ? "" : "opacity-80"}`}>{selected.label}</span>
+        <span className={`truncate ${value ? "" : "opacity-80"}`}>{shown}</span>
         <svg viewBox="0 0 12 8" className={`size-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true">
           <path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="2" />
         </svg>
@@ -140,7 +144,7 @@ export function Listbox({
         role="listbox"
         aria-label={label}
         hidden={!open}
-        className="absolute inset-x-0 top-full z-30 mt-1 max-h-72 overflow-y-auto border-2 border-current bg-[var(--bg)] text-[var(--fg)] shadow-[6px_6px_0_var(--fg)]"
+        className="absolute inset-x-0 top-full z-30 -mt-0.5 max-h-[min(26rem,60vh)] overflow-y-auto overscroll-contain border-2 border-current bg-[var(--bg)] text-[var(--fg)]"
       >
         {all.map((o, i) => (
           <li
