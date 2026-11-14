@@ -130,13 +130,31 @@ type Clip struct {
 	Width, Height int
 	// Audio keeps the first audio stream; otherwise the clip is silent.
 	Audio bool
+	// Subtitles, if set, is a local ASS file burned into the output after
+	// scaling (so its coordinates are output pixels), with fonts from
+	// FontsDir. Both are paths CAVI made: plain characters only.
+	Subtitles, FontsDir string
 }
+
+// safePath matches the paths allowed inside a filter graph, where ':' ','
+// '[' and quotes have meaning.
+var safePath = regexp.MustCompile(`^[A-Za-z0-9/_.-]+$`)
 
 // Clip renders c from input to the local file output, replacing it.
 // Seeking before the input and re-encoding makes the cut frame-accurate.
 func (r *Runner) Clip(ctx context.Context, input, output string, c Clip, timeout time.Duration) error {
 	if c.Length <= 0 || c.CropW <= 0 || c.CropH <= 0 || c.Width <= 0 || c.Height <= 0 || c.Width%2 != 0 || c.Height%2 != 0 {
 		return fmt.Errorf("ffmpeg: invalid clip %+v", c)
+	}
+	filter := fmt.Sprintf("crop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1", c.CropW, c.CropH, c.CropX, c.CropY, c.Width, c.Height)
+	if c.Subtitles != "" {
+		if !safePath.MatchString(c.Subtitles) || (c.FontsDir != "" && !safePath.MatchString(c.FontsDir)) {
+			return fmt.Errorf("ffmpeg: subtitle or font path has characters not allowed in a filter")
+		}
+		filter += ",subtitles=filename=" + c.Subtitles
+		if c.FontsDir != "" {
+			filter += ":fontsdir=" + c.FontsDir
+		}
 	}
 	args := []string{
 		"-v", "error", "-nostdin", "-y", "-protocol_whitelist", protocols,
@@ -151,7 +169,7 @@ func (r *Runner) Clip(ctx context.Context, input, output string, c Clip, timeout
 		args = append(args, "-an")
 	}
 	args = append(args,
-		"-vf", fmt.Sprintf("crop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1", c.CropW, c.CropH, c.CropX, c.CropY, c.Width, c.Height),
+		"-vf", filter,
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-profile:v", "high",
 		"-movflags", "+faststart", "-f", "mp4", output)
 	_, err := r.runFor(ctx, timeout, input, r.FFmpeg, args...)
