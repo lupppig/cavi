@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 import { Banner } from "@/components/account/account-header";
 import { can, client, raise, type Organisation, type Project } from "@/lib/queries";
-import { projectColour, projectHref } from "@/lib/projects";
+import { projectHref } from "@/lib/projects";
 
 const field =
-  "w-full min-w-0 rounded-2xl border-[3px] border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-cobalt/40 focus:outline-none disabled:opacity-60";
+  "w-full min-w-0 border-2 border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-ink/30 focus:outline-none disabled:opacity-60";
 
 export function Projects({ org }: { org: Organisation }) {
   const id = useId();
@@ -42,7 +42,7 @@ export function Projects({ org }: { org: Organisation }) {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="btn-pop min-h-12 rounded-2xl bg-tomato px-5 font-extrabold text-white"
+            className="btn-pop min-h-12 bg-ink px-5 font-extrabold text-white"
           >
             + New project
           </button>
@@ -54,14 +54,14 @@ export function Projects({ org }: { org: Organisation }) {
       {projects.isPending && (
         <div aria-busy="true" className="grid grid-cols-1 gap-6 md:grid-cols-2">
           <span className="sr-only">Loading projects…</span>
-          <div className="h-40 animate-pulse rounded-[28px] bg-paper-deep" />
-          <div className="h-40 animate-pulse rounded-[28px] bg-paper-deep" />
+          <div className="h-40 animate-pulse bg-paper-deep" />
+          <div className="h-40 animate-pulse bg-paper-deep" />
         </div>
       )}
       {projects.isError && (
         <div className="space-y-3">
           <Banner>{projects.error.message}</Banner>
-          <button type="button" onClick={() => projects.refetch()} className="btn-pop min-h-11 rounded-xl bg-white px-4 font-extrabold">
+          <button type="button" onClick={() => projects.refetch()} className="btn-pop min-h-11 bg-white px-4 font-extrabold">
             Try again
           </button>
         </div>
@@ -83,7 +83,7 @@ export function Projects({ org }: { org: Organisation }) {
           type="button"
           onClick={() => projects.fetchNextPage()}
           disabled={projects.isFetchingNextPage}
-          className="btn-pop min-h-12 w-full rounded-2xl bg-white px-6 font-extrabold disabled:opacity-60 sm:w-auto"
+          className="btn-pop min-h-12 w-full bg-white px-6 font-extrabold disabled:opacity-60 sm:w-auto"
         >
           {projects.isFetchingNextPage ? "Loading…" : "Show more projects"}
         </button>
@@ -97,9 +97,9 @@ function ProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={projectHref(project)}
-      className={`tilt-hover sticker-lg block h-full rounded-[28px] p-2 focus-visible:outline-offset-4 ${projectColour(project.id)}`}
+      className={`tilt-hover sticker-lg block h-full p-2 focus-visible:outline-offset-4 bg-ink`}
     >
-      <span className="flex h-full flex-col rounded-[20px] border-[3px] border-ink bg-white p-5">
+      <span className="flex h-full flex-col border-2 border-ink bg-white p-5">
         <span className="text-xl font-extrabold tracking-tight break-words">{project.name}</span>
         {project.description ? (
           <span className="mt-2 line-clamp-2 font-medium break-words text-ink-soft">{project.description}</span>
@@ -119,13 +119,13 @@ function ProjectCard({ project }: { project: Project }) {
 function EmptyProjects({ isClient, canCreate, onCreate }: { isClient: boolean; canCreate: boolean; onCreate: () => void }) {
   if (isClient) {
     return (
-      <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
+      <p className="border-2 border-dashed border-ink bg-white/60 p-5 font-semibold">
         Nothing has been shared with you yet. When the team shares a project with you, it’ll show up here.
       </p>
     );
   }
   return (
-    <div className="flex flex-col items-start gap-4 rounded-[28px] border-[3px] border-dashed border-ink bg-white/60 p-6">
+    <div className="flex flex-col items-start gap-4 border-2 border-dashed border-ink bg-white/60 p-6">
       <p className="text-lg font-semibold">
         No projects yet.{" "}
         {canCreate
@@ -133,7 +133,7 @@ function EmptyProjects({ isClient, canCreate, onCreate }: { isClient: boolean; c
           : "When someone starts one, it’ll show up here."}
       </p>
       {canCreate && (
-        <button type="button" onClick={onCreate} className="btn-pop min-h-12 rounded-2xl bg-cobalt px-5 font-extrabold text-white">
+        <button type="button" onClick={onCreate} className="btn-pop min-h-12 bg-ink px-5 font-extrabold text-white">
           Start your first project
         </button>
       )}
@@ -170,7 +170,7 @@ function CreateProject({ org, onCancel }: { org: Organisation; onCancel: () => v
   }
 
   return (
-    <form onSubmit={onSubmit} aria-labelledby={`${id}-h`} className="sticker-lg rounded-[28px] bg-sun p-5 sm:p-7">
+    <form onSubmit={onSubmit} aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-5 sm:p-7">
       <h3 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">New project</h3>
       <label htmlFor={`${id}-name`} className="mt-4 block font-extrabold">Name</label>
       <input
@@ -202,11 +202,11 @@ function CreateProject({ org, onCancel }: { org: Organisation; onCancel: () => v
         <button
           type="submit"
           disabled={create.isPending || !name.trim()}
-          className="btn-pop min-h-12 rounded-2xl bg-cobalt px-6 font-extrabold text-white disabled:opacity-60"
+          className="btn-pop min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60"
         >
           {create.isPending ? "Creating…" : "Create project"}
         </button>
-        <button type="button" onClick={onCancel} disabled={create.isPending} className="btn-pop min-h-12 rounded-2xl bg-white px-6 font-extrabold">
+        <button type="button" onClick={onCancel} disabled={create.isPending} className="btn-pop min-h-12 bg-white px-6 font-extrabold">
           Cancel
         </button>
       </div>

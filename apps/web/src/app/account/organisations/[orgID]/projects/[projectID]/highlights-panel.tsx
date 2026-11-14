@@ -116,7 +116,7 @@ export function HighlightsPanel({
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className="mt-3 rounded-xl border-2 border-ink bg-white">
+    <section aria-labelledby={`${id}-h`} className="mt-3 border-2 border-ink bg-white">
       <div className="flex min-h-11 items-center gap-2 px-3 pt-2">
         <h3 id={`${id}-h`} className="font-extrabold">Highlights</h3>
         {h?.status === "ready" && (
@@ -130,13 +130,13 @@ export function HighlightsPanel({
 
       {busy && (
         <p className="flex items-center gap-2 px-3 pb-3 text-sm font-semibold" role="status">
-          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-pink" />
+          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
           Reading the transcript with {h.model_label}…
         </p>
       )}
 
       {h?.status === "failed" && (
-        <p className="mx-3 mb-3 rounded-lg border-2 border-ink bg-tomato/15 p-2 text-sm font-semibold" role="status">
+        <p className="mx-3 mb-3 border-2 border-ink bg-paper-deep p-2 text-sm font-semibold" role="status">
           {h.error ?? "Finding highlights failed."}
         </p>
       )}
@@ -165,11 +165,11 @@ export function HighlightsPanel({
           ) : (
             <ol className="max-h-[28rem] space-y-2 overflow-y-auto px-3 pb-2">
               {h.clips.map((c, i) => (
-                <li key={`${c.start_ms}-${i}`} className="rounded-lg border-2 border-ink/15 bg-paper p-2.5">
+                <li key={`${c.start_ms}-${i}`} className="border-2 border-ink/15 bg-paper p-2.5">
                   <div className="flex items-start gap-2.5">
                     <span
                       aria-label={`Rank ${i + 1}`}
-                      className="grid size-7 shrink-0 place-items-center rounded-full border-2 border-ink bg-sun text-xs font-extrabold"
+                      className="grid size-7 shrink-0 place-items-center rounded-full border-2 border-ink bg-ink text-xs font-extrabold text-white"
                     >
                       {i + 1}
                     </span>
@@ -183,7 +183,7 @@ export function HighlightsPanel({
                         <button
                           type="button"
                           onClick={() => onPlay(c.start_ms, c.end_ms)}
-                          className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold"
+                          className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
                           aria-label={`Play clip ${i + 1}: ${c.title}`}
                         >
                           ▶ Play clip
@@ -192,7 +192,7 @@ export function HighlightsPanel({
                           <button
                             type="button"
                             onClick={() => setComposing(i)}
-                            className="btn-pop min-h-11 rounded-xl bg-tomato px-3 text-sm font-extrabold text-white"
+                            className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white"
                             aria-label={`Make clip ${i + 1}: ${c.title}`}
                           >
                             Make clip
@@ -207,7 +207,7 @@ export function HighlightsPanel({
           )}
           <div className={`flex flex-wrap items-center gap-2 border-t-2 border-ink/10 px-3 py-2 ${composingClip ? "hidden" : ""}`}>
             {canEdit && transcriptReady && (
-              <button type="button" onClick={edit} className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold">
+              <button type="button" onClick={edit} className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold">
                 Find again
               </button>
             )}
@@ -239,7 +239,7 @@ export function HighlightsPanel({
               maxLength={500}
               rows={2}
               placeholder="e.g. The funniest exchange between the hosts, for TikTok"
-              className="mt-1 block w-full rounded-xl border-2 border-ink bg-paper px-3 py-2 text-base font-medium"
+              className="mt-1 block w-full border-2 border-ink bg-paper px-3 py-2 text-base font-medium"
             />
           </div>
           <fieldset>
@@ -248,8 +248,8 @@ export function HighlightsPanel({
               {lengths.map((l, i) => (
                 <label
                   key={l.label}
-                  className={`flex min-h-11 min-w-0 cursor-pointer flex-col justify-center rounded-xl border-2 border-ink px-2.5 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
-                    length === i ? "bg-sky" : "bg-white"
+                  className={`flex min-h-11 min-w-0 cursor-pointer flex-col justify-center border-2 border-ink px-2.5 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                    length === i ? "bg-ink text-white" : "bg-white"
                   }`}
                 >
                   <input
@@ -269,7 +269,7 @@ export function HighlightsPanel({
             <button
               type="submit"
               disabled={request.isPending}
-              className="btn-pop min-h-11 rounded-xl bg-pink px-3 text-sm font-extrabold disabled:opacity-60"
+              className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
             >
               {request.isPending ? "Starting…" : h?.status === "failed" ? "Try again" : "Find highlights"}
             </button>
@@ -277,7 +277,7 @@ export function HighlightsPanel({
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold"
+                className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
               >
                 Cancel
               </button>

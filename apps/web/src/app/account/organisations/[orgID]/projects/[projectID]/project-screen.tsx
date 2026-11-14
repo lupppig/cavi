@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import { useId, useState, type FormEvent } from "react";
 import { AccountHeader, Banner } from "@/components/account/account-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
-import { projectColour } from "@/lib/projects";
 import { MediaSection } from "./media-section";
 import {
   can,
@@ -25,7 +24,7 @@ import {
 } from "@/lib/queries";
 
 const field =
-  "w-full min-w-0 rounded-2xl border-[3px] border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-cobalt/40 focus:outline-none disabled:opacity-60";
+  "w-full min-w-0 border-2 border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-ink/30 focus:outline-none disabled:opacity-60";
 
 function useProject(orgID: string, projectID: string) {
   return useQuery({
@@ -61,27 +60,27 @@ export function ProjectScreen() {
         {project.isPending && (
           <div aria-busy="true" className="space-y-6">
             <span className="sr-only">Loading…</span>
-            <div className="h-48 animate-pulse rounded-[28px] bg-paper-deep" />
-            <div className="h-32 animate-pulse rounded-[28px] bg-paper-deep" />
+            <div className="h-48 animate-pulse bg-paper-deep" />
+            <div className="h-32 animate-pulse bg-paper-deep" />
           </div>
         )}
         {project.isError && project.error instanceof NotSignedIn && (
-          <div className="sticker-lg rounded-[28px] bg-sun p-6 sm:p-8">
+          <div className="sticker-lg bg-white p-6 sm:p-8">
             <h1 className="text-3xl font-extrabold">Sign in to see this project</h1>
             <GoogleSignIn className="mt-6 w-full sm:w-auto" />
           </div>
         )}
         {project.isError && project.error instanceof NotFound && (
-          <div className="sticker-lg rounded-[28px] bg-white p-6 sm:p-8">
+          <div className="sticker-lg bg-white p-6 sm:p-8">
             <h1 className="text-3xl font-extrabold">Project not found</h1>
             <p className="mt-2 font-medium">It doesn’t exist, or it hasn’t been shared with you.</p>
           </div>
         )}
         {project.isError && !(project.error instanceof NotFound) && !(project.error instanceof NotSignedIn) && (
-          <div className="sticker-lg rounded-[28px] bg-white p-6 sm:p-8">
+          <div className="sticker-lg bg-white p-6 sm:p-8">
             <h1 className="text-3xl font-extrabold">Something went wrong</h1>
             <p className="mt-2 font-medium">{project.error.message}</p>
-            <button type="button" onClick={() => project.refetch()} className="btn-pop mt-6 min-h-12 rounded-2xl bg-cobalt px-6 font-extrabold text-white">
+            <button type="button" onClick={() => project.refetch()} className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white">
               Try again
             </button>
           </div>
@@ -102,7 +101,7 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
         canTranscribe={!!org && can(org, "editing.manage")}
         canRender={!!org && can(org, "render.execute")}
       />
-      <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
+      <p className="border-2 border-dashed border-ink bg-white/60 p-5 font-semibold">
         You can cut single clips from a video above. The timeline editor, captions and multi-clip edits aren’t available
         yet.
       </p>
@@ -148,8 +147,8 @@ function Details({ project }: { project: Project }) {
   }
 
   return (
-    <section className={`sticker-lg rounded-[28px] p-2 ${projectColour(project.id)}`}>
-      <div className="rounded-[20px] border-[3px] border-ink bg-white p-5 sm:p-7">
+    <section className="sticker-lg bg-ink p-2">
+      <div className="border-2 border-ink bg-white p-5 sm:p-7">
         {editing ? (
           <form onSubmit={onSubmit}>
             <label htmlFor={`${id}-name`} className="block font-extrabold">Name</label>
@@ -175,10 +174,10 @@ function Details({ project }: { project: Project }) {
             />
             {save.isError && <div className="mt-4"><Banner>{save.error.message}</Banner></div>}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              <button type="submit" disabled={save.isPending || !name.trim()} className="btn-pop min-h-12 rounded-2xl bg-cobalt px-6 font-extrabold text-white disabled:opacity-60">
+              <button type="submit" disabled={save.isPending || !name.trim()} className="btn-pop min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60">
                 {save.isPending ? "Saving…" : "Save"}
               </button>
-              <button type="button" onClick={cancel} disabled={save.isPending} className="btn-pop min-h-12 rounded-2xl bg-white px-6 font-extrabold">
+              <button type="button" onClick={cancel} disabled={save.isPending} className="btn-pop min-h-12 bg-white px-6 font-extrabold">
                 Cancel
               </button>
             </div>
@@ -197,7 +196,7 @@ function Details({ project }: { project: Project }) {
                     setDescription(project.description);
                     setEditing(true);
                   }}
-                  className="btn-pop min-h-11 rounded-full bg-white px-4 text-sm font-extrabold"
+                  className="btn-pop min-h-11 bg-white px-4 text-sm font-extrabold"
                 >
                   Edit
                 </button>
@@ -209,11 +208,11 @@ function Details({ project }: { project: Project }) {
               <p className="mt-3 font-medium text-ink-soft italic">No description yet.</p>
             )}
             <div className="mt-5 flex flex-wrap gap-2 text-sm font-extrabold">
-              <span className="rounded-full border-2 border-ink bg-sky px-3 py-1">{project.workspace.name}</span>
+              <span className="border-2 border-ink bg-paper-deep px-3 py-1">{project.workspace.name}</span>
               {project.created_by && (
-                <span className="rounded-full border-2 border-ink bg-paper px-3 py-1">Started by {project.created_by.name}</span>
+                <span className="border-2 border-ink bg-paper px-3 py-1">Started by {project.created_by.name}</span>
               )}
-              <span className="rounded-full border-2 border-ink bg-paper px-3 py-1">
+              <span className="border-2 border-ink bg-paper px-3 py-1">
                 {new Date(project.created_at).toLocaleDateString()}
               </span>
             </div>
@@ -270,14 +269,14 @@ function ClientAccess({ project }: { project: Project }) {
   const error = grant.error ?? revoke.error;
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg rounded-[28px] bg-white p-5 sm:p-7">
+    <section aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-5 sm:p-7">
       <h2 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">Client access</h2>
       <p className="mt-1 font-medium text-ink-soft">
         Your team sees every project. Clients only see the projects you share with them here.
       </p>
       {error && <div className="mt-4"><Banner>{error.message}</Banner></div>}
 
-      {(access.isPending || members.isPending) && <div className="mt-4 h-14 animate-pulse rounded-2xl bg-paper-deep" />}
+      {(access.isPending || members.isPending) && <div className="mt-4 h-14 animate-pulse bg-paper-deep" />}
       {access.isError && <div className="mt-4"><Banner>{access.error.message}</Banner></div>}
       {members.isError && <div className="mt-4"><Banner>{members.error.message}</Banner></div>}
 
@@ -306,13 +305,13 @@ function ClientAccess({ project }: { project: Project }) {
                   </option>
                 ))}
               </select>
-              <button type="submit" disabled={!selected || grant.isPending} className="btn-pop min-h-12 rounded-2xl bg-cobalt px-6 font-extrabold text-white disabled:opacity-60">
+              <button type="submit" disabled={!selected || grant.isPending} className="btn-pop min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60">
                 {grant.isPending ? "Sharing…" : "Share"}
               </button>
             </form>
           ) : (
             access.data.length === 0 && (
-              <p className="mt-4 rounded-2xl border-2 border-ink bg-paper p-4 font-semibold">
+              <p className="mt-4 border-2 border-ink bg-paper p-4 font-semibold">
                 There are no clients in this team yet. Invite someone with the Client role from the{" "}
                 <Link href={`/account/organisations/${orgID}`} className="font-extrabold underline decoration-2 underline-offset-4">
                   team page
@@ -329,9 +328,9 @@ function ClientAccess({ project }: { project: Project }) {
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     {a.avatar_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={a.avatar_url} alt="" referrerPolicy="no-referrer" className="size-11 shrink-0 rounded-full border-[3px] border-ink object-cover" />
+                      <img src={a.avatar_url} alt="" referrerPolicy="no-referrer" className="size-11 shrink-0 rounded-full border-2 border-ink object-cover" />
                     ) : (
-                      <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full border-[3px] border-ink bg-pink text-sm font-extrabold">
+                      <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full border-2 border-ink bg-ink text-sm font-extrabold text-white">
                         {initials(a)}
                       </span>
                     )}
@@ -344,7 +343,7 @@ function ClientAccess({ project }: { project: Project }) {
                     type="button"
                     disabled={revoke.isPending && revoke.variables === a.user_id}
                     onClick={() => revoke.mutate(a.user_id)}
-                    className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold disabled:opacity-60"
+                    className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold disabled:opacity-60"
                   >
                     Stop sharing
                   </button>
@@ -376,7 +375,7 @@ function DeleteProject({ project }: { project: Project }) {
   });
 
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-white/60 p-5 sm:p-7">
+    <section className="border-2 border-ink bg-white/60 p-5 sm:p-7">
       <h2 className="text-xl font-extrabold">Delete project</h2>
       <p className="mt-1 font-medium text-ink-soft">This removes the project for everyone. It can’t be undone.</p>
       {remove.isError && <div className="mt-4"><Banner>{remove.error.message}</Banner></div>}
@@ -386,7 +385,7 @@ function DeleteProject({ project }: { project: Project }) {
         onClick={() => {
           if (window.confirm(`Delete “${project.name}”? This can’t be undone.`)) remove.mutate();
         }}
-        className="btn-pop mt-4 min-h-12 rounded-2xl bg-tomato px-6 font-extrabold text-white disabled:opacity-60"
+        className="btn-pop mt-4 min-h-12 bg-ink px-6 font-extrabold text-white disabled:opacity-60"
       >
         {remove.isPending ? "Deleting…" : "Delete project"}
       </button>

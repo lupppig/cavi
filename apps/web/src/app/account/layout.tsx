@@ -7,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function AccountLayout({ children }: LayoutProps<"/account">) {
-  return <Providers>{children}</Providers>;
+  return (
+    <Providers>
+      <div className="app">{children}</div>
+    </Providers>
+  );
 }

@@ -152,7 +152,7 @@ export function ClipComposer({
         type="button"
         onClick={() => nudge(which, -NUDGE_MS)}
         aria-label={`Move ${label.toLowerCase()} half a second earlier`}
-        className="btn-pop grid min-h-11 min-w-11 place-items-center rounded-xl bg-white text-sm font-extrabold"
+        className="btn-pop grid min-h-11 min-w-11 place-items-center bg-white text-sm font-extrabold"
       >
         −½s
       </button>
@@ -163,7 +163,7 @@ export function ClipComposer({
         type="button"
         onClick={() => nudge(which, NUDGE_MS)}
         aria-label={`Move ${label.toLowerCase()} half a second later`}
-        className="btn-pop grid min-h-11 min-w-11 place-items-center rounded-xl bg-white text-sm font-extrabold"
+        className="btn-pop grid min-h-11 min-w-11 place-items-center bg-white text-sm font-extrabold"
       >
         +½s
       </button>
@@ -171,7 +171,7 @@ export function ClipComposer({
   );
 
   return (
-    <form onSubmit={submit} aria-label="Make a clip" className="@container space-y-3 rounded-xl border-2 border-ink bg-white p-2.5 sm:p-3">
+    <form onSubmit={submit} aria-label="Make a clip" className="@container space-y-3 border-2 border-ink bg-white p-2.5 sm:p-3">
       {create.isError && <Banner>{create.error.message}</Banner>}
       <div>
         <label htmlFor={`${id}-name`} className="text-sm font-extrabold">Clip name</label>
@@ -180,7 +180,7 @@ export function ClipComposer({
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={120}
-          className="mt-1 block min-h-11 w-full rounded-xl border-2 border-ink bg-paper px-3 text-base font-semibold"
+          className="mt-1 block min-h-11 w-full border-2 border-ink bg-paper px-3 text-base font-semibold"
         />
       </div>
 
@@ -190,12 +190,12 @@ export function ClipComposer({
         </legend>
         {edge("start", "In", start)}
         {edge("end", "Out", end)}
-        {problem && <p className="text-sm font-semibold text-tomato">{problem}</p>}
+        {problem && <p className="text-sm font-semibold text-ink">{problem}</p>}
         <button
           type="button"
           onClick={() => onPreview(start, end)}
           aria-label="Preview the trimmed clip in the player"
-          className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold"
+          className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
         >
           ▶ Preview
         </button>
@@ -210,8 +210,8 @@ export function ClipComposer({
             <label
               key={s.aspect}
               title={s.hint}
-              className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-ink px-1 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
-                aspect === s.aspect ? "bg-sky" : "bg-white"
+              className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-center justify-center gap-1 border-2 border-ink px-1 py-1.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                aspect === s.aspect ? "bg-ink text-white" : "bg-white"
               }`}
             >
               <input
@@ -224,7 +224,7 @@ export function ClipComposer({
               />
               <span
                 aria-hidden="true"
-                className="shrink-0 rounded-[3px] border-2 border-ink bg-white"
+                className="shrink-0 border-2 border-ink bg-white"
                 style={{ width: s.w >= s.h ? 22 : (22 * s.w) / s.h, height: s.h >= s.w ? 22 : (22 * s.h) / s.w }}
               />
               <span className="text-xs font-extrabold">{s.aspect}</span>
@@ -235,7 +235,7 @@ export function ClipComposer({
 
       <div>
         <p className="text-sm font-extrabold">Framing</p>
-        <div className="mt-1 grid place-items-center rounded-xl bg-ink p-2">
+        <div className="mt-1 grid place-items-center bg-ink p-2">
           <video
             ref={frame}
             src={url}
@@ -265,7 +265,7 @@ export function ClipComposer({
               max={100}
               value={focus}
               onChange={(e) => setFocus(Number(e.target.value))}
-              className="mt-1 block h-11 w-full accent-[var(--cobalt)]"
+              className="mt-1 block h-11 w-full accent-[var(--ink)]"
             />
           </label>
         ) : (
@@ -277,11 +277,11 @@ export function ClipComposer({
         <button
           type="submit"
           disabled={create.isPending || !!problem}
-          className="btn-pop min-h-11 rounded-xl bg-tomato px-3 text-sm font-extrabold text-white disabled:opacity-60"
+          className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
         >
           {create.isPending ? "Starting…" : "Render clip"}
         </button>
-        <button type="button" onClick={onClose} className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold">
+        <button type="button" onClick={onClose} className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold">
           Cancel
         </button>
       </div>
@@ -331,12 +331,12 @@ export function ClipsPanel({
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className="mt-3 rounded-xl border-2 border-ink bg-white">
+    <section aria-labelledby={`${id}-h`} className="mt-3 border-2 border-ink bg-white">
       <div className="flex min-h-11 flex-wrap items-center gap-2 px-3 pt-2">
         <h3 id={`${id}-h`} className="font-extrabold">Clips</h3>
         {list.length > 0 && <span className="text-sm font-semibold text-ink-soft">· {list.length}</span>}
         {canRender && !composing && (
-          <button type="button" onClick={startHere} className="btn-pop ml-auto min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold">
+          <button type="button" onClick={startHere} className="btn-pop ml-auto min-h-11 bg-white px-3 text-sm font-extrabold">
             + Clip from playhead
           </button>
         )}
@@ -368,7 +368,7 @@ export function ClipsPanel({
             const busy = r.status === "queued" || r.status === "running";
             const [w, h] = c.aspect.split(":").map(Number);
             return (
-              <li key={r.id} className="rounded-lg border-2 border-ink/15 bg-paper p-2.5">
+              <li key={r.id} className="border-2 border-ink/15 bg-paper p-2.5">
                 <div className="flex flex-wrap items-baseline gap-x-2">
                   <p className="min-w-0 font-extrabold break-words">{r.name}</p>
                   <p className="font-mono text-xs font-bold text-ink-soft">
@@ -377,19 +377,19 @@ export function ClipsPanel({
                 </div>
                 {busy && (
                   <p className="mt-1 flex items-center gap-2 text-sm font-semibold" role="status">
-                    <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-tomato" />
+                    <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
                     {r.status === "queued" ? "Waiting to render…" : "Rendering…"}
                   </p>
                 )}
                 {r.status === "failed" && (
                   <div className="mt-1 text-sm font-semibold" role="status">
-                    <p className="rounded-lg border-2 border-ink bg-tomato/15 p-2">{r.error ?? "Rendering failed."}</p>
+                    <p className="border-2 border-ink bg-paper-deep p-2">{r.error ?? "Rendering failed."}</p>
                     {canRender && r.source_asset_id && (
                       <button
                         type="button"
                         disabled={retry.isPending}
                         onClick={() => retry.mutate({ name: r.name, composition: r.composition })}
-                        className="btn-pop mt-2 min-h-11 rounded-xl bg-white px-3 font-extrabold disabled:opacity-60"
+                        className="btn-pop mt-2 min-h-11 bg-white px-3 font-extrabold disabled:opacity-60"
                       >
                         Render again
                       </button>
@@ -397,7 +397,7 @@ export function ClipsPanel({
                   </div>
                 )}
                 {r.output && (
-                  <div className="mt-2 grid place-items-center rounded-lg bg-ink p-1.5">
+                  <div className="mt-2 grid place-items-center bg-ink p-1.5">
                     <video
                       src={r.output.url}
                       controls
@@ -411,7 +411,7 @@ export function ClipsPanel({
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {r.output && (
-                    <a href={r.output.url} className="btn-pop flex min-h-11 items-center rounded-xl bg-white px-3 text-sm font-extrabold">
+                    <a href={r.output.url} className="btn-pop flex min-h-11 items-center bg-white px-3 text-sm font-extrabold">
                       Download
                     </a>
                   )}
@@ -422,7 +422,7 @@ export function ClipsPanel({
                       onClick={() => {
                         if (window.confirm(`Delete the clip “${r.name}”? This can’t be undone.`)) remove.mutate(r);
                       }}
-                      className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold disabled:opacity-60"
+                      className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold disabled:opacity-60"
                     >
                       Delete
                     </button>

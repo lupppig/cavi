@@ -2,17 +2,10 @@
 
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
-import { client, raise, useMe } from "@/lib/queries";
+import { Mark } from "@/components/home/site-header";
+import { client, displayName, raise, useMe } from "@/lib/queries";
 
-function Logo() {
-  return (
-    <svg viewBox="0 0 32 32" className="size-8" aria-hidden="true">
-      <rect x="2" y="2" width="28" height="28" rx="9" fill="var(--tomato)" stroke="var(--ink)" strokeWidth="3" />
-      <path d="M12 9.5 L23 16 L12 22.5 Z" fill="white" stroke="var(--ink)" strokeWidth="2.5" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
+/** The signed-in app's header: a black bar matching the homepage. */
 export function AccountHeader() {
   const me = useMe();
   const signOut = useMutation({
@@ -26,38 +19,52 @@ export function AccountHeader() {
 
   return (
     <>
-      <header className="sticker mx-auto flex h-16 max-w-4xl items-center justify-between gap-3 rounded-full bg-white pr-2 pl-3 sm:pl-4">
-        <Link href="/" className="flex min-h-11 items-center gap-2 text-2xl font-extrabold tracking-tight">
-          <Logo />
+      <header className="mx-auto flex min-h-16 max-w-4xl items-center justify-between gap-3 border-2 border-ink bg-ink px-3 text-paper sm:px-4">
+        <Link href="/" className="flex min-h-11 items-center gap-2.5 text-xl font-black tracking-tight [font-stretch:125%]">
+          <Mark />
           CAVI
         </Link>
         {me.data && (
-          <button
-            type="button"
-            onClick={() => signOut.mutate()}
-            disabled={signOut.isPending}
-            className="btn-pop min-h-11 rounded-full bg-white px-4 text-sm font-extrabold disabled:opacity-60 sm:px-5 sm:text-base"
-          >
-            {signOut.isPending ? "Signing out…" : "Sign out"}
-          </button>
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="hidden truncate font-mono text-xs uppercase sm:block">{displayName(me.data.user)}</span>
+            <button
+              type="button"
+              onClick={() => signOut.mutate()}
+              disabled={signOut.isPending}
+              className="min-h-11 border-2 border-paper px-4 text-xs font-extrabold tracking-wider uppercase transition-colors hover:bg-paper hover:text-ink disabled:opacity-60"
+            >
+              {signOut.isPending ? "Signing out…" : "Sign out"}
+            </button>
+          </div>
         )}
       </header>
       {signOut.isError && (
-        <p role="alert" className="sticker mx-auto mt-6 max-w-4xl rounded-2xl bg-tomato px-4 py-3 font-bold text-white">
-          {signOut.error.message}
-        </p>
+        <div className="mx-auto mt-6 max-w-4xl">
+          <Banner>{signOut.error.message}</Banner>
+        </div>
       )}
     </>
   );
 }
 
+/**
+ * A message strip. Errors are solid black with a "!" marker so they stand
+ * out without colour; confirmations are a light panel with a tick.
+ */
 export function Banner({ tone = "error", children }: { tone?: "error" | "ok"; children: React.ReactNode }) {
+  const error = tone === "error";
   return (
     <p
-      role={tone === "error" ? "alert" : "status"}
-      className={`sticker rounded-2xl px-4 py-3 font-bold ${tone === "error" ? "bg-tomato text-white" : "bg-mint"}`}
+      role={error ? "alert" : "status"}
+      className={`flex items-start gap-3 border-2 border-ink px-4 py-3 font-bold ${error ? "bg-ink text-paper" : "bg-paper-deep"}`}
     >
-      {children}
+      <span
+        aria-hidden="true"
+        className={`grid size-6 shrink-0 place-items-center font-mono text-sm font-black ${error ? "bg-paper text-ink" : "bg-ink text-paper"}`}
+      >
+        {error ? "!" : "✓"}
+      </span>
+      <span className="min-w-0 pt-px">{children}</span>
     </p>
   );
 }

@@ -1,28 +1,16 @@
 @import "tailwindcss";
 
 /* ==================================================================
-   CAVI app design tokens (the signed-in app). The homepage has its own
-   black-and-white system in app/home.css, scoped to .home.
+   CAVI design tokens: black and white, shared by the whole site. The
+   homepage adds its motion and section polarity in app/home.css.
    ================================================================== */
 
 :root {
-  --paper: #fff7e8;
-  --paper-deep: #ffeccb;
-  --ink: #141414;
-  --ink-soft: #4b4640;
+  --paper: #f7f7f4;
+  --paper-deep: #e6e6e0;
+  --ink: #050505;
+  --ink-soft: #45453f;
   --white: #ffffff;
-
-  --cobalt: #2e3bff;
-  --tomato: #ff5a36;
-  --sun: #ffd23f;
-  --mint: #3bd99a;
-  --pink: #ff8ad1;
-  --sky: #8fd3ff;
-  --lime: #c9f25b;
-
-  --skin-1: #8a5534;
-  --skin-2: #f2c49b;
-  --skin-3: #c98b5e;
 }
 
 @theme inline {
@@ -31,18 +19,8 @@
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
   --color-white: var(--white);
-  --color-cobalt: var(--cobalt);
-  --color-tomato: var(--tomato);
-  --color-sun: var(--sun);
-  --color-mint: var(--mint);
-  --color-pink: var(--pink);
-  --color-sky: var(--sky);
-  --color-lime: var(--lime);
-  --color-skin-1: var(--skin-1);
-  --color-skin-2: var(--skin-2);
-  --color-skin-3: var(--skin-3);
 
-  --font-sans: var(--font-bricolage);
+  --font-sans: var(--font-archivo);
   --font-mono: var(--font-geist-mono);
 }
 
@@ -56,53 +34,59 @@ body {
 }
 
 ::selection {
-  background: var(--sun);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
 }
 
 :focus-visible {
-  outline: 3px solid var(--cobalt);
+  outline: 3px solid var(--ink);
   outline-offset: 3px;
+}
+
+/* Headings in the signed-in app use the homepage's wide display cut. */
+.app h1,
+.app h2 {
+  font-stretch: 125%;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 0.95;
 }
 
 /* ------------------------------------------------------------------
    Stickers and buttons
    ------------------------------------------------------------------ */
 
-.sticker {
-  border: 3px solid var(--ink);
-  box-shadow: 5px 5px 0 var(--ink);
-}
+.sticker,
 .sticker-lg {
-  border: 3px solid var(--ink);
-  box-shadow: 8px 8px 0 var(--ink);
+  border: 2px solid var(--ink);
 }
 
 .btn-pop {
-  border: 3px solid var(--ink);
-  box-shadow: 4px 4px 0 var(--ink);
+  border: 2px solid var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   transition:
-    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
-    background-color 0.2s;
+    transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.btn-pop:hover {
+.btn-pop:hover:not(:disabled) {
   transform: translate(-2px, -2px);
-  box-shadow: 6px 6px 0 var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
 }
-.btn-pop:active {
-  transform: translate(3px, 3px);
-  box-shadow: 1px 1px 0 var(--ink);
+.btn-pop:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .tilt-hover {
-    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition:
+      transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .tilt-hover:hover {
-    transform: rotate(-1.5deg) translateY(-6px);
-  }
-  .tilt-hover:nth-child(even):hover {
-    transform: rotate(1.5deg) translateY(-6px);
+    transform: translate(-3px, -3px);
+    box-shadow: 6px 6px 0 var(--ink);
   }
 }

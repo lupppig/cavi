@@ -55,13 +55,13 @@ export default function AccountPage() {
         {me.isPending && <Loading />}
         {me.isError && me.error instanceof NotSignedIn && <SignedOut />}
         {me.isError && !(me.error instanceof NotSignedIn) && (
-          <div className="sticker-lg rounded-3xl bg-white p-6 sm:p-8">
+          <div className="sticker-lg bg-white p-6 sm:p-8">
             <h1 className="text-3xl font-extrabold tracking-tight">We couldn’t load your account</h1>
             <p className="mt-2 font-medium">{me.error.message}</p>
             <button
               type="button"
               onClick={() => me.refetch()}
-              className="btn-pop mt-6 min-h-12 rounded-2xl bg-cobalt px-6 font-extrabold text-white"
+              className="btn-pop mt-6 min-h-12 bg-ink px-6 font-extrabold text-white"
             >
               Try again
             </button>
@@ -77,15 +77,15 @@ function Loading() {
   return (
     <div aria-busy="true" className="space-y-6">
       <span className="sr-only">Loading your account…</span>
-      <div className="h-24 w-2/3 animate-pulse rounded-3xl bg-paper-deep" />
-      <div className="h-48 animate-pulse rounded-3xl bg-paper-deep" />
+      <div className="h-24 w-2/3 animate-pulse bg-paper-deep" />
+      <div className="h-48 animate-pulse bg-paper-deep" />
     </div>
   );
 }
 
 function SignedOut() {
   return (
-    <div className="sticker-lg rounded-[28px] bg-sun p-6 sm:p-10">
+    <div className="sticker-lg bg-white p-6 sm:p-10">
       <h1 className="text-4xl leading-tight font-extrabold tracking-tight sm:text-5xl">You’re not signed in</h1>
       <p className="mt-3 max-w-xl text-lg font-medium">
         Sign in with your Google account to see your account and workspaces. New here? Your account is
@@ -107,7 +107,7 @@ function SignedIn({ me }: { me: Me }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={me.user.avatar_url} alt="" referrerPolicy="no-referrer" className="sticker size-20 shrink-0 rounded-full object-cover" />
         ) : (
-          <span aria-hidden="true" className="sticker grid size-20 shrink-0 place-items-center rounded-full bg-pink text-2xl font-extrabold">
+          <span aria-hidden="true" className="sticker grid size-20 shrink-0 place-items-center rounded-full bg-ink text-white text-2xl font-extrabold">
             {initials(me.user)}
           </span>
         )}
@@ -133,13 +133,13 @@ function SignedIn({ me }: { me: Me }) {
             <li key={o.id}>
               <Link
                 href={`/account/organisations/${o.id}`}
-                className="tilt-hover sticker-lg block rounded-[28px] bg-mint p-2 focus-visible:outline-offset-4"
+                className="tilt-hover sticker-lg block bg-ink p-2 focus-visible:outline-offset-4"
               >
-                <span className="block rounded-[20px] border-[3px] border-ink bg-white p-5">
+                <span className="block border-2 border-ink bg-white p-5">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="mr-auto text-xl font-extrabold tracking-tight break-words">{o.name}</span>
-                    {o.personal && <span className="rounded-full border-2 border-ink bg-sun px-2.5 py-0.5 text-xs font-extrabold">Personal</span>}
-                    <span className="rounded-full border-2 border-ink bg-sky px-2.5 py-0.5 text-xs font-extrabold capitalize">{o.role}</span>
+                    {o.personal && <span className="border-2 border-ink bg-white px-2.5 py-0.5 text-xs font-extrabold">Personal</span>}
+                    <span className="border-2 border-ink bg-paper-deep px-2.5 py-0.5 text-xs font-extrabold capitalize">{o.role}</span>
                   </span>
                   <span className="mt-3 block text-sm font-semibold text-ink-soft">
                     {o.workspaces.length} workspace{o.workspaces.length === 1 ? "" : "s"} · {o.workspaces.map((w) => w.name).join(", ")}
@@ -154,7 +154,7 @@ function SignedIn({ me }: { me: Me }) {
 
       <CreateTeam />
 
-      <p className="rounded-2xl border-[3px] border-dashed border-ink bg-white/60 p-5 font-semibold">
+      <p className="border-2 border-dashed border-ink bg-white/60 p-5 font-semibold">
         Open an organisation to see its projects. CAVI is still being built: uploads, editing and renders will
         arrive in projects as they’re ready.
       </p>
@@ -182,16 +182,16 @@ function PendingInvitations() {
 
   if (!invitations.data?.length) return null;
   return (
-    <section aria-labelledby="inv-heading" className="sticker-lg rounded-[28px] bg-sun p-5 sm:p-7">
+    <section aria-labelledby="inv-heading" className="sticker-lg bg-white p-5 sm:p-7">
       <h2 id="inv-heading" className="text-2xl font-extrabold tracking-tight">
-        You’ve been invited 🎉
+        You’ve been invited
       </h2>
       {respond.isError && <div className="mt-4"><Banner>{respond.error.message}</Banner></div>}
       <ul className="mt-4 space-y-3">
         {invitations.data.map((inv) => {
           const busy = respond.isPending && respond.variables?.inv.id === inv.id;
           return (
-            <li key={inv.id} className="flex flex-col gap-3 rounded-2xl border-[3px] border-ink bg-white p-4 sm:flex-row sm:items-center">
+            <li key={inv.id} className="flex flex-col gap-3 border-2 border-ink bg-white p-4 sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 font-semibold">
                 <span className="font-extrabold">{inv.invited_by_name || "Someone"}</span> invited you to{" "}
                 <span className="font-extrabold">{inv.organisation_name}</span> as{" "}
@@ -202,7 +202,7 @@ function PendingInvitations() {
                   type="button"
                   disabled={busy}
                   onClick={() => respond.mutate({ inv, accept: true })}
-                  className="btn-pop min-h-11 flex-1 rounded-xl bg-cobalt px-4 font-extrabold text-white disabled:opacity-60 sm:flex-none"
+                  className="btn-pop min-h-11 flex-1 bg-ink px-4 font-extrabold text-white disabled:opacity-60 sm:flex-none"
                 >
                   Join
                 </button>
@@ -210,7 +210,7 @@ function PendingInvitations() {
                   type="button"
                   disabled={busy}
                   onClick={() => respond.mutate({ inv, accept: false })}
-                  className="btn-pop min-h-11 flex-1 rounded-xl bg-white px-4 font-extrabold disabled:opacity-60 sm:flex-none"
+                  className="btn-pop min-h-11 flex-1 bg-white px-4 font-extrabold disabled:opacity-60 sm:flex-none"
                 >
                   Decline
                 </button>
@@ -246,7 +246,7 @@ function CreateTeam() {
   }
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg rounded-[28px] bg-white p-5 sm:p-7">
+    <section aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-5 sm:p-7">
       <h2 id={`${id}-h`} className="text-2xl font-extrabold tracking-tight">
         Start a team
       </h2>
@@ -265,12 +265,12 @@ function CreateTeam() {
           required
           placeholder="e.g. Night Shift Studio"
           disabled={create.isPending}
-          className="min-h-12 w-full min-w-0 flex-1 rounded-2xl border-[3px] border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-cobalt/40 focus:outline-none"
+          className="min-h-12 w-full min-w-0 flex-1 border-2 border-ink bg-paper px-4 text-base font-medium focus:ring-4 focus:ring-ink/30 focus:outline-none"
         />
         <button
           type="submit"
           disabled={create.isPending || !name.trim()}
-          className="btn-pop min-h-12 rounded-2xl bg-tomato px-6 font-extrabold whitespace-nowrap text-white disabled:opacity-60"
+          className="btn-pop min-h-12 bg-ink px-6 font-extrabold whitespace-nowrap text-white disabled:opacity-60"
         >
           {create.isPending ? "Creating…" : "Create team"}
         </button>

@@ -77,7 +77,7 @@ export function TranscriptPanel({
         type="button"
         onClick={start}
         disabled={request.isPending}
-        className="btn-pop min-h-11 rounded-xl bg-cobalt px-3 text-sm font-extrabold text-white disabled:opacity-60"
+        className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
       >
         {request.isPending ? "Starting…" : label}
       </button>
@@ -91,18 +91,18 @@ export function TranscriptPanel({
       {t === null && startButton("Transcribe")}
       {busy && (
         <p className="flex items-center gap-2 text-sm font-semibold" role="status">
-          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-cobalt" />
+          <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
           Transcribing with {t.model_label}…
         </p>
       )}
       {t?.status === "failed" && (
-        <div className="rounded-xl border-2 border-ink bg-tomato/15 p-3 text-sm font-semibold" role="status">
+        <div className="border-2 border-ink bg-paper-deep p-3 text-sm font-semibold" role="status">
           <p>{t.error ?? "Transcription failed."}</p>
           <div className="mt-2">{startButton("Try again")}</div>
         </div>
       )}
       {t?.status === "ready" && (
-        <details className="group rounded-xl border-2 border-ink bg-white">
+        <details className="group border-2 border-ink bg-white">
           <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 font-extrabold">
             <span aria-hidden="true" className="transition-transform group-open:rotate-90">▸</span>
             Transcript
@@ -121,7 +121,7 @@ export function TranscriptPanel({
                     <button
                       type="button"
                       onClick={() => onSeek(s.start_ms)}
-                      className="mr-2 inline-flex min-h-8 items-center rounded-md bg-paper px-1.5 font-mono text-xs font-bold underline-offset-2 hover:underline"
+                      className="mr-2 inline-flex min-h-8 items-center bg-paper px-1.5 font-mono text-xs font-bold underline-offset-2 hover:underline"
                       aria-label={`Play from ${stamp(s.start_ms)}`}
                     >
                       {stamp(s.start_ms)}
@@ -142,7 +142,7 @@ export function TranscriptPanel({
                       setCopied(false);
                     }
                   }}
-                  className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold"
+                  className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold"
                 >
                   {copied ? "Copied!" : "Copy text"}
                 </button>

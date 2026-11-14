@@ -111,7 +111,7 @@ export function MediaSection({
   const visibleJobs = jobs.filter((j) => j.state !== "done");
 
   return (
-    <section aria-labelledby={`${id}-h`} className="sticker-lg rounded-[28px] bg-white p-3.5 sm:p-7">
+    <section aria-labelledby={`${id}-h`} className="sticker-lg bg-white p-3.5 sm:p-7">
       <div className="flex flex-wrap items-baseline gap-2">
         <h2 id={`${id}-h`} className="mr-auto text-2xl font-extrabold tracking-tight">
           Media {items.length > 0 && <span className="text-ink-soft">· {items.length}{media.hasNextPage ? "+" : ""}</span>}
@@ -133,11 +133,11 @@ export function MediaSection({
         </ul>
       )}
 
-      {media.isPending && <div className="mt-5 h-40 animate-pulse rounded-2xl bg-paper-deep" />}
+      {media.isPending && <div className="mt-5 h-40 animate-pulse bg-paper-deep" />}
       {media.isError && (
         <div className="mt-5 space-y-3">
           <Banner>{media.error.message}</Banner>
-          <button type="button" onClick={() => media.refetch()} className="btn-pop min-h-11 rounded-xl bg-white px-4 font-extrabold">
+          <button type="button" onClick={() => media.refetch()} className="btn-pop min-h-11 bg-white px-4 font-extrabold">
             Try again
           </button>
         </div>
@@ -165,7 +165,7 @@ export function MediaSection({
           type="button"
           onClick={() => media.fetchNextPage()}
           disabled={media.isFetchingNextPage}
-          className="btn-pop mt-5 min-h-12 w-full rounded-2xl bg-white px-6 font-extrabold disabled:opacity-60 sm:w-auto"
+          className="btn-pop mt-5 min-h-12 w-full bg-white px-6 font-extrabold disabled:opacity-60 sm:w-auto"
         >
           {media.isFetchingNextPage ? "Loading…" : "Show more"}
         </button>
@@ -194,11 +194,11 @@ function DropZone({ onFiles }: { onFiles: (files: File[]) => void }) {
       }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
-      className={`mt-4 flex flex-col items-center gap-3 rounded-2xl border-[3px] border-dashed border-ink p-6 text-center transition-colors ${over ? "bg-sun" : "bg-paper"}`}
+      className={`mt-4 flex flex-col items-center gap-3 border-2 border-dashed border-ink p-6 text-center transition-colors ${over ? "bg-paper-deep" : "bg-paper"}`}
     >
       <p className="text-lg font-extrabold">Drop footage, audio or stills here</p>
       <p className="text-sm font-semibold text-ink-soft">Video, audio, PNG, JPEG or WebP · up to 5 GB each</p>
-      <label htmlFor={`${id}-file`} className="btn-pop flex min-h-12 cursor-pointer items-center rounded-2xl bg-tomato px-6 font-extrabold text-white focus-within:ring-4 focus-within:ring-cobalt/40">
+      <label htmlFor={`${id}-file`} className="btn-pop flex min-h-12 cursor-pointer items-center bg-ink px-6 font-extrabold text-white focus-within:ring-4 focus-within:ring-ink/30">
         Choose files
         <input
           ref={input}
@@ -226,7 +226,7 @@ function UploadRow({ job, onCancel }: { job: Job; onCancel: () => void }) {
     job.state === "cancelled" ? "Cancelled" :
     job.error ?? "Failed";
   return (
-    <li className={`rounded-2xl border-2 border-ink p-3 ${job.state === "failed" ? "bg-tomato/15" : "bg-paper"}`}>
+    <li className={`border-2 border-ink p-3 ${job.state === "failed" ? "bg-paper-deep" : "bg-paper"}`}>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="truncate font-extrabold">{job.name}</p>
@@ -235,7 +235,7 @@ function UploadRow({ job, onCancel }: { job: Job; onCancel: () => void }) {
           </p>
         </div>
         {job.state === "sending" && (
-          <button type="button" onClick={onCancel} className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold">
+          <button type="button" onClick={onCancel} className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold">
             Cancel
           </button>
         )}
@@ -247,9 +247,9 @@ function UploadRow({ job, onCancel }: { job: Job; onCancel: () => void }) {
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={pct}
-          className="mt-2 h-3 overflow-hidden rounded-full border-2 border-ink bg-white"
+          className="mt-2 h-3 overflow-hidden border-2 border-ink bg-white"
         >
-          <div className="h-full bg-cobalt transition-[width]" style={{ width: `${pct}%` }} />
+          <div className="h-full bg-ink transition-[width]" style={{ width: `${pct}%` }} />
         </div>
       )}
     </li>
@@ -267,7 +267,7 @@ function stable(cacheKey: string, url: string | null, expiresAt: string | null) 
   return url;
 }
 
-const kindColour: Record<string, string> = { video: "bg-sky", audio: "bg-lime", image: "bg-pink" };
+const kindColour: Record<string, string> = { video: "bg-ink text-white", audio: "bg-paper-deep", image: "bg-white" };
 
 function formatDuration(ms: number) {
   const total = Math.round(ms / 1000);
@@ -361,7 +361,7 @@ function MediaCard({
   const details = describe(asset);
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-2xl border-[3px] border-ink bg-paper">
+    <article className="flex h-full flex-col overflow-hidden border-2 border-ink bg-paper">
       <div className="relative grid aspect-video place-items-center border-b-[3px] border-ink bg-ink">
         {url && asset.kind === "video" && (
           <video
@@ -384,7 +384,11 @@ function MediaCard({
         )}
         {url && asset.kind === "audio" && (
           <div className="flex w-full flex-col items-center gap-4 p-4">
-            <span aria-hidden="true" className="text-4xl">🎧</span>
+            <span aria-hidden="true" className="flex h-10 items-center gap-1">
+              {[0.4, 0.9, 0.6, 1, 0.5, 0.8, 0.35].map((h, i) => (
+                <span key={i} className="block w-1.5 bg-paper" style={{ height: `${h * 100}%` }} />
+              ))}
+            </span>
             <audio
               ref={player as React.RefObject<HTMLAudioElement>}
               src={url}
@@ -397,7 +401,7 @@ function MediaCard({
           </div>
         )}
         {busy && (
-          <span className="pointer-events-none absolute top-2 left-2 flex items-center gap-1.5 rounded-full border-2 border-ink bg-sun px-2.5 py-0.5 text-xs font-extrabold">
+          <span className="pointer-events-none absolute top-2 left-2 flex items-center gap-1.5 border-2 border-ink bg-white px-2.5 py-0.5 text-xs font-extrabold">
             <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-ink" />
             Processing…
           </span>
@@ -407,7 +411,7 @@ function MediaCard({
         <p className="font-extrabold break-all">{asset.filename}</p>
         <p className="mt-1 flex flex-wrap items-center gap-2 text-sm font-semibold text-ink-soft">
           {asset.kind && (
-            <span className={`rounded-full border-2 border-ink px-2 py-0.5 text-xs font-extrabold text-ink capitalize ${kindColour[asset.kind] ?? "bg-white"}`}>
+            <span className={`border-2 border-ink px-2 py-0.5 text-xs font-extrabold text-ink capitalize ${kindColour[asset.kind] ?? "bg-white"}`}>
               {asset.kind}
             </span>
           )}
@@ -420,14 +424,14 @@ function MediaCard({
           </p>
         )}
         {status === "failed" && (
-          <div className="mt-3 rounded-xl border-2 border-ink bg-tomato/15 p-3 text-sm font-semibold" role="status">
+          <div className="mt-3 border-2 border-ink bg-paper-deep p-3 text-sm font-semibold" role="status">
             <p>{asset.processing.error ?? "Processing failed."}</p>
             {canUpload && (
               <button
                 type="button"
                 disabled={retry.isPending}
                 onClick={() => retry.mutate()}
-                className="btn-pop mt-2 min-h-11 rounded-xl bg-white px-3 font-extrabold disabled:opacity-60"
+                className="btn-pop mt-2 min-h-11 bg-white px-3 font-extrabold disabled:opacity-60"
               >
                 {retry.isPending ? "Retrying…" : "Try again"}
               </button>
@@ -461,7 +465,7 @@ function MediaCard({
         {retry.isError && <div className="mt-3"><Banner>{retry.error.message}</Banner></div>}
         <div className="mt-auto flex gap-2 pt-4">
           {url && (
-            <a href={url} className="btn-pop flex min-h-11 items-center rounded-xl bg-white px-3 text-sm font-extrabold">
+            <a href={url} className="btn-pop flex min-h-11 items-center bg-white px-3 text-sm font-extrabold">
               Download
             </a>
           )}
@@ -472,7 +476,7 @@ function MediaCard({
               onClick={() => {
                 if (window.confirm(`Delete “${asset.filename}”? This can’t be undone.`)) remove.mutate();
               }}
-              className="btn-pop min-h-11 rounded-xl bg-white px-3 text-sm font-extrabold disabled:opacity-60"
+              className="btn-pop min-h-11 bg-white px-3 text-sm font-extrabold disabled:opacity-60"
             >
               {remove.isPending ? "Deleting…" : "Delete"}
             </button>
