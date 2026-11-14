@@ -1,5 +1,5 @@
 // Command media-worker processes uploaded media: it probes each file with
-// FFmpeg and makes thumbnails, and, when GEMINI_API_KEY is set, transcribes
+// FFmpeg, makes thumbnails and renders clips, and, when GEMINI_API_KEY is set, transcribes
 // speech and finds highlights with the organisation's AI model. It is deployed
 // separately from the API (it needs FFmpeg, more CPU and the AI key) and
 // scales by running more copies.
@@ -21,6 +21,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/media"
+	"github.com/lupppig/cavi/apps/api/internal/render"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 )
 
@@ -68,6 +69,10 @@ func run() error {
 	opts := jobs.WorkerOptions{Concurrency: cfg.Concurrency}
 	workers := []*jobs.Worker{
 		jobs.NewWorker(db, bus, jobs.KindMediaProcess, media.NewProcessor(db, store, ff, logger), logger, opts),
+		// Rendering is CPU-heavy and slow: fewer at once, long leases, and
+		// FFmpeg's own timeout (at most 25 minutes) stays inside the lease.
+		jobs.NewWorker(db, bus, jobs.KindRenderClip, render.NewRenderer(db, store, ff, logger), logger,
+			jobs.WorkerOptions{Concurrency: max(1, cfg.Concurrency/2), Lease: 30 * time.Minute}),
 	}
 	if cfg.GeminiAPIKey != "" {
 		gemini, err := ai.NewGemini(ctx, cfg.GeminiAPIKey)
