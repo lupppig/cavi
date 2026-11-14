@@ -31,6 +31,7 @@ import (
 const (
 	KindMediaProcess    = "media.process"
 	KindMediaTranscribe = "media.transcribe"
+	KindMediaHighlights = "media.highlights"
 )
 
 // Message is what travels over NATS. It is versioned so workers can
