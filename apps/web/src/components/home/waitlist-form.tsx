@@ -3,6 +3,7 @@
 import { useId, useState, type FormEvent } from "react";
 import type { Discipline } from "@cavi/api-client";
 import { api } from "@/lib/api";
+import { Listbox } from "./listbox";
 
 const disciplines: { value: Discipline; label: string }[] = [
   { value: "clipper", label: "Clipping & short-form" },
@@ -120,23 +121,13 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
           className={`${field} aria-invalid:border-[3px] aria-invalid:border-dashed ${layout === "row" ? "" : "sm:col-span-2"}`}
         />
 
-        <label htmlFor={`${id}-discipline`} className="sr-only">
-          What do you make? (optional)
-        </label>
-        <select
-          id={`${id}-discipline`}
+        <Listbox
           name="discipline"
-          defaultValue=""
+          label="What do you make? (optional)"
+          placeholder="What do you make? (optional)"
+          options={disciplines}
           disabled={unavailable || submitting}
-          className={`${field} bg-[var(--bg)]`}
-        >
-          <option value="">What do you make?</option>
-          {disciplines.map((d) => (
-            <option key={d.value} value={d.value}>
-              {d.label}
-            </option>
-          ))}
-        </select>
+        />
 
         {/* Honeypot: hidden from people and assistive tech; bots tend to fill it. */}
         <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
