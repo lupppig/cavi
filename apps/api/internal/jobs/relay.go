@@ -65,7 +65,7 @@ func (r *Relay) PublishPending(ctx context.Context) (int, error) {
 	sent := 0
 	err := r.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		rows, err := tx.QueryContext(ctx, `
-			SELECT id, kind, organisation_id, coalesce(media_asset_id::text, ''), coalesce(correlation_id, '')
+			SELECT id, kind, organisation_id, coalesce(media_asset_id::text, ''), coalesce(render_id::text, ''), coalesce(correlation_id, '')
 			FROM jobs
 			WHERE status = 'queued' AND (published_at IS NULL OR published_at < ?)
 			ORDER BY created_at LIMIT 100
@@ -76,7 +76,7 @@ func (r *Relay) PublishPending(ctx context.Context) (int, error) {
 		var msgs []Message
 		for rows.Next() {
 			m := Message{Version: MessageVersion}
-			if err := rows.Scan(&m.JobID, &m.Kind, &m.OrganisationID, &m.MediaAssetID, &m.CorrelationID); err != nil {
+			if err := rows.Scan(&m.JobID, &m.Kind, &m.OrganisationID, &m.MediaAssetID, &m.RenderID, &m.CorrelationID); err != nil {
 				rows.Close()
 				return err
 			}

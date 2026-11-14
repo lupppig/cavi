@@ -16,7 +16,8 @@
 //   - Failures are retried with backoff up to the job's max attempts;
 //     errors marked Permanent are not retried.
 //
-// Messages carry identifiers only, never file contents.
+// Messages carry identifiers only (job, organisation, media file or
+// render), never file contents.
 package jobs
 
 import (
@@ -32,6 +33,7 @@ const (
 	KindMediaProcess    = "media.process"
 	KindMediaTranscribe = "media.transcribe"
 	KindMediaHighlights = "media.highlights"
+	KindRenderClip      = "render.clip"
 )
 
 // Message is what travels over NATS. It is versioned so workers can
@@ -42,6 +44,7 @@ type Message struct {
 	Kind           string `json:"kind"`
 	OrganisationID string `json:"organisation_id"`
 	MediaAssetID   string `json:"media_asset_id,omitempty"`
+	RenderID       string `json:"render_id,omitempty"`
 	CorrelationID  string `json:"correlation_id,omitempty"`
 }
 
@@ -54,6 +57,7 @@ type Job struct {
 	Kind           string
 	OrganisationID string
 	MediaAssetID   string
+	RenderID       string
 	CorrelationID  string
 	// Attempt is 1 for the first run.
 	Attempt     int
@@ -65,6 +69,7 @@ type New struct {
 	Kind           string
 	OrganisationID string
 	MediaAssetID   string
+	RenderID       string
 	CorrelationID  string
 	MaxAttempts    int
 }
@@ -80,9 +85,9 @@ func Enqueue(ctx context.Context, db bun.IDB, n New) (string, error) {
 	}
 	var id string
 	err := db.QueryRowContext(ctx, `
-		INSERT INTO jobs (kind, organisation_id, media_asset_id, correlation_id, max_attempts)
-		VALUES (?, ?, NULLIF(?, '')::uuid, NULLIF(?, ''), ?) RETURNING id`,
-		n.Kind, n.OrganisationID, n.MediaAssetID, n.CorrelationID, n.MaxAttempts).Scan(&id)
+		INSERT INTO jobs (kind, organisation_id, media_asset_id, render_id, correlation_id, max_attempts)
+		VALUES (?, ?, NULLIF(?, '')::uuid, NULLIF(?, '')::uuid, NULLIF(?, ''), ?) RETURNING id`,
+		n.Kind, n.OrganisationID, n.MediaAssetID, n.RenderID, n.CorrelationID, n.MaxAttempts).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("enqueue job: %w", err)
 	}

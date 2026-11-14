@@ -104,6 +104,7 @@ func (w *world) state(id string) jobState {
 type fakeHandler struct {
 	mu        sync.Mutex
 	calls     map[string]int
+	jobs      map[string]Job
 	fail      int
 	permanent bool
 	failed    map[string]error
@@ -111,12 +112,13 @@ type fakeHandler struct {
 }
 
 func newHandler() *fakeHandler {
-	return &fakeHandler{calls: map[string]int{}, failed: map[string]error{}}
+	return &fakeHandler{calls: map[string]int{}, jobs: map[string]Job{}, failed: map[string]error{}}
 }
 
 func (h *fakeHandler) Process(ctx context.Context, j Job) error {
 	h.mu.Lock()
 	h.calls[j.ID]++
+	h.jobs[j.ID] = j
 	n := h.calls[j.ID]
 	h.mu.Unlock()
 	if h.delay > 0 {
@@ -138,18 +140,26 @@ func (h *fakeHandler) Failed(_ context.Context, j Job, err error) error {
 	return nil
 }
 
+func (h *fakeHandler) job(id string) Job {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.jobs[id]
+}
+
 func (h *fakeHandler) count(id string) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.calls[id]
 }
 
-func (w *world) run(h Handler) (context.CancelFunc, *Relay) {
+func (w *world) run(h Handler) (context.CancelFunc, *Relay) { return w.runKind(KindMediaProcess, h) }
+
+func (w *world) runKind(kind string, h Handler) (context.CancelFunc, *Relay) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	relay := NewRelay(w.db, w.bus, logger)
 	relay.Interval = 100 * time.Millisecond
-	worker := NewWorker(w.db, w.bus, KindMediaProcess, h, logger, WorkerOptions{
+	worker := NewWorker(w.db, w.bus, kind, h, logger, WorkerOptions{
 		Concurrency: 2, Lease: 10 * time.Second,
 		RetryDelay: func(int) time.Duration { return 100 * time.Millisecond },
 	})
@@ -311,5 +321,53 @@ func TestExpiredLeaseIsTakenOver(t *testing.T) {
 	s := w.waitFor(id, "succeeded")
 	if s.attempts != 2 || h.count(id) != 1 {
 		t.Fatalf("state = %+v, calls = %d", s, h.count(id))
+	}
+}
+
+// render creates a render (and its project) to hang a job off.
+func (w *world) render() string {
+	w.t.Helper()
+	var proj, id string
+	if err := w.db.QueryRowContext(w.ctx, `SELECT project_id FROM media_assets WHERE id = ?`, w.asset()).Scan(&proj); err != nil {
+		w.t.Fatal(err)
+	}
+	if err := w.db.QueryRowContext(w.ctx, `
+		INSERT INTO renders (organisation_id, project_id, name, composition, composition_version)
+		VALUES (?, ?, 'clip', '{}', 1) RETURNING id`, w.org, proj).Scan(&id); err != nil {
+		w.t.Fatal(err)
+	}
+	return id
+}
+
+func TestRenderJobsCarryTheirRender(t *testing.T) {
+	w := newWorld(t)
+	h := newHandler()
+	render, other := w.render(), w.render()
+	id, err := Enqueue(w.ctx, w.db, New{Kind: KindRenderClip, OrganisationID: w.org, RenderID: render})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE jobs SET published_at = now() WHERE id = ?`, id); err != nil {
+		t.Fatal(err)
+	}
+	// A message naming another render of the same organisation never runs.
+	forged := Message{Version: MessageVersion, JobID: id, Kind: KindRenderClip, OrganisationID: w.org, RenderID: other}
+	if err := w.bus.Publish(w.ctx, forged); err != nil {
+		t.Fatal(err)
+	}
+	w.runKind(KindRenderClip, h)
+	time.Sleep(time.Second)
+	if h.count(id) != 0 || w.state(id).status != "queued" {
+		t.Fatalf("forged render message ran the job: calls %d, state %+v", h.count(id), w.state(id))
+	}
+	// A job the relay publishes reaches the handler with its render. (A new
+	// job: JetStream deduplicates messages by job ID.)
+	id, err = Enqueue(w.ctx, w.db, New{Kind: KindRenderClip, OrganisationID: w.org, RenderID: render})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.waitFor(id, "succeeded")
+	if got := h.job(id); got.RenderID != render || got.MediaAssetID != "" {
+		t.Fatalf("handler got %+v", got)
 	}
 }
