@@ -32,9 +32,11 @@ func NewGemini(ctx context.Context, apiKey string) (*Gemini, error) {
 
 const transcriptionPrompt = "Transcribe this audio verbatim in its original language. " +
 	"Split it into segments of one sentence or short phrase spoken by a single speaker. " +
-	"Give start and end as clock times from the start of this audio, minutes:seconds with one decimal, " +
-	"for example 0:07.4 or 12:31.0. " +
+	"Give start and end as clock times from the start of this audio, minutes:seconds with two decimals, " +
+	"for example 0:07.42 or 12:31.05. " +
+	"For each segment, list its words in order, each with the clock time it starts. " +
 	"Label speakers 'Speaker 1', 'Speaker 2', ... in order of first appearance. " +
+	"In speakers, describe how each speaker's voice sounds: woman, man, or unclear if you are not sure. " +
 	"Give the main spoken language as a BCP-47 code in language. " +
 	"Do not summarise, translate, correct or invent words. If there is no speech, return no segments."
 
@@ -42,31 +44,64 @@ var transcriptionSchema = &genai.Schema{
 	Type: genai.TypeObject,
 	Properties: map[string]*genai.Schema{
 		"language": {Type: genai.TypeString},
+		"speakers": {
+			Type: genai.TypeArray,
+			Items: &genai.Schema{
+				Type: genai.TypeObject,
+				Properties: map[string]*genai.Schema{
+					"label": {Type: genai.TypeString},
+					"voice": {Type: genai.TypeString, Enum: []string{VoiceWoman, VoiceMan, VoiceUnclear}},
+				},
+				Required:         []string{"label", "voice"},
+				PropertyOrdering: []string{"label", "voice"},
+			},
+		},
 		"segments": {
 			Type: genai.TypeArray,
 			Items: &genai.Schema{
 				Type: genai.TypeObject,
 				Properties: map[string]*genai.Schema{
-					"start":   {Type: genai.TypeString, Description: "M:SS.s from the start of the audio"},
-					"end":     {Type: genai.TypeString, Description: "M:SS.s from the start of the audio"},
+					"start":   {Type: genai.TypeString, Description: "M:SS.ss from the start of the audio"},
+					"end":     {Type: genai.TypeString, Description: "M:SS.ss from the start of the audio"},
 					"speaker": {Type: genai.TypeString},
 					"text":    {Type: genai.TypeString},
+					"words": {
+						Type: genai.TypeArray,
+						Items: &genai.Schema{
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"start": {Type: genai.TypeString, Description: "M:SS.ss when the word starts"},
+								"word":  {Type: genai.TypeString},
+							},
+							Required:         []string{"start", "word"},
+							PropertyOrdering: []string{"start", "word"},
+						},
+					},
 				},
-				Required:         []string{"start", "end", "speaker", "text"},
-				PropertyOrdering: []string{"start", "end", "speaker", "text"},
+				Required:         []string{"start", "end", "speaker", "text", "words"},
+				PropertyOrdering: []string{"start", "end", "speaker", "text", "words"},
 			},
 		},
 	},
-	Required: []string{"language", "segments"},
+	Required:         []string{"language", "speakers", "segments"},
+	PropertyOrdering: []string{"language", "speakers", "segments"},
 }
 
 type transcriptionJSON struct {
 	Language string `json:"language"`
+	Speakers []struct {
+		Label string `json:"label"`
+		Voice string `json:"voice"`
+	} `json:"speakers"`
 	Segments []struct {
 		Start   string `json:"start"`
 		End     string `json:"end"`
 		Speaker string `json:"speaker"`
 		Text    string `json:"text"`
+		Words   []struct {
+			Start string `json:"start"`
+			Word  string `json:"word"`
+		} `json:"words"`
 	} `json:"segments"`
 }
 
@@ -91,7 +126,19 @@ func (g *Gemini) Transcribe(ctx context.Context, model Model, audio []byte, mime
 		if !ok1 || !ok2 {
 			return Transcript{}, usage, fmt.Errorf("%w: segment %d has times %q-%q, not M:SS.s", ErrInvalidOutput, i, s.Start, s.End)
 		}
-		t.Segments[i] = Segment{StartMS: start, EndMS: end, Speaker: s.Speaker, Text: s.Text}
+		seg := Segment{StartMS: start, EndMS: end, Speaker: s.Speaker, Text: s.Text}
+		for _, w := range s.Words {
+			at, ok := parseClock(w.Start)
+			if !ok {
+				seg.Words = nil // unusable word times: estimate instead
+				break
+			}
+			seg.Words = append(seg.Words, Word{StartMS: at, Text: w.Word})
+		}
+		t.Segments[i] = seg
+	}
+	for _, sp := range out.Speakers {
+		t.Speakers = append(t.Speakers, Speaker{Label: sp.Label, Voice: sp.Voice})
 	}
 	t, err = ValidateTranscript(t, durationMS)
 	return t, usage, err

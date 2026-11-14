@@ -97,12 +97,39 @@ func (u *Usage) Add(o Usage) {
 	u.OutputTokens += o.OutputTokens
 }
 
+// Word is one spoken word and when it is said.
+type Word struct {
+	StartMS int64
+	EndMS   int64
+	Text    string
+}
+
 // Segment is one stretch of speech.
 type Segment struct {
 	StartMS int64
 	EndMS   int64
 	Speaker string
 	Text    string
+	// Words are the segment's words with their times, or empty when the
+	// model's word times didn't hold up (callers then estimate).
+	Words []Word
+}
+
+// How a speaker's voice sounds, as suggested by the model. It describes the
+// voice only; people can correct it.
+const (
+	VoiceWoman   = "woman"
+	VoiceMan     = "man"
+	VoiceUnclear = "unclear"
+)
+
+// ValidVoice reports whether v is one of the voice labels.
+func ValidVoice(v string) bool { return v == VoiceWoman || v == VoiceMan || v == VoiceUnclear }
+
+// Speaker is a speaker label in a transcript and how their voice sounds.
+type Speaker struct {
+	Label string
+	Voice string
 }
 
 // Transcript is a validated transcription of one piece of audio. Times are
@@ -110,6 +137,8 @@ type Segment struct {
 type Transcript struct {
 	Language string
 	Segments []Segment
+	// Speakers lists every label used in Segments, once.
+	Speakers []Speaker
 }
 
 // Transcriber turns audio into a transcript.
@@ -125,4 +154,5 @@ type Transcriber interface {
 // v2 asks for clock times (M:SS.s): with millisecond integers the models
 // sometimes wrote seconds or minutes-and-seconds ("226" for 2:26), which
 // stayed within the audio and so passed validation with wrong times.
-const TranscriptionPromptVersion = "transcription-v2"
+// v3 adds each word's start time and how each speaker's voice sounds.
+const TranscriptionPromptVersion = "transcription-v3"

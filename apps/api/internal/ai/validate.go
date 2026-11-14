@@ -14,6 +14,14 @@ const (
 	maxSpeakerRunes  = 40
 	timestampSlackMS = 2000
 	minSegmentMS     = 300
+	// wordSlackMS is how far outside its segment a word may start before
+	// the segment's word times are distrusted (within it, words are
+	// clamped to the segment).
+	wordSlackMS = 500
+	// maxEstimatedShare is the share of segments that may lack usable word
+	// times before the whole output is treated as invalid.
+	maxEstimatedShare  = 0.2
+	maxWordsPerSegment = 400
 )
 
 var languagePattern = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`)
@@ -66,9 +74,77 @@ func ValidateTranscript(t Transcript, durationMS int64) (Transcript, error) {
 			}
 			s.EndMS = min(s.EndMS, durationMS)
 		}
+		s.Words = validWords(s)
 		out = append(out, s)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].StartMS < out[j].StartMS })
+	estimated := 0
+	for _, s := range out {
+		if len(s.Words) == 0 {
+			estimated++
+		}
+	}
+	if len(out) > 0 && float64(estimated) > maxEstimatedShare*float64(len(out)) {
+		return bad("%d of %d segments have no usable word times", estimated, len(out))
+	}
 	t.Segments = out
+	t.Speakers = speakers(out, t.Speakers)
 	return t, nil
+}
+
+// validWords returns the segment's words with checked times (each ends
+// where the next starts; the last at the segment's end), or nil if the
+// model's word times don't hold up.
+func validWords(s Segment) []Word {
+	if len(s.Words) == 0 || len(s.Words) > maxWordsPerSegment {
+		return nil
+	}
+	out := make([]Word, 0, len(s.Words))
+	prev := s.StartMS
+	for _, w := range s.Words {
+		w.Text = strings.TrimSpace(w.Text)
+		if w.Text == "" {
+			continue
+		}
+		if w.StartMS < s.StartMS-wordSlackMS || w.StartMS > s.EndMS+wordSlackMS || w.StartMS < prev-wordSlackMS/5 {
+			return nil
+		}
+		w.StartMS = min(max(w.StartMS, s.StartMS, prev), s.EndMS)
+		prev = w.StartMS
+		out = append(out, w)
+	}
+	for i := range out {
+		if i+1 < len(out) {
+			out[i].EndMS = out[i+1].StartMS
+		} else {
+			out[i].EndMS = s.EndMS
+		}
+	}
+	return out
+}
+
+// speakers lists each label used in segments once, in order of first
+// appearance, with the voice the model gave it (unclear if none or not a
+// known value).
+func speakers(segs []Segment, given []Speaker) []Speaker {
+	voice := map[string]string{}
+	for _, sp := range given {
+		if v := strings.TrimSpace(sp.Voice); ValidVoice(v) {
+			voice[strings.TrimSpace(sp.Label)] = v
+		}
+	}
+	var out []Speaker
+	seen := map[string]bool{}
+	for _, s := range segs {
+		if seen[s.Speaker] {
+			continue
+		}
+		seen[s.Speaker] = true
+		v := voice[s.Speaker]
+		if v == "" {
+			v = VoiceUnclear
+		}
+		out = append(out, Speaker{Label: s.Speaker, Voice: v})
+	}
+	return out
 }

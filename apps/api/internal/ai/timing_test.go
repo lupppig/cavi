@@ -13,12 +13,49 @@ import (
 // synthetic two-voice podcast (espeak-ng); podcast-two-voices.json has
 // each line's true start and end. A model passes when, on every run,
 // the transcript is valid, nearly every line is found, the median start
-// error is at most 1 s and 90% of lines start within 2 s.
+// error (measured with the model's word times) is at most 0.5 s, 90% of
+// lines start within 1 s, and no speaker's voice is labelled as the
+// opposite of how it sounds ("unclear" is allowed).
 
 type truthLine struct {
+	Speaker string `json:"speaker"`
 	StartMS int64  `json:"start_ms"`
 	EndMS   int64  `json:"end_ms"`
 	Text    string `json:"text"`
+}
+
+// truthVoices is how the fixture's espeak-ng voices sound: en-gb (the
+// default male voice) and en-us+f3 (a female variant).
+var truthVoices = map[string]string{"Speaker 1": VoiceMan, "Speaker 2": VoiceWoman}
+
+// voiceMistakes maps each transcript label to the true speaker it mostly
+// covers and returns labels whose voice is the opposite of the truth
+// ("unclear" is not a mistake).
+func voiceMistakes(truth []truthLine, tr Transcript) []string {
+	votes := map[string]map[string]int64{}
+	for _, sg := range tr.Segments {
+		for _, l := range truth {
+			if o := min(sg.EndMS, l.EndMS) - max(sg.StartMS, l.StartMS); o > 0 {
+				if votes[sg.Speaker] == nil {
+					votes[sg.Speaker] = map[string]int64{}
+				}
+				votes[sg.Speaker][l.Speaker] += o
+			}
+		}
+	}
+	var wrong []string
+	for _, sp := range tr.Speakers {
+		best, bestN := "", int64(0)
+		for who, n := range votes[sp.Label] {
+			if n > bestN {
+				best, bestN = who, n
+			}
+		}
+		if want := truthVoices[best]; sp.Voice != VoiceUnclear && want != "" && sp.Voice != want {
+			wrong = append(wrong, sp.Label+" sounds like "+want+", labelled "+sp.Voice)
+		}
+	}
+	return wrong
 }
 
 func loadTruth(t *testing.T) (int64, []truthLine) {
@@ -62,7 +99,23 @@ func timedWords[T any](spans []T, get func(T) (int64, int64, string)) []timedWor
 // seconds at its first matched word, sorted.
 func startErrors(truth []truthLine, segs []Segment) []float64 {
 	tw := timedWords(truth, func(l truthLine) (int64, int64, string) { return l.StartMS, l.EndMS, l.Text })
-	sw := timedWords(segs, func(s Segment) (int64, int64, string) { return s.StartMS, s.EndMS, s.Text })
+	// Segments with word times are measured by them (what captions use);
+	// others by spreading their words evenly.
+	var sw []timedWord
+	for i, sg := range segs {
+		if len(sg.Words) == 0 {
+			for _, tw := range timedWords([]Segment{sg}, func(s Segment) (int64, int64, string) { return s.StartMS, s.EndMS, s.Text }) {
+				tw.line = i
+				sw = append(sw, tw)
+			}
+			continue
+		}
+		for _, w := range sg.Words {
+			for _, tok := range words(w.Text) {
+				sw = append(sw, timedWord{w: tok, ms: float64(w.StartMS), line: i})
+			}
+		}
+	}
 	n, m := len(tw), len(sw)
 	dp := make([][]int, n+1)
 	for i := range dp {
@@ -129,9 +182,20 @@ func TestEvalTranscriptionTiming(t *testing.T) {
 					t.Fatalf("run %d: found %d of %d lines", run, len(errs), len(truth))
 				}
 				med, p90 := errs[len(errs)/2], errs[len(errs)*9/10]
-				t.Logf("run %d: %d segments, start error median %.2fs, p90 %.2fs", run, len(tr.Segments), med, p90)
-				if med > 1 || p90 > 2 {
-					t.Errorf("run %d: timestamps drift (median %.1fs, p90 %.1fs)", run, med, p90)
+				withWords := 0
+				for _, sg := range tr.Segments {
+					if len(sg.Words) > 0 {
+						withWords++
+					}
+				}
+				t.Logf("run %d: %d segments (%d with word times), start error median %.2fs, p90 %.2fs, speakers %+v",
+					run, len(tr.Segments), withWords, med, p90, tr.Speakers)
+				// Word-by-word captions need starts within half a second.
+				if med > 0.5 || p90 > 1 {
+					t.Errorf("run %d: timestamps drift (median %.2fs, p90 %.2fs)", run, med, p90)
+				}
+				if wrong := voiceMistakes(truth, tr); len(wrong) > 0 {
+					t.Errorf("run %d: voice labelled wrongly: %v", run, wrong)
 				}
 			}
 		})
