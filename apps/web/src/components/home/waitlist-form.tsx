@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type CSSProperties, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import type { Discipline } from "@cavi/api-client";
 import { api } from "@/lib/api";
 
@@ -19,21 +19,6 @@ type State =
   | { kind: "submitting" }
   | { kind: "joined" }
   | { kind: "error"; message: string; field?: "email" | "discipline" };
-
-const confettiColors = ["var(--tomato)", "var(--sun)", "var(--cobalt)", "var(--mint)", "var(--pink)", "var(--sky)"];
-// Deterministic burst: 28 pieces spread around a circle.
-const confetti = Array.from({ length: 28 }, (_, i) => {
-  const angle = (i / 28) * Math.PI * 2 + (i % 3) * 0.2;
-  const dist = 90 + (i % 5) * 28;
-  return {
-    x: `${Math.round(Math.cos(angle) * dist)}px`,
-    y: `${Math.round(Math.sin(angle) * dist - 40)}px`,
-    spin: `${(i % 2 ? 1 : -1) * (180 + i * 23)}deg`,
-    delay: `${(i % 4) * 30}ms`,
-    color: confettiColors[i % confettiColors.length],
-    round: i % 3 === 0,
-  };
-});
 
 export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row" }) {
   const id = useId();
@@ -85,27 +70,16 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
 
   if (state.kind === "joined") {
     return (
-      <div role="status" className="relative">
-        <div aria-hidden="true" className="pointer-events-none absolute top-1/2 left-1/2 z-10">
-          {confetti.map((c, i) => (
-            <span
-              key={i}
-              className={`confetti-piece absolute size-3 border-2 border-ink ${c.round ? "rounded-full" : "rounded-[2px]"}`}
-              style={
-                {
-                  background: c.color,
-                  "--x": c.x,
-                  "--y": c.y,
-                  "--spin": c.spin,
-                  "--delay": c.delay,
-                } as CSSProperties
-              }
-            />
-          ))}
-        </div>
-        <div className="sticker -rotate-1 rounded-3xl bg-mint p-5 sm:p-6">
-          <p className="text-2xl font-extrabold">You&rsquo;re on the list! 🎬</p>
-          <p className="mt-1 font-medium">We&rsquo;ll email you when early access opens.</p>
+      <div role="status" className="[perspective:900px]">
+        <div className="ticket flipped relative flex max-w-xl items-stretch border-2 border-current bg-[var(--fg)] text-[var(--bg)]">
+          <div className="flex-1 p-5 sm:p-6">
+            <p className="mono text-[11px] uppercase opacity-70">Access ticket · early access</p>
+            <p className="display mt-2 text-3xl sm:text-4xl">You&rsquo;re on the list.</p>
+            <p className="mt-2 font-medium">We&rsquo;ll email you when early access opens.</p>
+          </div>
+          <div className="mono flex w-14 items-center justify-center border-l-2 border-dashed border-current text-xs font-bold tracking-[0.3em] uppercase [writing-mode:vertical-rl]">
+            Admit one
+          </div>
         </div>
       </div>
     );
@@ -117,7 +91,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
   const emailInvalid = state.kind === "error" && state.field === "email";
 
   const field =
-    "min-h-13 w-full min-w-0 rounded-2xl border-[3px] border-ink bg-white px-4 text-base font-medium text-ink placeholder:text-ink-soft/70 focus:outline-none focus-visible:outline-none focus:ring-4 focus:ring-cobalt/40 disabled:opacity-60";
+    "min-h-13 w-full min-w-0 border-2 border-current bg-transparent px-4 text-base font-medium text-current placeholder:text-current placeholder:opacity-50 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-current focus:ring-offset-2 focus:ring-offset-[var(--bg)] disabled:opacity-50";
 
   return (
     <form onSubmit={onSubmit}>
@@ -143,7 +117,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
           disabled={unavailable || submitting}
           aria-invalid={emailInvalid || undefined}
           aria-describedby={emailInvalid ? errorId : undefined}
-          className={`${field} aria-invalid:border-tomato ${layout === "row" ? "" : "sm:col-span-2"}`}
+          className={`${field} aria-invalid:border-[3px] aria-invalid:border-dashed ${layout === "row" ? "" : "sm:col-span-2"}`}
         />
 
         <label htmlFor={`${id}-discipline`} className="sr-only">
@@ -154,11 +128,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
           name="discipline"
           defaultValue=""
           disabled={unavailable || submitting}
-          className={`${field} appearance-none bg-[length:12px] bg-[right_1rem_center] bg-no-repeat pr-10`}
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%23141414' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
-          }}
+          className={`${field} bg-[var(--bg)]`}
         >
           <option value="">What do you make?</option>
           {disciplines.map((d) => (
@@ -177,7 +147,7 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
         <button
           type="submit"
           disabled={unavailable || submitting}
-          className="btn-pop min-h-13 rounded-2xl bg-cobalt px-6 text-base font-extrabold whitespace-nowrap text-white disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn min-h-13 whitespace-nowrap"
         >
           {submitting ? "Joining…" : "Join the waitlist →"}
         </button>
@@ -185,15 +155,15 @@ export function WaitlistForm({ layout = "stacked" }: { layout?: "stacked" | "row
 
       <p id={errorId} aria-live="polite" className="mt-3 min-h-5 text-sm font-bold">
         {state.kind === "error" && (
-          <span className="inline-block rounded-lg bg-tomato px-2 py-0.5 text-white">{state.message}</span>
+          <span className="inline-block bg-[var(--fg)] px-2 py-0.5 text-[var(--bg)]">{state.message}</span>
         )}
         {unavailable && (
-          <span className="inline-block rounded-lg bg-tomato px-2 py-0.5 text-white">
+          <span className="inline-block bg-[var(--fg)] px-2 py-0.5 text-[var(--bg)]">
             Signups are unavailable right now. Please check back soon.
           </span>
         )}
       </p>
-      <p className="text-sm font-medium text-ink-soft">
+      <p className="text-sm font-medium opacity-70">
         We&rsquo;ll only use your email to contact you about CAVI early access.
       </p>
     </form>
