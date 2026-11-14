@@ -119,6 +119,57 @@ func (r *Runner) Audio(ctx context.Context, input string, offset, length time.Du
 	return out, nil
 }
 
+// Clip describes one rendered clip: a stretch of the input, cropped and
+// scaled to an exact output size, encoded as H.264/AAC MP4. It carries no
+// product meaning; callers decide the numbers.
+type Clip struct {
+	Start, Length time.Duration
+	// Crop is the source region, in display pixels (after rotation).
+	CropX, CropY, CropW, CropH int
+	// Width and Height are the output size; both even.
+	Width, Height int
+	// Audio keeps the first audio stream; otherwise the clip is silent.
+	Audio bool
+}
+
+// Clip renders c from input to the local file output, replacing it.
+// Seeking before the input and re-encoding makes the cut frame-accurate.
+func (r *Runner) Clip(ctx context.Context, input, output string, c Clip, timeout time.Duration) error {
+	if c.Length <= 0 || c.CropW <= 0 || c.CropH <= 0 || c.Width <= 0 || c.Height <= 0 || c.Width%2 != 0 || c.Height%2 != 0 {
+		return fmt.Errorf("ffmpeg: invalid clip %+v", c)
+	}
+	args := []string{
+		"-v", "error", "-nostdin", "-y", "-protocol_whitelist", protocols,
+		"-ss", strconv.FormatFloat(c.Start.Seconds(), 'f', 3, 64),
+		"-i", input,
+		"-t", strconv.FormatFloat(c.Length.Seconds(), 'f', 3, 64),
+		"-map", "0:v:0",
+	}
+	if c.Audio {
+		args = append(args, "-map", "0:a:0", "-c:a", "aac", "-b:a", "160k", "-ar", "48000")
+	} else {
+		args = append(args, "-an")
+	}
+	args = append(args,
+		"-vf", fmt.Sprintf("crop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1", c.CropW, c.CropH, c.CropX, c.CropY, c.Width, c.Height),
+		"-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-profile:v", "high",
+		"-movflags", "+faststart", "-f", "mp4", output)
+	_, err := r.runFor(ctx, timeout, input, r.FFmpeg, args...)
+	return err
+}
+
+// ProbeFile inspects a local file CAVI produced (never user input).
+func (r *Runner) ProbeFile(ctx context.Context, path string) (Probe, error) {
+	out, err := r.run(ctx, path, r.FFprobe,
+		"-v", "error", "-protocol_whitelist", "file",
+		"-print_format", "json", "-show_format", "-show_streams",
+		"-i", "file:"+path)
+	if err != nil {
+		return Probe{}, err
+	}
+	return parseProbe(out)
+}
+
 var urlPattern = regexp.MustCompile(`https?://\S+`)
 
 // scrub removes URLs (which carry signatures) from FFmpeg output.
@@ -140,7 +191,11 @@ var unreadableSignals = []string{
 }
 
 func (r *Runner) run(ctx context.Context, input, bin string, args ...string) ([]byte, error) {
-	timeout := r.Timeout
+	return r.runFor(ctx, r.Timeout, input, bin, args...)
+}
+
+// runFor runs bin with its own timeout (default 2 minutes).
+func (r *Runner) runFor(ctx context.Context, timeout time.Duration, input, bin string, args ...string) ([]byte, error) {
 	if timeout <= 0 {
 		timeout = 2 * time.Minute
 	}

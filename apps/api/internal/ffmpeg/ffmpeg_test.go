@@ -107,6 +107,29 @@ func TestRealFFmpeg(t *testing.T) {
 		t.Fatalf("extracted audio = %+v, %v", ap, err)
 	}
 
+	// A 9:16 clip from the middle, with and without sound.
+	out := filepath.Join(dir, "vertical.mp4")
+	c := Clip{Start: 500 * time.Millisecond, Length: time.Second, CropX: 219, CropY: 0, CropW: 202, CropH: 360,
+		Width: 360, Height: 640, Audio: true}
+	if err := r.Clip(ctx, srv.URL+"/clip.mp4", out, c, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	vp, err := r.ProbeFile(ctx, out)
+	if err != nil || vp.Width != 360 || vp.Height != 640 || vp.VideoCodec != "h264" || vp.AudioCodec != "aac" ||
+		vp.Duration < 950*time.Millisecond || vp.Duration > 1150*time.Millisecond {
+		t.Fatalf("clip = %+v, %v", vp, err)
+	}
+	c.Audio = false
+	if err := r.Clip(ctx, srv.URL+"/clip.mp4", out, c, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if vp, err := r.ProbeFile(ctx, out); err != nil || vp.HasAudio || !vp.HasVideo {
+		t.Fatalf("silent clip = %+v, %v", vp, err)
+	}
+	if err := r.Clip(ctx, srv.URL+"/clip.mp4", out, Clip{Length: time.Second, CropW: 2, CropH: 2, Width: 3, Height: 4}, time.Minute); err == nil {
+		t.Fatal("odd output size accepted")
+	}
+
 	if _, err := r.Probe(ctx, srv.URL+"/fake.mp4"); !errors.Is(err, ErrUnreadable) {
 		t.Fatalf("fake: err = %v", err)
 	}
