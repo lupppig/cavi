@@ -1,17 +1,61 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Inter } from "next/font/google";
 import { useEffect, useId, useRef, useState } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, raise, type Composition, type MediaAsset, type Project, type Render } from "@/lib/queries";
+import { useTranscript } from "./transcript-panel";
 
-/** Output shapes, matching the API's composition aspects. */
-const shapes: { aspect: Composition["aspect"]; w: number; h: number; hint: string }[] = [
-  { aspect: "9:16", w: 9, h: 16, hint: "Reels, TikTok, Shorts" },
-  { aspect: "1:1", w: 1, h: 1, hint: "Square feed" },
-  { aspect: "4:5", w: 4, h: 5, hint: "Portrait feed" },
-  { aspect: "16:9", w: 16, h: 9, hint: "YouTube, web" },
+// The caption font the render worker burns in (Inter Black).
+const inter = Inter({ subsets: ["latin"], weight: "900" });
+
+/** Output shapes, matching the API's composition aspects and render sizes. */
+const shapes: { aspect: Composition["aspect"]; w: number; h: number; outW: number; outH: number; hint: string }[] = [
+  { aspect: "9:16", w: 9, h: 16, outW: 1080, outH: 1920, hint: "Reels, TikTok, Shorts" },
+  { aspect: "1:1", w: 1, h: 1, outW: 1080, outH: 1080, hint: "Square feed" },
+  { aspect: "4:5", w: 4, h: 5, outW: 1080, outH: 1350, hint: "Portrait feed" },
+  { aspect: "16:9", w: 16, h: 9, outW: 1920, outH: 1080, hint: "YouTube, web" },
 ];
+
+type CaptionStyle = "bold" | "boxed";
+const captionChoices: { value: CaptionStyle | ""; label: string }[] = [
+  { value: "", label: "Off" },
+  { value: "bold", label: "Bold" },
+  { value: "boxed", label: "Boxed" },
+];
+
+/**
+ * Caption size and placement in output pixels. Mirrors layoutFor in the
+ * render worker (internal/render/captions.go) so the preview matches.
+ */
+function captionLayout(outW: number, outH: number) {
+  const size = Math.round(Math.min(outW, outH) * 0.075);
+  return {
+    size,
+    marginV: Math.round(outH * (outH > outW ? 0.22 : 0.08)),
+    maxChars: Math.floor((outW * 0.84) / (size * 0.62)),
+    outline: Math.round(size * 0.09),
+    pad: Math.round(size * 0.2),
+    side: Math.floor(outW / 12),
+  };
+}
+
+/** The first caption the clip will show: wrap() in the worker, first cue. */
+function firstCaption(text: string, maxChars: number) {
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of text.split(/\s+/).filter(Boolean)) {
+    if (!cur) cur = w;
+    else if (cur.length + 1 + w.length <= maxChars) cur += ` ${w}`;
+    else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.slice(0, 2);
+}
 
 const MIN_MS = 1000;
 const MAX_MS = 10 * 60_000;
@@ -57,10 +101,18 @@ export function useRenders(project: Project, asset: MediaAsset) {
 function useCreateRender(project: Project, asset: MediaAsset) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, composition }: { name: string; composition: Composition }) => {
+    mutationFn: async ({
+      name,
+      composition,
+      captions,
+    }: {
+      name: string;
+      composition: Composition;
+      captions: CaptionStyle | "";
+    }) => {
       const { data, error, response } = await client().POST("/api/v1/organisations/{orgID}/projects/{projectID}/renders", {
         params: { path: { orgID: project.organisation_id, projectID: project.id } },
-        body: { name, composition },
+        body: { name, composition, ...(captions ? { captions: { style: captions } } : {}) },
       });
       if (!data) raise(error, response.status, "Could not start the render.");
       return data;
@@ -98,7 +150,11 @@ export function ClipComposer({
   const [end, setEnd] = useState(initial.endMS);
   const [aspect, setAspect] = useState<Composition["aspect"]>("9:16");
   const [focus, setFocus] = useState(50);
+  const [captions, setCaptions] = useState<CaptionStyle | "">("");
   const create = useCreateRender(project, asset);
+  const transcript = useTranscript(project, asset);
+  const segments = transcript.data?.status === "ready" ? transcript.data.segments : null;
+  const spoken = segments?.find((sg) => sg.end_ms > start && sg.start_ms < end);
   const frame = useRef<HTMLVideoElement>(null);
 
   const shape = shapes.find((s) => s.aspect === aspect)!;
@@ -132,13 +188,14 @@ export function ClipComposer({
       {
         name: name.trim() || "Clip",
         composition: {
-          version: 1,
+          version: captions ? 2 : 1,
           source_asset_id: asset.id,
           start_ms: Math.round(start),
           end_ms: Math.round(end),
           aspect,
           focus: crops ? focus / 100 : 0.5,
         },
+        captions,
       },
       { onSuccess: onClose },
     );
@@ -236,23 +293,27 @@ export function ClipComposer({
       <div>
         <p className="text-sm font-extrabold">Framing</p>
         <div className="mt-1 grid place-items-center bg-ink p-2">
-          <video
-            ref={frame}
-            src={url}
-            muted
-            playsInline
-            preload="metadata"
-            aria-label="How the clip will be framed"
-            className="block bg-ink"
+          <div
+            className="relative [container-type:inline-size]"
             style={{
               // Width-led sizing keeps the exact shape at any width (at most
               // 16rem tall), so the preview crops exactly as the render will.
               width: `min(100%, calc(16rem * ${shape.w} / ${shape.h}))`,
               aspectRatio: `${shape.w} / ${shape.h}`,
-              objectFit: "cover",
-              objectPosition: `${focus}% ${focus}%`,
             }}
-          />
+          >
+            <video
+              ref={frame}
+              src={url}
+              muted
+              playsInline
+              preload="metadata"
+              aria-label="How the clip will be framed"
+              className="block h-full w-full bg-ink"
+              style={{ objectFit: "cover", objectPosition: `${focus}% ${focus}%` }}
+            />
+            {captions && spoken && <CaptionPreview style={captions} text={spoken.text} outW={shape.outW} outH={shape.outH} />}
+          </div>
         </div>
         {crops ? (
           <label className="mt-2 block">
@@ -273,10 +334,46 @@ export function ClipComposer({
         )}
       </div>
 
+      <fieldset>
+        <legend className="text-sm font-extrabold">Captions</legend>
+        <div className="mt-1 grid grid-cols-3 gap-1.5">
+          {captionChoices.map((c) => {
+            const unavailable = c.value !== "" && !segments;
+            return (
+              <label
+                key={c.label}
+                className={`flex min-h-11 min-w-0 items-center justify-center border-2 border-ink px-1 text-sm font-extrabold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 ${
+                  captions === c.value ? "bg-ink text-white" : "bg-white"
+                } ${unavailable ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
+              >
+                <input
+                  type="radio"
+                  name={`${id}-captions`}
+                  checked={captions === c.value}
+                  disabled={unavailable}
+                  onChange={() => setCaptions(c.value)}
+                  className="sr-only"
+                />
+                {c.label}
+              </label>
+            );
+          })}
+        </div>
+        <p className="mt-1 text-xs font-semibold text-ink-soft">
+          {!segments
+            ? "Transcribe this file to add captions."
+            : captions && !spoken
+              ? "There’s no speech in this part of the transcript."
+              : captions
+                ? "Burned in from the transcript. Check it for mistakes first."
+                : "Captions come from the transcript."}
+        </p>
+      </fieldset>
+
       <div className="flex flex-wrap gap-2">
         <button
           type="submit"
-          disabled={create.isPending || !!problem}
+          disabled={create.isPending || !!problem || (!!captions && !spoken)}
           className="btn-pop min-h-11 bg-ink px-3 text-sm font-extrabold text-white disabled:opacity-60"
         >
           {create.isPending ? "Starting…" : "Render clip"}
@@ -286,6 +383,44 @@ export function ClipComposer({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The first caption, drawn over the framing preview at the size and place
+ * the renderer will burn it in (container units scale output pixels).
+ */
+function CaptionPreview({ style, text, outW, outH }: { style: CaptionStyle; text: string; outW: number; outH: number }) {
+  const lay = captionLayout(outW, outH);
+  const px = (n: number) => `${(n / outW) * 100}cqw`;
+  return (
+    <div
+      aria-hidden="true"
+      className={`${inter.className} pointer-events-none absolute inset-x-0 text-center leading-[1.2] text-white`}
+      style={{
+        bottom: `${(lay.marginV / outH) * 100}%`,
+        paddingInline: px(lay.side),
+        fontSize: px(lay.size),
+        fontWeight: 900,
+        letterSpacing: "normal",
+        textTransform: "none",
+      }}
+    >
+      {firstCaption(text, lay.maxChars).map((line, i) => (
+        <div key={i}>
+          <span
+            className={style === "boxed" ? "bg-black" : ""}
+            style={
+              style === "boxed"
+                ? { padding: `0 ${px(lay.pad)}`, boxDecorationBreak: "clone" }
+                : { WebkitTextStroke: `${px(lay.outline * 2)} black`, paintOrder: "stroke fill" }
+            }
+          >
+            {line}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -373,6 +508,7 @@ export function ClipsPanel({
                   <p className="min-w-0 font-extrabold break-words">{r.name}</p>
                   <p className="font-mono text-xs font-bold text-ink-soft">
                     {c.aspect} · {length(c.end_ms - c.start_ms)} · from {stampTenths(c.start_ms)}
+                    {c.captions ? ` · ${c.captions.style} captions` : ""}
                   </p>
                 </div>
                 {busy && (
@@ -388,7 +524,10 @@ export function ClipsPanel({
                       <button
                         type="button"
                         disabled={retry.isPending}
-                        onClick={() => retry.mutate({ name: r.name, composition: r.composition })}
+                        onClick={() => {
+                          const { captions: cap, ...composition } = r.composition;
+                          retry.mutate({ name: r.name, composition, captions: cap?.style ?? "" });
+                        }}
                         className="btn-pop mt-2 min-h-11 bg-white px-3 font-extrabold disabled:opacity-60"
                       >
                         Render again
