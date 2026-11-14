@@ -187,3 +187,18 @@ func TestASS(t *testing.T) {
 		t.Errorf("%d word events", n)
 	}
 }
+
+func TestHighlightStaysVisible(t *testing.T) {
+	green := CaptionOptions{Colors: CaptionColors{Text: "#39FF14", Highlight: "#FFFFFF", Stroke: "#000000"}}
+	if got := highlightFor("#39FF14", green); got != "#FFFFFF" {
+		t.Errorf("normal highlight = %s", got)
+	}
+	// A white-voiced speaker with a white highlight: use the text colour.
+	if got := highlightFor("#ffffff", green); got != "#39FF14" {
+		t.Errorf("clashing highlight = %s", got)
+	}
+	white := CaptionOptions{Colors: CaptionColors{Text: "#FFFFFF", Highlight: "#FFFFFF", Stroke: "#000000"}}
+	if got := highlightFor("#FFFFFF", white); got != "#FFE600" {
+		t.Errorf("all-white highlight = %s", got)
+	}
+}

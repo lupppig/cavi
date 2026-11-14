@@ -318,6 +318,19 @@ func (c *Captions) validate(lengthMS int64) error {
 	return nil
 }
 
+// highlightFor returns the colour for the spoken word over text of colour
+// base: the chosen highlight, or, when that matches the text (so the
+// highlight would be invisible), the first of the caption's text colour,
+// yellow and green that doesn't.
+func highlightFor(base string, o CaptionOptions) string {
+	for _, c := range []string{o.Colors.Highlight, o.Colors.Text, "#FFE600", "#39FF14"} {
+		if !strings.EqualFold(c, base) {
+			return c
+		}
+	}
+	return o.Colors.Highlight
+}
+
 // assColor turns #RRGGBB into ASS &H00BBGGRR (opaque).
 func assColor(hex string) string {
 	h := strings.TrimPrefix(hex, "#")
@@ -350,7 +363,7 @@ func ASS(c Captions, aspect string) string {
 	if opts.Style == CaptionsBoxed {
 		border, outline = 3, int(math.Round(float64(lay.FontSize)*0.2)) // the box's padding
 	}
-	text, hl, stroke := assColor(opts.Colors.Text), assColor(opts.Colors.Highlight), assColor(opts.Colors.Stroke)
+	text, stroke := assColor(opts.Colors.Text), assColor(opts.Colors.Stroke)
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n", sh.Width, sh.Height)
 	b.WriteString("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
@@ -358,10 +371,11 @@ func ASS(c Captions, aspect string) string {
 		lay.FontSize, text, text, stroke, stroke, border, outline, lay.Alignment, sh.Width/12, sh.Width/12, lay.MarginV)
 	b.WriteString("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 	for _, q := range c.Cues {
-		base := text
+		baseHex := opts.Colors.Text
 		if col, ok := opts.SpeakerColors[q.Speaker]; ok {
-			base = assColor(col)
+			baseHex = col
 		}
+		base, hl := assColor(baseHex), assColor(highlightFor(baseHex, opts))
 		lineSizes := []int{}
 		for _, l := range strings.Split(q.Text, "\n") {
 			lineSizes = append(lineSizes, len(strings.Fields(l)))
