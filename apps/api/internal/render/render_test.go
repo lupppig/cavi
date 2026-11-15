@@ -48,6 +48,11 @@ func (m *memStore) ReadHead(context.Context, string, int64) ([]byte, error) {
 	return nil, errors.New("not used")
 }
 func (m *memStore) Put(context.Context, string, string, []byte) error { return errors.New("not used") }
+
+// Download writes the key as the file's contents (sources aren't stored).
+func (m *memStore) Download(_ context.Context, key, path string) error {
+	return os.WriteFile(path, []byte(key), 0o600)
+}
 func (m *memStore) PutFile(_ context.Context, key, _, filename, path string) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -635,5 +640,18 @@ func TestRendersFollowTheBrief(t *testing.T) {
 	}
 	if r, _ := w.svc.Get(w.ctx, ana.id, org, proj, music.ID); r.Status != StatusFailed || r.Error != msgExcluded {
 		t.Fatalf("render = %s %q", r.Status, r.Error)
+	}
+}
+
+func TestCheckCatchesShortVideo(t *testing.T) {
+	want := ffmpeg.Clip{Length: 60 * time.Second, Width: 1080, Height: 1920, Audio: true}
+	ok := ffmpeg.Probe{HasVideo: true, HasAudio: true, Width: 1080, Height: 1920, Duration: 60 * time.Second, VideoDuration: 60 * time.Second}
+	if err := check(ok, want); err != nil {
+		t.Fatal(err)
+	}
+	short := ok
+	short.VideoDuration = 34500 * time.Millisecond
+	if err := check(short, want); !errors.Is(err, errBadOutput) {
+		t.Fatalf("video stopping at 34.5 s under 60 s of audio passed: %v", err)
 	}
 }

@@ -1,6 +1,7 @@
 package render
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -160,6 +161,16 @@ func TestRenderMontage(t *testing.T) {
 	}
 	if len(ff.montages) != 1 || len(ff.montages[0].Parts) != 2 || len(ff.montages[0].Parts[0].Blur) != 1 || ff.montages[0].Parts[1].Audio {
 		t.Fatalf("montages = %+v", ff.montages)
+	}
+	// Multi-segment montages read local copies of their sources, removed
+	// after the render.
+	for _, p := range ff.montages[0].Parts {
+		if !strings.HasPrefix(p.Input, "/") {
+			t.Fatalf("part input %q is not a local copy", p.Input)
+		}
+		if _, err := os.Stat(p.Input); !os.IsNotExist(err) {
+			t.Fatalf("local copy %s left behind: %v", p.Input, err)
+		}
 	}
 	if len(ff.ass) != 1 || !strings.Contains(ff.ass[0], "Diamonds built this school") || !strings.Contains(ff.ass[0], ",Cap,") {
 		t.Fatalf("overlay = %v", ff.ass)
@@ -322,6 +333,9 @@ func TestRenderMontageWithSignOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := ff.montages[0]
+	if !strings.HasPrefix(m.Parts[0].Input, "https://") {
+		t.Fatalf("a single-segment montage should stream its source, got %q", m.Parts[0].Input)
+	}
 	if len(m.Voices) != 2 || m.Voices[1].At != 7500*time.Millisecond || m.Voices[1].Length != 2*time.Second || m.Voices[1].Duck != signOffDuck {
 		t.Fatalf("plan voices = %+v", m.Voices)
 	}

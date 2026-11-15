@@ -93,6 +93,14 @@ func TestS3RoundTrip(t *testing.T) {
 		t.Fatalf("head = %q, %v", head, err)
 	}
 
+	local := filepath.Join(t.TempDir(), "copy")
+	if err := s.Download(ctx, key, local); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(local); string(got) != string(body) {
+		t.Fatalf("downloaded %d bytes, want the object", len(got))
+	}
+
 	url, _, err := s.PresignDownload(ctx, key, time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -173,5 +181,8 @@ func TestS3RoundTrip(t *testing.T) {
 	}
 	if _, err := s.ReadHead(ctx, key, 4); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("read after delete: %v", err)
+	}
+	if err := s.Download(ctx, key, filepath.Join(t.TempDir(), "gone")); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("download after delete: %v", err)
 	}
 }

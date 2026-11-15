@@ -49,6 +49,15 @@ func (m *memStore) Stat(_ context.Context, key string) (storage.ObjectInfo, erro
 	}
 	return storage.ObjectInfo{Size: int64(len(b))}, nil
 }
+func (m *memStore) Download(_ context.Context, key, path string) error {
+	m.mu.Lock()
+	b, ok := m.objects[key]
+	m.mu.Unlock()
+	if !ok {
+		return storage.ErrNotFound
+	}
+	return os.WriteFile(path, b, 0o600)
+}
 func (m *memStore) ReadHead(_ context.Context, key string, n int64) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

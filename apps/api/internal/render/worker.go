@@ -176,6 +176,11 @@ func check(p ffmpeg.Probe, want ffmpeg.Clip) error {
 	if d := p.Duration - want.Length; d < -200*time.Millisecond || d > 200*time.Millisecond {
 		return fmt.Errorf("%w: %v long, want %v", errBadOutput, p.Duration, want.Length)
 	}
+	// The picture must last as long as the sound: an input that stops
+	// early leaves the video short under full-length audio.
+	if d := p.VideoDuration - want.Length; p.VideoDuration > 0 && (d < -200*time.Millisecond || d > 200*time.Millisecond) {
+		return fmt.Errorf("%w: video is %v long, want %v", errBadOutput, p.VideoDuration, want.Length)
+	}
 	return nil
 }
 
@@ -264,8 +269,30 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 		return err
 	}
 	length := time.Duration(c.LengthMS()) * time.Millisecond
+	dir, err := os.MkdirTemp(r.TempDir, "render-")
+	if err != nil {
+		return fmt.Errorf("render work dir: %w", err)
+	}
+	defer os.RemoveAll(dir)
 	inputs := map[string]string{}
+	n := 0
 	for id, key := range keys {
+		if len(c.Segments) > 1 {
+			// FFmpeg reads segments one after another, so a later
+			// segment's connection sits idle while earlier ones play, and
+			// storage may drop it: the picture would stop early. Sources
+			// of multi-segment montages are read from local copies.
+			path := filepath.Join(dir, fmt.Sprintf("source-%d", n))
+			n++
+			if err := r.store.Download(ctx, key, path); err != nil {
+				if errors.Is(err, storage.ErrNotFound) {
+					return jobs.Permanent(errSourceGone)
+				}
+				return err
+			}
+			inputs[id] = path
+			continue
+		}
 		url, _, err := r.store.PresignDownload(ctx, key, timeoutFor(length)+10*time.Minute)
 		if err != nil {
 			return err
@@ -302,11 +329,6 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 			return err
 		}
 	}
-	dir, err := os.MkdirTemp(r.TempDir, "render-")
-	if err != nil {
-		return fmt.Errorf("render work dir: %w", err)
-	}
-	defer os.RemoveAll(dir)
 	if ass := OverlayASS(c.Captions, c.Hook, c.SignOff, c.SignOffStartMS(), c.LengthMS(), c.Aspect); ass != "" {
 		plan.Subtitles = filepath.Join(dir, "overlay.ass")
 		plan.FontsDir = r.FontsDir

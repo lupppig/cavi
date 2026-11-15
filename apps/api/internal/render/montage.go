@@ -19,18 +19,18 @@ const MontageVersion = 3
 
 // Montage limits.
 const (
-	MaxSegments       = 20
-	MaxTiles          = 2 // extra scenes in a split-screen segment
-	MinSegment        = 500 * time.Millisecond
-	MaxTreatments     = 20 // blur boxes or muted ranges per segment
-	MaxHookRunes      = 120
-	MaxSignOffRunes   = 80
+	MaxSegments     = 20
+	MaxTiles        = 2 // extra scenes in a split-screen segment
+	MinSegment      = 500 * time.Millisecond
+	MaxTreatments   = 20 // blur boxes or muted ranges per segment
+	MaxHookRunes    = 120
+	MaxSignOffRunes = 80
 	// SignOffMS is how long a silent sign-off card shows; a spoken one
 	// shows while it's said, plus signOffTailMS.
 	SignOffMS     = 2500
 	signOffTailMS = 500
 	// signOffDuck is the clip's own sound under a spoken sign-off.
-	signOffDuck = 0.2
+	signOffDuck       = 0.2
 	minBlurFraction   = 0.02
 	minHookMS         = 500
 	montageFPS        = 30

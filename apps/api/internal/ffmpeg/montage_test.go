@@ -269,3 +269,42 @@ func TestRealMusicBed(t *testing.T) {
 	}
 	t.Logf("music under speech %.1f dB, alone %.1f dB", underSpeech, alone)
 }
+
+// TestRealMontageLocalInputs reads parts from local files, as the worker
+// does for multi-segment montages, and checks the picture lasts.
+func TestRealMontageLocalInputs(t *testing.T) {
+	r := New()
+	if err := r.Available(); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "talk")
+	if out, err := exec.Command("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25", "-f", "lavfi", "-i",
+		"sine=frequency=440:sample_rate=48000", "-t", "8", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-f", "mp4", src).CombinedOutput(); err != nil {
+		t.Fatalf("generate: %v %s", err, out)
+	}
+	out := filepath.Join(dir, "montage.mp4")
+	m := Montage{Width: 360, Height: 640, FPS: 30, Parts: []MontagePart{
+		{Input: src, Start: time.Second, Length: 2 * time.Second, CropX: 219, CropW: 202, CropH: 360, Audio: true},
+		{Input: src, Start: 4 * time.Second, Length: 3 * time.Second, CropX: 219, CropW: 202, CropH: 360, Audio: true},
+	}}
+	if err := r.Montage(context.Background(), out, m, 2*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.ProbeFile(context.Background(), out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.VideoDuration < 4900*time.Millisecond || p.VideoDuration > 5100*time.Millisecond {
+		t.Fatalf("video lasts %v, want 5s", p.VideoDuration)
+	}
+	// Local inputs may only be video containers: a playlist is refused.
+	playlist := filepath.Join(dir, "list")
+	if err := os.WriteFile(playlist, []byte("#EXTM3U\n#EXTINF:1,\n"+src+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.Parts = []MontagePart{{Input: playlist, Length: time.Second, CropX: 219, CropW: 202, CropH: 360}}
+	if err := r.Montage(context.Background(), out, m, time.Minute); err == nil {
+		t.Fatal("read a playlist as a local input")
+	}
+}

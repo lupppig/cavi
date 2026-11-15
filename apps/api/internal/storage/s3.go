@@ -159,6 +159,33 @@ func (s *S3) ReadHead(ctx context.Context, key string, n int64) ([]byte, error) 
 	return b, nil
 }
 
+// Download implements Store.
+func (s *S3) Download(ctx context.Context, key, path string) error {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		if isNotFound(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("download object: %w", err)
+	}
+	defer out.Body.Close()
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("download object: %w", err)
+	}
+	n, err := io.Copy(f, out.Body)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("download object: %w", err)
+	}
+	if want := aws.ToInt64(out.ContentLength); want > 0 && n != want {
+		return fmt.Errorf("download object: got %d of %d bytes", n, want)
+	}
+	return nil
+}
+
 // Put implements Store.
 func (s *S3) Put(ctx context.Context, key, contentType string, body []byte) error {
 	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{

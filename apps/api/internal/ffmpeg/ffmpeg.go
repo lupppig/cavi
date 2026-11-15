@@ -59,6 +59,10 @@ type Probe struct {
 	// Width and Height are display dimensions, after rotation metadata.
 	Width, Height int
 	FrameRate     float64
+	// VideoDuration is the video stream's own length, when the file
+	// records it: a video cut short shows here while Duration, the longest
+	// stream, doesn't.
+	VideoDuration time.Duration
 	HasAudio      bool
 	AudioCodec    string
 	AudioChannels int
@@ -294,9 +298,10 @@ func parseProbe(out []byte) (Probe, error) {
 			if p.FrameRate == 0 {
 				p.FrameRate = rate(s.RFrameRate)
 			}
-			if p.Duration == 0 {
-				if d, err := strconv.ParseFloat(s.Duration, 64); err == nil && d > 0 {
-					p.Duration = time.Duration(d * float64(time.Second))
+			if d, err := strconv.ParseFloat(s.Duration, 64); err == nil && d > 0 && !math.IsInf(d, 0) {
+				p.VideoDuration = time.Duration(d * float64(time.Second))
+				if p.Duration == 0 {
+					p.Duration = p.VideoDuration
 				}
 			}
 		case "audio":

@@ -203,6 +203,21 @@ func (m Montage) filterGraph() (string, error) {
 	return g.String(), nil
 }
 
+// localFormats are the containers a local input may be read as: the video
+// formats uploads are checked to be.
+const localFormats = "mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi"
+
+// input is the options and -i for one input. Input options apply only to
+// the -i they precede, so each input gets its own whitelist: URLs may only
+// use network protocols; a local file (an absolute path CAVI made) may only
+// be read as a file, in a video container.
+func input(in string) []string {
+	if strings.HasPrefix(in, "/") {
+		return []string{"-protocol_whitelist", "file", "-format_whitelist", localFormats, "-i", "file:" + in}
+	}
+	return []string{"-protocol_whitelist", protocols, "-i", in}
+}
+
 // Montage renders m to the local file output, replacing it. Each part is
 // seeked before its input and re-encoded, so cuts are frame-accurate.
 func (r *Runner) Montage(ctx context.Context, output string, m Montage, timeout time.Duration) error {
@@ -213,20 +228,23 @@ func (r *Runner) Montage(ctx context.Context, output string, m Montage, timeout 
 	if err != nil {
 		return err
 	}
-	args := []string{"-v", "error", "-nostdin", "-y", "-protocol_whitelist", protocols}
+	args := []string{"-v", "error", "-nostdin", "-y"}
 	for _, p := range m.Parts {
-		args = append(args, "-ss", secs(p.Start), "-t", secs(p.Length), "-i", p.Input)
+		args = append(args, "-ss", secs(p.Start), "-t", secs(p.Length))
+		args = append(args, input(p.Input)...)
 	}
 	for _, p := range m.Parts {
 		for _, t := range p.Stack {
-			args = append(args, "-ss", secs(t.Start), "-t", secs(p.Length), "-i", t.Input)
+			args = append(args, "-ss", secs(t.Start), "-t", secs(p.Length))
+			args = append(args, input(t.Input)...)
 		}
 	}
 	for _, v := range m.Voices {
-		args = append(args, "-i", v.Input)
+		args = append(args, input(v.Input)...)
 	}
 	if m.Music != "" {
-		args = append(args, "-stream_loop", "-1", "-i", m.Music)
+		args = append(args, "-stream_loop", "-1")
+		args = append(args, input(m.Music)...)
 	}
 	args = append(args,
 		"-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
