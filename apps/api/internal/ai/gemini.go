@@ -429,3 +429,50 @@ Prefer clips that include the priority moments. Never choose a clip that include
 	b.WriteString("BRIEF>>>\n")
 	return b.String()
 }
+
+// Speak implements Narrator with a Gemini text-to-speech model.
+func (g *Gemini) Speak(ctx context.Context, model Model, script, voice string) (Speech, Usage, error) {
+	if model.Provider != ProviderGemini {
+		return Speech{}, Usage{}, fmt.Errorf("%w: model %s is not a Gemini model", ErrPermanent, model.ID)
+	}
+	if !ValidVoiceID(voice) {
+		return Speech{}, Usage{}, fmt.Errorf("%w: voice %q is not offered", ErrPermanent, voice)
+	}
+	script, err := CleanScript(script)
+	if err != nil {
+		return Speech{}, Usage{}, fmt.Errorf("%w: %v", ErrPermanent, err)
+	}
+	// The script is read aloud as written: it is not instructions.
+	prompt := "Read the following voiceover script aloud, clearly and naturally, exactly as written:\n\n" + script
+	resp, err := g.client.Models.GenerateContent(ctx, model.ID,
+		[]*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
+		&genai.GenerateContentConfig{
+			ResponseModalities: []string{string(genai.ModalityAudio)},
+			SpeechConfig: &genai.SpeechConfig{VoiceConfig: &genai.VoiceConfig{
+				PrebuiltVoiceConfig: &genai.PrebuiltVoiceConfig{VoiceName: voice}}},
+		})
+	if err != nil {
+		return Speech{}, Usage{}, classify(err)
+	}
+	usage := usageOf(resp)
+	if resp.PromptFeedback != nil && resp.PromptFeedback.BlockReason != "" {
+		return Speech{}, usage, fmt.Errorf("%w: input blocked (%s)", ErrPermanent, resp.PromptFeedback.BlockReason)
+	}
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+		return Speech{}, usage, fmt.Errorf("%w: no audio", ErrInvalidOutput)
+	}
+	var s Speech
+	for _, p := range resp.Candidates[0].Content.Parts {
+		if p.InlineData == nil || !strings.HasPrefix(p.InlineData.MIMEType, "audio/") {
+			continue
+		}
+		s.PCM = append(s.PCM, p.InlineData.Data...)
+		s.SampleRate = 24000
+		if i := strings.Index(p.InlineData.MIMEType, "rate="); i >= 0 {
+			if r, err := strconv.Atoi(strings.TrimRight(p.InlineData.MIMEType[i+5:], "; ")); err == nil {
+				s.SampleRate = r
+			}
+		}
+	}
+	return s, usage, ValidateSpeech(s, script)
+}
