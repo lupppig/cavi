@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Banner } from "@/components/account/account-header";
-import { client, raise, useAIModelSettings, type Project, type Voice, type Voiceover } from "@/lib/queries";
+import { client, raise, useAIModelSettings, type Project, type Voice, type Voiceover, type VoiceStyle } from "@/lib/queries";
 import { stampTenths } from "./clips";
 import { stable } from "./media-section";
 
@@ -91,15 +91,19 @@ export function VoiceoverPicker({
   const chosen = useVoiceover(project, value.id);
   const [script, setScript] = useState(initialScript);
   const [voice, setVoice] = useState("");
+  const [style, setStyle] = useState<VoiceStyle>("natural");
   const settings = useAIModelSettings(project.organisation_id);
   const model = settings.data?.find((s) => s.task === "voiceover")?.model;
+  // Only the voices and styles of the organisation's voiceover model work.
+  const offered = (voices.data ?? []).filter((vc) => !model || vc.provider === model.provider);
+  const styles: VoiceStyle[] = offered[0]?.styles ?? ["natural"];
   const ready = (list.data ?? []).filter((v) => v.status === "ready");
 
   const make = useMutation({
     mutationFn: async () => {
       const { data, error, response } = await client().POST("/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers", {
         params: { path: { orgID: project.organisation_id, projectID: project.id } },
-        body: { script: script.trim(), ...(voice ? { voice } : {}) },
+        body: { script: script.trim(), style, ...(voice ? { voice } : {}) },
       });
       if (!data) raise(error, response.status, "Could not start the voiceover.");
       return data;
@@ -113,7 +117,7 @@ export function VoiceoverPicker({
 
   function speak() {
     if (!script.trim()) return;
-    const where = model ? `${model.provider === "gemini" ? "Google " : ""}${model.label}` : "your organisation’s AI provider";
+    const where = model ? model.label : "your organisation’s AI provider";
     if (window.confirm(`The script will be sent to ${where} to be spoken. Continue?`)) make.mutate();
   }
 
@@ -156,13 +160,29 @@ export function VoiceoverPicker({
               >
                 {voices.isPending && <option value="">Loading voices…</option>}
                 {voices.isError && <option value="">Default voice</option>}
-                {voices.data?.map((vc, i) => (
+                {offered.map((vc, i) => (
                   <option key={vc.id} value={i === 0 ? "" : vc.id}>
-                    {vc.id} · {vc.label}
+                    {vc.provider === "gemini" ? `${vc.id} · ` : ""}{vc.label}
                   </option>
                 ))}
               </select>
             </label>
+            {styles.length > 1 && (
+              <label className="min-w-0 flex-1 text-xs font-semibold">
+                Delivery
+                <select
+                  value={style}
+                  onChange={(e) => setStyle(e.target.value as VoiceStyle)}
+                  className="mt-1 block min-h-11 w-full min-w-0 border border-line bg-white px-2 text-sm font-semibold capitalize"
+                >
+                  {styles.map((st) => (
+                    <option key={st} value={st}>
+                      {st}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button
               type="button"
               onClick={speak}

@@ -52,6 +52,7 @@ type Voiceover struct {
 	ProjectID     string
 	Script        string
 	Voice         string
+	Style         string
 	Status        string
 	Provider      string
 	Model         string
@@ -88,16 +89,15 @@ func audioKey(orgID, projectID, id string) string {
 
 // Create queues a voiceover (editing.manage). The script is sent to the
 // organisation's text-to-speech model; the request is audited.
-func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, script, voice string) (Voiceover, error) {
+// An empty voice is the model's provider's default; an empty style is
+// natural. The voice and style must be ones that provider offers.
+func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, script, voice, style string) (Voiceover, error) {
 	script, err := ai.CleanScript(script)
 	if err != nil {
 		return Voiceover{}, invalid("script", fmt.Sprintf("Write a script of up to %d characters.", ai.MaxScriptRunes))
 	}
-	if voice == "" {
-		voice = ai.Voices[0].ID
-	}
-	if !ai.ValidVoiceID(voice) {
-		return Voiceover{}, invalid("voice", "Choose one of the offered voices.")
+	if style == "" {
+		style = ai.StyleNatural
 	}
 	var id string
 	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -112,10 +112,21 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, script,
 		if err != nil {
 			return err
 		}
+		if voice == "" {
+			if vs := ai.VoicesFor(model.Provider); len(vs) > 0 {
+				voice = vs[0].ID
+			}
+		}
+		if !ai.ValidVoiceFor(model.Provider, voice) {
+			return invalid("voice", "Choose one of the voices offered for your organisation’s voiceover model.")
+		}
+		if !ai.ValidStyleFor(model.Provider, style) {
+			return invalid("style", "Your organisation’s voiceover model can’t perform that style. Choose another, or a more expressive model.")
+		}
 		if err := tx.QueryRowContext(ctx, `
-			INSERT INTO voiceovers (organisation_id, project_id, script, voice, provider, model, prompt_version, requested_by_user_id)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-			orgID, projectID, script, voice, model.Provider, model.ID, ai.VoiceoverPromptVersion, actorID).Scan(&id); err != nil {
+			INSERT INTO voiceovers (organisation_id, project_id, script, voice, style, provider, model, prompt_version, requested_by_user_id)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+			orgID, projectID, script, voice, style, model.Provider, model.ID, ai.VoiceoverPromptVersion, actorID).Scan(&id); err != nil {
 			return fmt.Errorf("insert voiceover: %w", err)
 		}
 		if _, err := jobs.Enqueue(ctx, tx, jobs.New{Kind: jobs.KindVoiceoverSpeak, OrganisationID: orgID, SubjectID: id,
@@ -123,7 +134,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, script,
 			return err
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "voiceover.requested", "voiceover", id,
-			map[string]any{"project_id": projectID, "voice": voice, "provider": model.Provider, "model": model.ID})
+			map[string]any{"project_id": projectID, "voice": voice, "style": style, "provider": model.Provider, "model": model.ID})
 	})
 	if err != nil {
 		return Voiceover{}, err
@@ -134,14 +145,14 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, script,
 	return s.Get(ctx, actorID, orgID, projectID, id)
 }
 
-const columns = ` v.id, v.project_id, v.script, v.voice, v.status, v.provider, v.model, v.prompt_version,
+const columns = ` v.id, v.project_id, v.script, v.voice, v.style, v.status, v.provider, v.model, v.prompt_version,
 	coalesce(v.duration_ms, 0), coalesce(v.error, ''), v.created_at, v.completed_at, coalesce(v.storage_key, '')`
 
 func (s *Service) scan(ctx context.Context, row interface{ Scan(...any) error }, acc account.Access) (Voiceover, error) {
 	var v Voiceover
 	var completed sql.NullTime
 	var key string
-	if err := row.Scan(&v.ID, &v.ProjectID, &v.Script, &v.Voice, &v.Status, &v.Provider, &v.Model, &v.PromptVersion,
+	if err := row.Scan(&v.ID, &v.ProjectID, &v.Script, &v.Voice, &v.Style, &v.Status, &v.Provider, &v.Model, &v.PromptVersion,
 		&v.DurationMS, &v.Error, &v.CreatedAt, &completed, &key); err != nil {
 		return Voiceover{}, err
 	}
@@ -350,11 +361,11 @@ const (
 // Process implements jobs.Handler. It is idempotent: a rerun speaks again
 // to the same key and records the result once.
 func (n *Narrator) Process(ctx context.Context, job jobs.Job) error {
-	var projectID, script, voice, provider, modelID string
+	var projectID, script, voice, style, provider, modelID string
 	err := n.db.QueryRowContext(ctx, `
-		SELECT project_id, script, voice, provider, model FROM voiceovers
+		SELECT project_id, script, voice, style, provider, model FROM voiceovers
 		WHERE id = ? AND organisation_id = ? AND status IN ('queued', 'running')`,
-		job.SubjectID, job.OrganisationID).Scan(&projectID, &script, &voice, &provider, &modelID)
+		job.SubjectID, job.OrganisationID).Scan(&projectID, &script, &voice, &style, &provider, &modelID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // deleted, or done; nothing to do
 	}
@@ -368,7 +379,7 @@ func (n *Narrator) Process(ctx context.Context, job jobs.Job) error {
 	if _, err := n.db.ExecContext(ctx, `UPDATE voiceovers SET status = 'running', updated_at = now() WHERE id = ?`, job.SubjectID); err != nil {
 		return err
 	}
-	speech, usage, err := n.ai.Speak(ctx, model, script, voice)
+	speech, usage, err := n.ai.Speak(ctx, model, script, voice, style)
 	n.recordUsage(ctx, job, model, usage, err == nil)
 	if err != nil {
 		if errors.Is(err, ai.ErrPermanent) {
@@ -376,8 +387,12 @@ func (n *Narrator) Process(ctx context.Context, job jobs.Job) error {
 		}
 		return err
 	}
-	words, timing := TimeWords(ctx, n.timer, script, speech)
-	if n.timer != nil {
+	words, timing := speech.Words, ai.Usage{}
+	if len(words) == 0 {
+		// The provider gave no timings: time the words by transcribing.
+		words, timing = TimeWords(ctx, n.timer, script, speech)
+	}
+	if len(speech.Words) == 0 && n.timer != nil {
 		tm := ai.Default(ai.TaskTranscription)
 		n.recordUsageFor(ctx, job, ai.TaskTranscription, tm, timing, true)
 	}

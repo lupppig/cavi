@@ -71,6 +71,7 @@ services:
       CAVI_STORAGE_PATH_STYLE: "true"
       # From apps/api/.env via make media-worker; empty disables transcription.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
     depends_on:
       postgres: { condition: service_healthy }
       storage: { condition: service_healthy }

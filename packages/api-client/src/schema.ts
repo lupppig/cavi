@@ -1423,11 +1423,17 @@ export interface components {
             plans: components["schemas"]["EditPlan"][];
         };
         Voice: {
-            /** @description The voice's name; send it as `voice`. */
+            /** @description The AI provider whose models use this voice (`gemini`, `elevenlabs`). Use the voices of your organisation's `voiceover` model's provider. */
+            provider: string;
+            /** @description The voice's name or ID; send it as `voice`. */
             id: string;
             /** @description How it sounds. */
             label: string;
+            /** @description Delivery styles this provider's models can perform; send one as `style`. */
+            styles: components["schemas"]["VoiceStyle"][];
         };
+        /** @enum {string} */
+        VoiceStyle: "natural" | "curious" | "excited" | "playful" | "warm" | "storyteller";
         Voiceover: {
             /** Format: uuid */
             id: string;
@@ -1435,6 +1441,7 @@ export interface components {
             project_id: string;
             script: string;
             voice: string;
+            style: components["schemas"]["VoiceStyle"];
             /** @enum {string} */
             status: "queued" | "running" | "ready" | "failed";
             provider: string;
@@ -1456,8 +1463,10 @@ export interface components {
         };
         CreateVoiceoverRequest: {
             script: string;
-            /** @description One of GET /api/v1/voices; defaults to the first. */
+            /** @description One of GET /api/v1/voices for the organisation's voiceover model's provider; defaults to that provider's first. */
             voice?: string;
+            /** @description How it's delivered (default `natural`). Only expressive models (ElevenLabs) perform other styles; Gemini voices speak naturally. */
+            style?: components["schemas"]["VoiceStyle"];
         };
         /** @description A ready voiceover mixed into a montage. It must fit inside the clip from `start_ms`. */
         VoiceoverMix: {

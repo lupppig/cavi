@@ -21,6 +21,7 @@ const (
 	TaskBriefs        = "briefs"
 	TaskVoiceover     = "voiceover"
 	TaskPlans         = "plans"
+	TaskMusic         = "music"
 )
 
 // Providers.
@@ -64,8 +65,11 @@ var catalogue = map[string][]Model{
 	},
 	// Voiceover models must pass TestEvalVoiceover: speech of a plausible
 	// length for the script, in every offered voice.
+	// ElevenLabs v3 must also pass TestEvalElevenLabs: styles performed,
+	// not read aloud, and every word timed.
 	TaskVoiceover: {
-		{Provider: ProviderGemini, ID: "gemini-3.8-flash-tts", Label: "Gemini 3.8 Flash TTS", Default: true},
+		{Provider: ProviderElevenLabs, ID: "eleven_v3", Label: "ElevenLabs v3 (expressive)", Default: true},
+		{Provider: ProviderGemini, ID: "gemini-3.8-flash-tts", Label: "Gemini 3.8 Flash TTS"},
 		{Provider: ProviderGemini, ID: "gemini-3.8-flash-lite-tts", Label: "Gemini 3.8 Flash-Lite TTS (lower cost)"},
 	},
 }

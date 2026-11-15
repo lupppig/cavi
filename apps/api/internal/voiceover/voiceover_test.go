@@ -49,7 +49,7 @@ type fakeNarrator struct {
 	calls int
 }
 
-func (f *fakeNarrator) Speak(_ context.Context, _ ai.Model, script, voice string) (ai.Speech, ai.Usage, error) {
+func (f *fakeNarrator) Speak(_ context.Context, _ ai.Model, script, voice, style string) (ai.Speech, ai.Usage, error) {
 	f.calls++
 	if f.err != nil {
 		return ai.Speech{}, ai.Usage{}, f.err
@@ -147,25 +147,35 @@ func TestVoiceovers(t *testing.T) {
 	org := w.team(ana, map[string]person{authz.RoleViewer: vic})
 	proj := w.project(ana, org)
 
-	if _, err := w.svc.Create(w.ctx, vic.id, org, proj, script, ""); !errors.Is(err, ErrForbidden) {
+	if _, err := w.svc.Create(w.ctx, vic.id, org, proj, script, "", ""); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("viewer create: %v", err)
 	}
-	if _, err := w.svc.Create(w.ctx, eve.id, org, proj, script, ""); !errors.Is(err, ErrNotFound) {
+	if _, err := w.svc.Create(w.ctx, eve.id, org, proj, script, "", ""); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("outsider create: %v", err)
 	}
 	for field, args := range map[string][2]string{"script": {" ", ""}, "voice": {script, "Robot"}} {
-		_, err := w.svc.Create(w.ctx, ana.id, org, proj, args[0], args[1])
+		_, err := w.svc.Create(w.ctx, ana.id, org, proj, args[0], args[1], "")
 		var v *account.ValidationError
 		if !errors.As(err, &v) || v.Field != field {
 			t.Errorf("%s: err = %v", field, err)
 		}
 	}
 
-	v, err := w.svc.Create(w.ctx, ana.id, org, proj, "  "+script+"  ", "Puck")
+	// The default model is ElevenLabs v3: its voices, and styles it can perform.
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, script, "", "sarcastic")
+	var ve *account.ValidationError
+	if !errors.As(err, &ve) || ve.Field != "style" {
+		t.Fatalf("unknown style: %v", err)
+	}
+	if _, err := w.svc.Create(w.ctx, ana.id, org, proj, script, "Puck", ""); !errors.As(err, &ve) || ve.Field != "voice" {
+		t.Fatalf("Gemini voice on ElevenLabs: %v", err)
+	}
+	liam := ai.VoicesFor(ai.ProviderElevenLabs)[3].ID
+	v, err := w.svc.Create(w.ctx, ana.id, org, proj, "  "+script+"  ", liam, ai.StyleCurious)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Status != StatusQueued || v.Script != script || v.Voice != "Puck" || v.Model != "gemini-3.8-flash-tts" || v.URL != "" {
+	if v.Status != StatusQueued || v.Script != script || v.Voice != liam || v.Style != ai.StyleCurious || v.Model != "eleven_v3" || v.URL != "" {
 		t.Fatalf("created = %+v", v)
 	}
 	if _, err := Load(w.ctx, w.db, org, proj, v.ID); !errors.Is(err, ErrNotFound) {
@@ -204,7 +214,7 @@ func TestVoiceovers(t *testing.T) {
 	}
 
 	// Failures: blocked scripts fail for good with a message.
-	bad, _ := w.svc.Create(w.ctx, ana.id, org, proj, script, "")
+	bad, _ := w.svc.Create(w.ctx, ana.id, org, proj, script, "", "")
 	err = w.narrator(&fakeNarrator{err: fmt.Errorf("%w: blocked", ai.ErrPermanent)}).Process(w.ctx, w.job(bad.ID))
 	if !jobs.IsPermanent(err) {
 		t.Fatalf("blocked: %v", err)

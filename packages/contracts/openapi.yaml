@@ -2437,19 +2437,29 @@ components:
 
     Voice:
       type: object
-      required: [id, label]
+      required: [provider, id, label, styles]
       properties:
-        id: { type: string, description: The voice's name; send it as `voice`. }
+        provider: { type: string, description: "The AI provider whose models use this voice (`gemini`, `elevenlabs`). Use the voices of your organisation's `voiceover` model's provider." }
+        id: { type: string, description: The voice's name or ID; send it as `voice`. }
         label: { type: string, description: How it sounds. }
+        styles:
+          type: array
+          description: Delivery styles this provider's models can perform; send one as `style`.
+          items: { $ref: "#/components/schemas/VoiceStyle" }
+
+    VoiceStyle:
+      type: string
+      enum: [natural, curious, excited, playful, warm, storyteller]
 
     Voiceover:
       type: object
-      required: [id, project_id, script, voice, status, provider, model, model_label, prompt_version, duration_ms, error, created_at, completed_at, can_delete, url, url_expires_at]
+      required: [id, project_id, script, voice, style, status, provider, model, model_label, prompt_version, duration_ms, error, created_at, completed_at, can_delete, url, url_expires_at]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
         script: { type: string }
         voice: { type: string }
+        style: { $ref: "#/components/schemas/VoiceStyle" }
         status: { type: string, enum: [queued, running, ready, failed] }
         provider: { type: string }
         model: { type: string }
@@ -2468,7 +2478,10 @@ components:
       required: [script]
       properties:
         script: { type: string, minLength: 1, maxLength: 1200 }
-        voice: { type: string, description: "One of GET /api/v1/voices; defaults to the first." }
+        voice: { type: string, description: "One of GET /api/v1/voices for the organisation's voiceover model's provider; defaults to that provider's first." }
+        style:
+          allOf: [{ $ref: "#/components/schemas/VoiceStyle" }]
+          description: "How it's delivered (default `natural`). Only expressive models (ElevenLabs) perform other styles; Gemini voices speak naturally."
 
     VoiceoverMix:
       type: object

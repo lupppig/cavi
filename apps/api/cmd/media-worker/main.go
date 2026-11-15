@@ -82,6 +82,17 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		// Voiceovers go to the provider of the organisation's model.
+		narrators := ai.Narrators{ai.ProviderGemini: gemini}
+		if cfg.ElevenLabsAPIKey != "" {
+			eleven, err := ai.NewElevenLabs(cfg.ElevenLabsAPIKey, "")
+			if err != nil {
+				return err
+			}
+			narrators[ai.ProviderElevenLabs] = eleven
+		} else {
+			logger.Warn("ElevenLabs disabled: ELEVENLABS_API_KEY is not set; ElevenLabs voiceovers will fail")
+		}
 		// AI calls are slow and rate-limited; run fewer at once.
 		workers = append(workers, jobs.NewWorker(db, bus, jobs.KindMediaTranscribe,
 			media.NewTranscriber(db, store, ff, gemini, logger), logger,
@@ -100,7 +111,7 @@ func run() error {
 				plan.NewPlanner(db, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 10 * time.Minute, RetryDelay: providerRetry}),
 			jobs.NewWorker(db, bus, jobs.KindVoiceoverSpeak,
-				voiceover.NewNarrator(db, store, gemini, gemini, logger), logger,
+				voiceover.NewNarrator(db, store, narrators, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute, RetryDelay: providerRetry}))
 	} else {
 		logger.Warn("AI disabled: GEMINI_API_KEY is not set; transcription, highlight and brief jobs will wait")

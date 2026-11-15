@@ -13,7 +13,7 @@ import (
 // VoiceoverService is the voiceover behaviour the handlers need. Every
 // method authorises the actor itself.
 type VoiceoverService interface {
-	Create(ctx context.Context, actorID, orgID, projectID, script, voice string) (voiceover.Voiceover, error)
+	Create(ctx context.Context, actorID, orgID, projectID, script, voice, style string) (voiceover.Voiceover, error)
 	List(ctx context.Context, actorID, orgID, projectID string) ([]voiceover.Voiceover, error)
 	Get(ctx context.Context, actorID, orgID, projectID, id string) (voiceover.Voiceover, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, id string) error
@@ -29,6 +29,7 @@ type voiceoverResponse struct {
 	ProjectID     string  `json:"project_id"`
 	Script        string  `json:"script"`
 	Voice         string  `json:"voice"`
+	Style         string  `json:"style"`
 	Status        string  `json:"status"`
 	Provider      string  `json:"provider"`
 	Model         string  `json:"model"`
@@ -44,7 +45,7 @@ type voiceoverResponse struct {
 }
 
 func toVoiceoverResponse(v voiceover.Voiceover) voiceoverResponse {
-	r := voiceoverResponse{ID: v.ID, ProjectID: v.ProjectID, Script: v.Script, Voice: v.Voice, Status: v.Status,
+	r := voiceoverResponse{ID: v.ID, ProjectID: v.ProjectID, Script: v.Script, Voice: v.Voice, Style: v.Style, Status: v.Status,
 		Provider: v.Provider, Model: v.Model, ModelLabel: v.ModelLabel, PromptVersion: v.PromptVersion,
 		Error: ptr(v.Error), CreatedAt: ts(v.CreatedAt), CanDelete: v.CanDelete, URL: ptr(v.URL)}
 	if v.Status == voiceover.StatusReady {
@@ -57,6 +58,7 @@ func toVoiceoverResponse(v voiceover.Voiceover) voiceoverResponse {
 type createVoiceoverRequest struct {
 	Script string `json:"script"`
 	Voice  string `json:"voice"`
+	Style  string `json:"style"`
 }
 
 func (h voiceoverHandler) create(c *gin.Context) {
@@ -64,7 +66,7 @@ func (h voiceoverHandler) create(c *gin.Context) {
 	if !decodeJSON(c, &req) {
 		return
 	}
-	v, err := h.svc.Create(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Script, req.Voice)
+	v, err := h.svc.Create(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Script, req.Voice, req.Style)
 	if err != nil {
 		h.fail(c, err)
 		return
@@ -106,15 +108,19 @@ func (h voiceoverHandler) delete(c *gin.Context) {
 }
 
 type voiceResponse struct {
-	ID    string `json:"id"`
-	Label string `json:"label"`
+	Provider string   `json:"provider"`
+	ID       string   `json:"id"`
+	Label    string   `json:"label"`
+	Styles   []string `json:"styles"`
 }
 
-// voices lists the voices voiceovers can use, the first the default.
+// voices lists the voices voiceovers can use, per provider (each
+// provider's first is its default), with the delivery styles each can
+// perform.
 func voices(c *gin.Context) {
 	out := make([]voiceResponse, len(ai.Voices))
 	for i, v := range ai.Voices {
-		out[i] = voiceResponse{ID: v.ID, Label: v.Label}
+		out[i] = voiceResponse{Provider: v.Provider, ID: v.ID, Label: v.Label, Styles: ai.StylesFor(v.Provider)}
 	}
 	c.JSON(http.StatusOK, listResponse[voiceResponse]{Data: out})
 }

@@ -25,6 +25,7 @@ export type PlanRun = components["schemas"]["PlanRun"];
 export type EditPlan = components["schemas"]["EditPlan"];
 export type Voiceover = components["schemas"]["Voiceover"];
 export type Voice = components["schemas"]["Voice"];
+export type VoiceStyle = components["schemas"]["VoiceStyle"];
 export type MontageSegment = components["schemas"]["MontageSegment"];
 export type BlurBox = components["schemas"]["BlurBox"];
 export type TimeRange = components["schemas"]["TimeRange"];
