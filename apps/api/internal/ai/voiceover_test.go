@@ -37,6 +37,25 @@ func TestValidateSpeech(t *testing.T) {
 	if string(w[:4]) != "RIFF" || string(w[8:16]) != "WAVEfmt " || binary.LittleEndian.Uint32(w[24:]) != 24000 || len(w) != 44+48000 {
 		t.Fatalf("bad WAV header: % x", w[:44])
 	}
+	// A whole WAV file in the reply: only its samples are speech.
+	inner := tone(1, 8000)
+	inner.SampleRate = 16000
+	pcm, rate, err := pcmOf(inner.WAV(), 24000)
+	if err != nil || rate != 16000 || len(pcm) != len(inner.PCM) || string(pcm[:4]) == "RIFF" {
+		t.Fatalf("pcmOf(WAV) = %d bytes at %d Hz, %v", len(pcm), rate, err)
+	}
+	if raw, rate, _ := pcmOf(inner.PCM, 24000); len(raw) != len(inner.PCM) || rate != 24000 {
+		t.Fatal("raw PCM changed")
+	}
+	stereo := inner.WAV()
+	stereo[22] = 2
+	if _, _, err := pcmOf(stereo, 24000); !errors.Is(err, ErrInvalidOutput) {
+		t.Fatalf("stereo WAV: %v", err)
+	}
+	// Speech padded by extra words (an instruction read aloud) is too slow.
+	if err := ValidateSpeech(tone(7, 8000), script); !errors.Is(err, ErrInvalidOutput) {
+		t.Errorf("7 s for 7 words: %v", err)
+	}
 	if _, err := CleanScript("   "); err == nil {
 		t.Error("empty script accepted")
 	}

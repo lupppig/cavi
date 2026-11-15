@@ -16,7 +16,9 @@ const VoiceoverPromptVersion = "voiceover-v1"
 const (
 	MaxScriptRunes = 1200
 	// Spoken pace bounds, in words per second, for checking output.
-	minWordsPerSecond = 0.7
+	// Natural narration runs at about 2.5 words a second; much slower
+	// means extra speech (an instruction read aloud) or long silences.
+	minWordsPerSecond = 1.4
 	maxWordsPerSecond = 5.5
 )
 
@@ -114,4 +116,38 @@ func ValidateSpeech(s Speech, script string) error {
 		return fmt.Errorf("%w: audio is silent", ErrInvalidOutput)
 	}
 	return nil
+}
+
+// pcmOf returns the 16-bit mono PCM in a reply's audio data. Providers
+// send either raw PCM (at rate) or a whole WAV file; the WAV header must
+// not be played as sound, so its format is read and only its samples kept.
+func pcmOf(data []byte, rate int) ([]byte, int, error) {
+	if len(data) < 12 || string(data[:4]) != "RIFF" || string(data[8:12]) != "WAVE" {
+		return data, rate, nil
+	}
+	bad := func(msg string) ([]byte, int, error) {
+		return nil, 0, fmt.Errorf("%w: WAV audio %s", ErrInvalidOutput, msg)
+	}
+	var channels, bits uint16
+	for i := 12; i+8 <= len(data); {
+		id, size := string(data[i:i+4]), int(binary.LittleEndian.Uint32(data[i+4:]))
+		body := data[i+8:]
+		if size > len(body) {
+			size = len(body) // streams often leave the data size unset
+		}
+		switch id {
+		case "fmt ":
+			if size < 16 || binary.LittleEndian.Uint16(body) != 1 {
+				return bad("is not PCM")
+			}
+			channels, rate, bits = binary.LittleEndian.Uint16(body[2:]), int(binary.LittleEndian.Uint32(body[4:])), binary.LittleEndian.Uint16(body[14:])
+		case "data":
+			if channels != 1 || bits != 16 {
+				return bad(fmt.Sprintf("has %d channels of %d bits", channels, bits))
+			}
+			return body[:size-size%2], rate, nil
+		}
+		i += 8 + size + size%2
+	}
+	return bad("has no data")
 }

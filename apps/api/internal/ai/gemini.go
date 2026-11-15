@@ -444,10 +444,10 @@ func (g *Gemini) Speak(ctx context.Context, model Model, script, voice string) (
 	if err != nil {
 		return Speech{}, Usage{}, fmt.Errorf("%w: %v", ErrPermanent, err)
 	}
-	// The script is read aloud as written: it is not instructions.
-	prompt := "Read the following voiceover script aloud, clearly and naturally, exactly as written:\n\n" + script
+	// Text-to-speech models speak everything they are sent, so only the
+	// script goes: an instruction ahead of it was read aloud too.
 	resp, err := g.client.Models.GenerateContent(ctx, model.ID,
-		[]*genai.Content{genai.NewContentFromText(prompt, genai.RoleUser)},
+		[]*genai.Content{genai.NewContentFromText(script, genai.RoleUser)},
 		&genai.GenerateContentConfig{
 			ResponseModalities: []string{string(genai.ModalityAudio)},
 			SpeechConfig: &genai.SpeechConfig{VoiceConfig: &genai.VoiceConfig{
@@ -468,13 +468,20 @@ func (g *Gemini) Speak(ctx context.Context, model Model, script, voice string) (
 		if p.InlineData == nil || !strings.HasPrefix(p.InlineData.MIMEType, "audio/") {
 			continue
 		}
-		s.PCM = append(s.PCM, p.InlineData.Data...)
-		s.SampleRate = 24000
+		rate := 24000
 		if i := strings.Index(p.InlineData.MIMEType, "rate="); i >= 0 {
 			if r, err := strconv.Atoi(strings.TrimRight(p.InlineData.MIMEType[i+5:], "; ")); err == nil {
-				s.SampleRate = r
+				rate = r
 			}
 		}
+		pcm, rate, err := pcmOf(p.InlineData.Data, rate)
+		if err != nil {
+			return Speech{}, usage, err
+		}
+		if s.SampleRate != 0 && s.SampleRate != rate {
+			return Speech{}, usage, fmt.Errorf("%w: audio parts at %d and %d Hz", ErrInvalidOutput, s.SampleRate, rate)
+		}
+		s.PCM, s.SampleRate = append(s.PCM, pcm...), rate
 	}
 	return s, usage, ValidateSpeech(s, script)
 }
