@@ -112,6 +112,10 @@ type Asset struct {
 	// framing has got to; empty if never requested.
 	FramingStatus string
 	FramingError  string
+	// SourceURL is the link an imported file came from; ImportError says
+	// why importing it stopped.
+	SourceURL   string
+	ImportError string
 
 	thumbnailKey string
 }
@@ -252,7 +256,7 @@ const assetColumns = `
 	m.processing_status, coalesce(m.processing_error, ''), coalesce(m.container, ''), coalesce(m.duration_ms, 0),
 	coalesce(m.width, 0), coalesce(m.height, 0), coalesce(m.frame_rate, 0)::float8, coalesce(m.video_codec, ''),
 	coalesce(m.audio_codec, ''), coalesce(m.audio_channels, 0), coalesce(m.sample_rate, 0), coalesce(m.thumbnail_key, ''),
-	coalesce(m.framing_status, ''), coalesce(m.framing_error, '')`
+	coalesce(m.framing_status, ''), coalesce(m.framing_error, ''), coalesce(m.source_url, ''), coalesce(m.import_error, '')`
 
 const assetFrom = `
 	FROM media_assets m LEFT JOIN users u ON u.id = m.uploaded_by_user_id`
@@ -267,7 +271,7 @@ func scanAsset(row scanner) (Asset, string, error) {
 		&a.ProcessingStatus, &a.ProcessingError, &a.Container, &a.DurationMS,
 		&a.Width, &a.Height, &a.FrameRate, &a.VideoCodec,
 		&a.AudioCodec, &a.AudioChannels, &a.SampleRate, &a.thumbnailKey,
-		&a.FramingStatus, &a.FramingError)
+		&a.FramingStatus, &a.FramingError, &a.SourceURL, &a.ImportError)
 	return a, key, err
 }
 
@@ -326,6 +330,9 @@ func (s *Service) Complete(ctx context.Context, actorID, orgID, projectID, asset
 	}
 	if asset.Status == "uploaded" {
 		return asset, s.sign(ctx, &asset, key)
+	}
+	if asset.Status == "importing" {
+		return Asset{}, ErrNotFound // imports finish themselves
 	}
 	// Only the person uploading can finish their own upload.
 	if asset.UploadedByID != actorID || !canUpload(acc) {
@@ -408,8 +415,8 @@ func decodeCursor(c string) (time.Time, string, error) {
 	return t, id, err
 }
 
-// List returns a project's uploaded media, newest first, each with a
-// signed URL.
+// List returns a project's uploaded and importing media, newest first,
+// uploaded files with a signed URL.
 func (s *Service) List(ctx context.Context, actorID, orgID, projectID, cursor string, limit int) (Page, error) {
 	switch {
 	case limit == 0:
@@ -431,7 +438,7 @@ func (s *Service) List(ctx context.Context, actorID, orgID, projectID, cursor st
 		return Page{}, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT`+assetColumns+assetFrom+`
-		WHERE m.project_id = ? AND m.organisation_id = ? AND m.status = 'uploaded'
+		WHERE m.project_id = ? AND m.organisation_id = ? AND m.status IN ('uploaded', 'importing')
 		AND (?::uuid IS NULL OR (m.created_at, m.id) < (?::timestamptz, ?::uuid))
 		ORDER BY m.created_at DESC, m.id DESC
 		LIMIT ?`, projectID, orgID, afterID, after, afterID, limit+1)
@@ -475,7 +482,7 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID, assetID st
 	if err != nil {
 		return Asset{}, err
 	}
-	if a.Status != "uploaded" && a.UploadedByID != actorID {
+	if a.Status == "uploading" && a.UploadedByID != actorID {
 		return Asset{}, ErrNotFound
 	}
 	return a, s.sign(ctx, &a, key)
@@ -542,7 +549,7 @@ func (s *Service) Delete(ctx context.Context, actorID, orgID, projectID, assetID
 		if err != nil {
 			return err
 		}
-		if a.Status != "uploaded" && a.UploadedByID != actorID {
+		if a.Status == "uploading" && a.UploadedByID != actorID {
 			return ErrNotFound
 		}
 		if !a.CanDelete {

@@ -128,6 +128,7 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	med := proj.Group("/:projectID/media", requireService(opts.Media != nil))
 	med.GET("", mediaH.list)
 	med.POST("/uploads", mediaH.createUpload)
+	med.POST("/imports", mediaH.createImport)
 	med.GET("/:assetID", mediaH.get)
 	med.DELETE("/:assetID", mediaH.delete)
 	med.POST("/:assetID/complete", mediaH.complete)

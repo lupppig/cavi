@@ -1,5 +1,6 @@
 // Command media-worker processes uploaded media: it probes each file with
-// FFmpeg, makes thumbnails, finds the people in videos for auto framing
+// FFmpeg, imports videos from links, makes thumbnails, finds the people in
+// videos for auto framing
 // and renders clips, and, when GEMINI_API_KEY is set, transcribes
 // speech and finds highlights with the organisation's AI model. It is deployed
 // separately from the API (it needs FFmpeg, more CPU and the AI key) and
@@ -84,6 +85,13 @@ func run() error {
 		jobs.NewWorker(db, bus, jobs.KindMediaFraming,
 			media.NewFramer(db, store, ff, media.HelperDetectors(framing.DefaultHelper, framing.DefaultModel), logger), logger,
 			jobs.WorkerOptions{Concurrency: 1, Lease: 2 * time.Hour}),
+		// Imports download from YouTube, Twitch or Kick for up to an hour.
+		jobs.NewWorker(db, bus, jobs.KindMediaImport,
+			media.NewImporter(db, store, media.YTDLP{Bin: "yt-dlp"}, logger), logger,
+			jobs.WorkerOptions{Concurrency: 2, Lease: 75 * time.Minute}),
+	}
+	if _, err := exec.LookPath("yt-dlp"); err != nil {
+		logger.Warn("imports from links disabled: yt-dlp isn't installed; imports will fail (it is in the media worker image)")
 	}
 	if _, err := exec.LookPath(framing.DefaultHelper); err != nil {
 		logger.Warn("auto framing disabled: the cavi-faces helper isn't installed; framing analysis will fail (it is in the media worker image)")

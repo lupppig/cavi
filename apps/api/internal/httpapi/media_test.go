@@ -177,6 +177,17 @@ func TestMediaOverHTTP(t *testing.T) {
 	expect(t, w.call(ana, "GET", one+"/framing/path?aspect=9:16&start_ms=soon&end_ms=1000", ""), http.StatusUnprocessableEntity, CodeValidation)
 	expect(t, w.call(eve, "GET", one+"/framing/path?aspect=9:16&start_ms=0&end_ms=1000", ""), http.StatusNotFound, CodeNotFound)
 
+	// Imports: supported links only, with the rights confirmed.
+	expect(t, w.call(ana, "POST", base+"/imports", `{"url":"https://vimeo.com/1","rights_confirmed":true}`), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(ana, "POST", base+"/imports", `{"url":"https://youtu.be/abc"}`), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(eve, "POST", base+"/imports", `{"url":"https://youtu.be/abc","rights_confirmed":true}`), http.StatusNotFound, CodeNotFound)
+	rec = w.call(ana, "POST", base+"/imports", `{"url":"https://youtu.be/abc","rights_confirmed":true}`)
+	expect(t, rec, http.StatusAccepted, "")
+	imp := decode[assetResponse](t, rec)
+	if imp.Status != "importing" || imp.SourceURL == nil || *imp.SourceURL != "https://youtu.be/abc" || imp.URL != nil || imp.ImportError != nil {
+		t.Fatalf("import = %+v", imp)
+	}
+
 	expect(t, w.call(ana, "DELETE", one, ""), http.StatusNoContent, "")
 	expect(t, w.call(ana, "GET", one, ""), http.StatusNotFound, CodeNotFound)
 }

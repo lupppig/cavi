@@ -27,6 +27,7 @@ type MediaService interface {
 	RequestHighlights(ctx context.Context, actorID, orgID, projectID, assetID string, req media.HighlightRequest) (media.Highlights, error)
 	Highlights(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Highlights, error)
 	RequestFraming(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
+	CreateImport(ctx context.Context, actorID, orgID, projectID, rawURL string, rightsConfirmed bool) (media.Asset, error)
 }
 
 type mediaHandler struct {
@@ -54,6 +55,10 @@ type assetResponse struct {
 	// Framing is finding the people in a video for auto framing; null
 	// when it hasn't been asked for.
 	Framing *processingResponse `json:"framing"`
+	// SourceURL is the link an imported file came from; ImportError says
+	// why importing stopped.
+	SourceURL   *string `json:"source_url"`
+	ImportError *string `json:"import_error"`
 }
 
 type processingResponse struct {
@@ -121,6 +126,7 @@ func toAssetResponse(a media.Asset) assetResponse {
 		r.URL, r.URLExpiresAt = &u, &e
 	}
 	r.ThumbnailURL = ptr(a.ThumbnailURL)
+	r.SourceURL, r.ImportError = ptr(a.SourceURL), ptr(a.ImportError)
 	r.Processing = processingResponse{Status: a.ProcessingStatus, Error: ptr(a.ProcessingError)}
 	if a.FramingStatus != "" {
 		r.Framing = &processingResponse{Status: a.FramingStatus, Error: ptr(a.FramingError)}
@@ -412,6 +418,25 @@ func (h mediaHandler) setSpeakerVoice(c *gin.Context) {
 
 func (h mediaHandler) requestFraming(c *gin.Context) {
 	a, err := h.svc.RequestFraming(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusAccepted, toAssetResponse(a))
+}
+
+type createImportRequest struct {
+	URL             string `json:"url"`
+	RightsConfirmed bool   `json:"rights_confirmed"`
+}
+
+func (h mediaHandler) createImport(c *gin.Context) {
+	var req createImportRequest
+	if !decodeJSON(c, &req) {
+		return
+	}
+	a, err := h.svc.CreateImport(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.URL, req.RightsConfirmed)
 	if err != nil {
 		h.fail(c, err)
 		return

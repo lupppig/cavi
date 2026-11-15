@@ -448,6 +448,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import a video from a link
+         * @description Requires `media.upload`. Imports one video from YouTube, Twitch
+         *     (videos and clips) or Kick (videos and clips): the file is recorded
+         *     as `importing` and the media worker downloads it (at most 1080p,
+         *     4 hours and 5 GB), checks it like an upload and, once stored, it
+         *     is `uploaded` and processed as usual. If importing gives up, the
+         *     file stays `importing` with `import_error` saying why; delete it
+         *     and try again. Playlists, channels and live streams are refused.
+         *     `rights_confirmed` must be true: the caller confirms they own the
+         *     video or have the creator's permission to clip it, which is
+         *     recorded in the audit log.
+         */
+        post: operations["createMediaImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}": {
         parameters: {
             query?: never;
@@ -1143,8 +1172,16 @@ export interface components {
             content_type: string;
             /** Format: int64 */
             size_bytes: number;
-            /** @enum {string} */
-            status: "uploading" | "uploaded";
+            /**
+             * @description `importing` files are being downloaded from `source_url`; their
+             *     name is a placeholder and their size 0 until they arrive.
+             * @enum {string}
+             */
+            status: "uploading" | "importing" | "uploaded";
+            /** @description The link an imported file came from; null for uploads. */
+            source_url: string | null;
+            /** @description Why importing stopped, for the user; null otherwise. */
+            import_error: string | null;
             uploaded_by: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
             created_at: string;
@@ -1210,6 +1247,12 @@ export interface components {
         MediaPage: {
             data: components["schemas"]["MediaAsset"][];
             next_cursor: string | null;
+        };
+        CreateImportRequest: {
+            /** @description A link to one YouTube, Twitch or Kick video or clip. */
+            url: string;
+            /** @description The caller owns the video or has the creator's permission to clip it. Must be true. */
+            rights_confirmed: boolean;
         };
         CreateUploadRequest: {
             filename: string;
@@ -2595,6 +2638,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaUpload"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createMediaImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Import started. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
                 };
             };
             400: components["responses"]["InvalidRequest"];

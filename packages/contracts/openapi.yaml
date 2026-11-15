@@ -774,6 +774,55 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/media/imports:
+    post:
+      operationId: createMediaImport
+      summary: Import a video from a link
+      description: |
+        Requires `media.upload`. Imports one video from YouTube, Twitch
+        (videos and clips) or Kick (videos and clips): the file is recorded
+        as `importing` and the media worker downloads it (at most 1080p,
+        4 hours and 5 GB), checks it like an upload and, once stored, it
+        is `uploaded` and processed as usual. If importing gives up, the
+        file stays `importing` with `import_error` saying why; delete it
+        and try again. Playlists, channels and live streams are refused.
+        `rights_confirmed` must be true: the caller confirms they own the
+        video or have the creator's permission to clip it, which is
+        recorded in the audit log.
+      tags: [media]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateImportRequest"
+      responses:
+        "202":
+          description: Import started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaAsset"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}:
     get:
       operationId: getMedia
@@ -2142,7 +2191,7 @@ components:
 
     MediaAsset:
       type: object
-      required: [id, project_id, filename, kind, content_type, size_bytes, status, uploaded_by, created_at, uploaded_at, can_delete, url, url_expires_at, thumbnail_url, processing, metadata, framing]
+      required: [id, project_id, filename, kind, content_type, size_bytes, status, uploaded_by, created_at, uploaded_at, can_delete, url, url_expires_at, thumbnail_url, processing, metadata, framing, source_url, import_error]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
@@ -2153,7 +2202,18 @@ components:
           enum: [video, audio, image, null]
         content_type: { type: string }
         size_bytes: { type: integer, format: int64 }
-        status: { type: string, enum: [uploading, uploaded] }
+        status:
+          type: string
+          enum: [uploading, importing, uploaded]
+          description: |
+            `importing` files are being downloaded from `source_url`; their
+            name is a placeholder and their size 0 until they arrive.
+        source_url:
+          description: The link an imported file came from; null for uploads.
+          type: [string, "null"]
+        import_error:
+          description: Why importing stopped, for the user; null otherwise.
+          type: [string, "null"]
         uploaded_by:
           oneOf:
             - $ref: "#/components/schemas/UserRef"
@@ -2238,6 +2298,19 @@ components:
           items: { $ref: "#/components/schemas/MediaAsset" }
         next_cursor:
           type: [string, "null"]
+
+    CreateImportRequest:
+      type: object
+      required: [url, rights_confirmed]
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          maxLength: 2048
+          description: A link to one YouTube, Twitch or Kick video or clip.
+        rights_confirmed:
+          type: boolean
+          description: The caller owns the video or has the creator's permission to clip it. Must be true.
 
     CreateUploadRequest:
       type: object
