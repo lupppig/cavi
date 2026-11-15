@@ -181,3 +181,70 @@ func TestRenderMontage(t *testing.T) {
 		t.Fatalf("montage with a deleted source: %v", err)
 	}
 }
+
+// readyVoiceover adds a finished voiceover of durationMS to the project.
+func (w *world) readyVoiceover(org, proj string, durationMS int64) string {
+	w.t.Helper()
+	var id string
+	if err := w.db.QueryRowContext(w.ctx, `
+		INSERT INTO voiceovers (organisation_id, project_id, script, voice, status, provider, model, prompt_version, storage_key, duration_ms, completed_at)
+		VALUES (?, ?, 'Diamonds paid for this school.', 'Kore', 'ready', 'gemini', 'gemini-3.8-flash-tts', 'voiceover-v1', ?, ?, now()) RETURNING id`,
+		org, proj, "vo/"+proj+"/"+time.Now().Format("150405.000000"), durationMS).Scan(&id); err != nil {
+		w.t.Fatal(err)
+	}
+	return id
+}
+
+func TestRenderMontageWithVoiceover(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 60_000, true)
+	vo := w.readyVoiceover(org, proj, 4000)
+	c := montageOf(Segment{SourceAssetID: src, StartMS: 10_000, EndMS: 16_000, Focus: 0.5})
+
+	c.Voiceover = &VoiceoverMix{VoiceoverID: vo, StartMS: 3000, Duck: 0.25}
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Too long", c, nil)
+	wantField(t, err, "composition.voiceover.start_ms")
+	c.Voiceover = &VoiceoverMix{VoiceoverID: newID(), StartMS: 0, Duck: 0.25}
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Missing", c, nil)
+	wantField(t, err, "composition.voiceover.voiceover_id")
+	c.Voiceover = &VoiceoverMix{VoiceoverID: vo, StartMS: 1000, Duck: 1.5}
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Loud", c, nil)
+	wantField(t, err, "composition.voiceover.duck")
+
+	c.Voiceover = &VoiceoverMix{VoiceoverID: vo, StartMS: 1500, Duck: 0.25, DurationMS: 99}
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "With voiceover", c, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Composition.Voiceover.DurationMS != 4000 {
+		t.Fatalf("duration not copied from the voiceover: %+v", r.Composition.Voiceover)
+	}
+	ff := &fakeFFmpeg{}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err != nil {
+		t.Fatal(err)
+	}
+	m := ff.montages[0]
+	if m.Voiceover == "" || m.VoiceoverAt != 1500*time.Millisecond || m.VoiceoverLength != 4*time.Second || m.Duck != 0.25 {
+		t.Fatalf("plan voiceover = %q at %v for %v duck %v", m.Voiceover, m.VoiceoverAt, m.VoiceoverLength, m.Duck)
+	}
+
+	r2, err := w.svc.Create(w.ctx, ana.id, org, proj, "Again", c, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.db.ExecContext(w.ctx, `DELETE FROM voiceovers WHERE id = ?`, vo); err != nil {
+		t.Fatal(err)
+	}
+	j := w.job(r2.ID)
+	err = w.renderer(ff).Process(w.ctx, j)
+	if !jobs.IsPermanent(err) {
+		t.Fatalf("deleted voiceover: %v", err)
+	}
+	_ = w.renderer(ff).Failed(w.ctx, j, err)
+	if got, _ := w.svc.Get(w.ctx, ana.id, org, proj, r2.ID); got.Error != msgVoiceoverGone {
+		t.Fatalf("message = %q", got.Error)
+	}
+}

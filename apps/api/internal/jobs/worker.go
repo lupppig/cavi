@@ -112,7 +112,8 @@ func (w *Worker) handle(ctx context.Context, msg jetstream.Msg) {
 	if err := json.Unmarshal(msg.Data(), &m); err != nil || m.Version != MessageVersion || m.Kind != w.kind ||
 		!uuidPattern.MatchString(m.JobID) || !uuidPattern.MatchString(m.OrganisationID) ||
 		(m.MediaAssetID != "" && !uuidPattern.MatchString(m.MediaAssetID)) ||
-		(m.RenderID != "" && !uuidPattern.MatchString(m.RenderID)) {
+		(m.RenderID != "" && !uuidPattern.MatchString(m.RenderID)) ||
+		(m.SubjectID != "" && !uuidPattern.MatchString(m.SubjectID)) {
 		w.logger.Error("discarding malformed job message", slog.String("subject", msg.Subject()))
 		_ = msg.Term()
 		return
@@ -207,12 +208,12 @@ func (w *Worker) claim(ctx context.Context, m Message) (Job, bool, error) {
 		UPDATE jobs SET status = 'running', attempts = attempts + 1, lease_expires_at = ?,
 			started_at = coalesce(started_at, now()), updated_at = now()
 		WHERE id = ? AND kind = ? AND organisation_id::text = ? AND coalesce(media_asset_id::text, '') = ?
-			AND coalesce(render_id::text, '') = ?
+			AND coalesce(render_id::text, '') = ? AND coalesce(subject_id::text, '') = ?
 			AND (status = 'queued' OR (status = 'running' AND lease_expires_at < now()))
 		RETURNING kind, organisation_id, coalesce(media_asset_id::text, ''), coalesce(render_id::text, ''),
-			coalesce(correlation_id, ''), attempts, max_attempts`,
-		time.Now().Add(w.opts.Lease), m.JobID, w.kind, m.OrganisationID, m.MediaAssetID, m.RenderID).
-		Scan(&j.Kind, &j.OrganisationID, &j.MediaAssetID, &j.RenderID, &j.CorrelationID, &j.Attempt, &j.MaxAttempts)
+			coalesce(subject_id::text, ''), coalesce(correlation_id, ''), attempts, max_attempts`,
+		time.Now().Add(w.opts.Lease), m.JobID, w.kind, m.OrganisationID, m.MediaAssetID, m.RenderID, m.SubjectID).
+		Scan(&j.Kind, &j.OrganisationID, &j.MediaAssetID, &j.RenderID, &j.SubjectID, &j.CorrelationID, &j.Attempt, &j.MaxAttempts)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Job{}, false, nil
 	}
@@ -225,11 +226,11 @@ func (w *Worker) claim(ctx context.Context, m Message) (Job, bool, error) {
 // mismatched reports whether the job exists but belongs to a different
 // tenant or resource than the message claims.
 func (w *Worker) mismatched(ctx context.Context, m Message) bool {
-	var org, asset, render string
+	var org, asset, render, subject string
 	err := w.db.QueryRowContext(ctx, `
-		SELECT organisation_id::text, coalesce(media_asset_id::text, ''), coalesce(render_id::text, '')
-		FROM jobs WHERE id::text = ?`, m.JobID).Scan(&org, &asset, &render)
-	return err == nil && (org != m.OrganisationID || asset != m.MediaAssetID || render != m.RenderID)
+		SELECT organisation_id::text, coalesce(media_asset_id::text, ''), coalesce(render_id::text, ''), coalesce(subject_id::text, '')
+		FROM jobs WHERE id::text = ?`, m.JobID).Scan(&org, &asset, &render, &subject)
+	return err == nil && (org != m.OrganisationID || asset != m.MediaAssetID || render != m.RenderID || subject != m.SubjectID)
 }
 
 func (w *Worker) finish(ctx context.Context, id string) error {

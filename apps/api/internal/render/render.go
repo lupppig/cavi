@@ -24,6 +24,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
+	"github.com/lupppig/cavi/apps/api/internal/voiceover"
 )
 
 // Render statuses.
@@ -175,7 +176,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
 			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.LengthMS(), "segments": max(1, len(c.Segments)),
-				"hook": c.Hook != nil, "captions": captions != nil})
+				"hook": c.Hook != nil, "voiceover": c.Voiceover != nil, "captions": captions != nil})
 	})
 	if err != nil {
 		return Render{}, err
@@ -490,6 +491,13 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 				transcripts[id] = segs
 			}
 			c.Captions = &Captions{CaptionOptions: opts, Cues: MontageCaptions(c.Segments, transcripts, c.Aspect, opts.Mode)}
+		}
+		if c.Voiceover != nil {
+			v, err := voiceover.Load(ctx, tx, orgID, projectID, c.Voiceover.VoiceoverID)
+			if err != nil {
+				return invalid("composition.voiceover.voiceover_id", "Choose a finished voiceover from this project.")
+			}
+			c.Voiceover.DurationMS = v.DurationMS
 		}
 		if err := c.ValidateMontage(srcs); err != nil {
 			return err

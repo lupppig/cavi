@@ -64,6 +64,17 @@ type Hook struct {
 	EndMS int64  `json:"end_ms"`
 }
 
+// VoiceoverMix places a ready voiceover in a montage.
+type VoiceoverMix struct {
+	VoiceoverID string `json:"voiceover_id"`
+	// StartMS is where it starts, in clip time.
+	StartMS int64 `json:"start_ms"`
+	// Duck is the clip's own audio level (0 to 1) while it plays.
+	Duck float64 `json:"duck"`
+	// DurationMS is copied from the voiceover when the render is requested.
+	DurationMS int64 `json:"duration_ms"`
+}
+
 // LengthMS is the montage's total length.
 func (c Composition) LengthMS() int64 {
 	if c.Version != MontageVersion {
@@ -166,6 +177,16 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 	if c.Captions != nil {
 		if err := c.Captions.validate(total); err != nil {
 			return err
+		}
+	}
+	if v := c.Voiceover; v != nil {
+		if math.IsNaN(v.Duck) || v.Duck < 0 || v.Duck > 1 {
+			return invalid("composition.voiceover.duck", "The clip’s own sound under the voiceover must be between 0 and 1.")
+		}
+		if v.StartMS < 0 || v.DurationMS <= 0 || v.StartMS+v.DurationMS > total {
+			return invalid("composition.voiceover.start_ms", fmt.Sprintf(
+				"The voiceover (%.1f s) must fit inside the clip (%.1f s). Start it earlier or make the clip longer.",
+				float64(v.DurationMS)/1000, float64(total)/1000))
 		}
 	}
 	first := c.Segments[0]

@@ -25,6 +25,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/render"
 	"github.com/lupppig/cavi/apps/api/internal/session"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
+	"github.com/lupppig/cavi/apps/api/internal/voiceover"
 	"github.com/lupppig/cavi/apps/api/internal/waitlist"
 )
 
@@ -76,6 +77,7 @@ func run() error {
 	var mediaService httpapi.MediaService
 	var renderService httpapi.RenderService
 	var briefService httpapi.BriefService
+	var voiceoverService httpapi.VoiceoverService
 	if cfg.StorageEnabled() {
 		st := cfg.Storage
 		store := storage.NewS3(storage.S3Config{
@@ -85,7 +87,8 @@ func run() error {
 		svc := media.NewService(db, store, logger)
 		renders := render.NewService(db, store, logger)
 		briefs := brief.NewService(db)
-		mediaService, renderService, briefService = svc, renders, briefs
+		voiceovers := voiceover.NewService(db, store)
+		mediaService, renderService, briefService, voiceoverService = svc, renders, briefs, voiceovers
 		go sweepMedia(ctx, logger, svc)
 
 		// Jobs are always recorded; with NATS they are also delivered.
@@ -99,6 +102,7 @@ func run() error {
 			svc.OnJobQueued(relay.Wake)
 			renders.OnJobQueued(relay.Wake)
 			briefs.OnJobQueued(relay.Wake)
+			voiceovers.OnJobQueued(relay.Wake)
 			go relay.Run(ctx)
 		} else {
 			logger.Warn("job delivery disabled: CAVI_NATS_URL is not set; media and renders will wait in the queue")
@@ -117,6 +121,7 @@ func run() error {
 		Media:          mediaService,
 		Renders:        renderService,
 		Briefs:         briefService,
+		Voiceovers:     voiceoverService,
 		AISettings:     ai.NewSettingsService(db),
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,

@@ -652,6 +652,72 @@ export interface paths {
         patch: operations["updateBrief"];
         trace?: never;
     };
+    "/api/v1/voices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The voices voiceovers can use
+         * @description The first is the default.
+         */
+        get: operations["listVoices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A project's voiceovers, newest first (at most 100) */
+        get: operations["listVoiceovers"];
+        put?: never;
+        /**
+         * Have a script spoken by an AI voice
+         * @description Requires `editing.manage`. The script is sent to the organisation's
+         *     chosen model for the `voiceover` task, which speaks it in one of the
+         *     offered voices; the audio is checked (not empty, silent, truncated
+         *     or runaway) and stored. Use a ready voiceover in a montage's
+         *     `voiceover`. Recorded in the audit log.
+         */
+        post: operations["createVoiceover"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a voiceover, with a fresh signed URL once ready */
+        get: operations["getVoiceover"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete a voiceover and its audio
+         * @description Requires `editing.manage`. Clips already made keep their sound; new renders can't use it.
+         */
+        delete: operations["deleteVoiceover"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/projects/{projectID}/renders": {
         parameters: {
             query?: never;
@@ -1254,6 +1320,7 @@ export interface components {
             /** @description Version 3 only. At least half a second each; 1 s to 10 min in total. */
             segments?: components["schemas"]["MontageSegment"][];
             hook?: components["schemas"]["Hook"];
+            voiceover?: components["schemas"]["VoiceoverMix"];
             /** Format: uuid */
             source_asset_id: string;
             /** Format: int64 */
@@ -1270,6 +1337,60 @@ export interface components {
              *     0 left or top, 0.5 centre, 1 right or bottom.
              */
             focus: number;
+        };
+        Voice: {
+            /** @description The voice's name; send it as `voice`. */
+            id: string;
+            /** @description How it sounds. */
+            label: string;
+        };
+        Voiceover: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            script: string;
+            voice: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed";
+            provider: string;
+            model: string;
+            model_label: string;
+            prompt_version: string;
+            /** Format: int64 */
+            duration_ms: number | null;
+            error: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            can_delete: boolean;
+            /** @description Signed URL to play the audio (WAV) */
+            url: string | null;
+            /** Format: date-time */
+            url_expires_at: string | null;
+        };
+        CreateVoiceoverRequest: {
+            script: string;
+            /** @description One of GET /api/v1/voices; defaults to the first. */
+            voice?: string;
+        };
+        /** @description A ready voiceover mixed into a montage. It must fit inside the clip from `start_ms`. */
+        VoiceoverMix: {
+            /** Format: uuid */
+            voiceover_id: string;
+            /**
+             * Format: int64
+             * @description Clip time.
+             */
+            start_ms: number;
+            /** @description The clip's own sound level while the voiceover plays (0.25 is a typical duck). */
+            duck: number;
+            /**
+             * Format: int64
+             * @description Copied from the voiceover when the render is requested.
+             */
+            readonly duration_ms?: number;
         };
         TimeRange: {
             /**
@@ -1421,7 +1542,7 @@ export interface components {
         AIModelSettingList: {
             data: {
                 /** @enum {string} */
-                task: "transcription" | "highlights" | "briefs";
+                task: "transcription" | "highlights" | "briefs" | "voiceover";
                 model: components["schemas"]["AIModel"];
                 custom: boolean;
                 options: components["schemas"]["AIModel"][];
@@ -2674,6 +2795,147 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    listVoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Voices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Voice"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+        };
+    };
+    listVoiceovers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Voiceovers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Voiceover"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createVoiceover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVoiceoverRequest"];
+            };
+        };
+        responses: {
+            /** @description Voiceover queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Voiceover"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getVoiceover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                voiceoverID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The voiceover. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Voiceover"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deleteVoiceover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                voiceoverID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     listRenders: {
         parameters: {
             query?: {
@@ -2827,7 +3089,7 @@ export interface operations {
             header?: never;
             path: {
                 orgID: components["parameters"]["OrgID"];
-                task: "transcription" | "highlights" | "briefs";
+                task: "transcription" | "highlights" | "briefs" | "voiceover";
             };
             cookie?: never;
         };

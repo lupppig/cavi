@@ -17,6 +17,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
+	"github.com/lupppig/cavi/apps/api/internal/voiceover"
 )
 
 // Clipper is what rendering needs from FFmpeg. *ffmpeg.Runner implements it.
@@ -52,18 +53,20 @@ var _ jobs.Handler = (*Renderer)(nil)
 
 // Reasons a render fails for good.
 var (
-	errSourceGone = errors.New("render: source is gone or no longer a processed video")
-	errBadOutput  = errors.New("render: output failed checks")
-	errExcluded   = errors.New("render: clip includes content the brief excludes")
+	errSourceGone    = errors.New("render: source is gone or no longer a processed video")
+	errBadOutput     = errors.New("render: output failed checks")
+	errExcluded      = errors.New("render: clip includes content the brief excludes")
+	errVoiceoverGone = errors.New("render: voiceover was deleted")
 )
 
 // User-facing failure messages.
 const (
-	msgSourceGone = "The source file was deleted or changed, so this clip can’t be made. Make it again from the file."
-	msgUnreadable = "The source file couldn’t be read, so this clip can’t be made."
-	msgBadOutput  = "The rendered clip didn’t come out right, so we didn’t keep it. Try again."
-	msgGaveUp     = "Rendering kept failing, so we stopped trying. Try again."
-	msgExcluded   = "The creator brief now excludes part of this clip, so it wasn’t made. Choose another stretch."
+	msgSourceGone    = "The source file was deleted or changed, so this clip can’t be made. Make it again from the file."
+	msgUnreadable    = "The source file couldn’t be read, so this clip can’t be made."
+	msgBadOutput     = "The rendered clip didn’t come out right, so we didn’t keep it. Try again."
+	msgGaveUp        = "Rendering kept failing, so we stopped trying. Try again."
+	msgExcluded      = "The creator brief now excludes part of this clip, so it wasn’t made. Choose another stretch."
+	msgVoiceoverGone = "The voiceover was deleted, so this clip can’t be made. Make it again with another voiceover."
 )
 
 // timeoutFor bounds one FFmpeg run: generous for the clip's length, within
@@ -188,6 +191,8 @@ func (r *Renderer) Failed(ctx context.Context, job jobs.Job, err error) error {
 		msg = msgBadOutput
 	case errors.Is(err, errExcluded):
 		msg = msgExcluded
+	case errors.Is(err, errVoiceoverGone):
+		msg = msgVoiceoverGone
 	}
 	_, dbErr := r.db.ExecContext(ctx, `
 		UPDATE renders SET status = 'failed', error = ?, updated_at = now()
@@ -266,6 +271,22 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 		inputs[id] = url
 	}
 	plan := PlanMontage(c, srcs, inputs)
+	if v := c.Voiceover; v != nil {
+		ready, err := voiceover.Load(ctx, r.db, job.OrganisationID, projectID, v.VoiceoverID)
+		if errors.Is(err, voiceover.ErrNotFound) {
+			return jobs.Permanent(errVoiceoverGone)
+		}
+		if err != nil {
+			return err
+		}
+		url, _, err := r.store.PresignDownload(ctx, ready.StorageKey, timeoutFor(length)+10*time.Minute)
+		if err != nil {
+			return err
+		}
+		plan.Voiceover, plan.Duck = url, v.Duck
+		plan.VoiceoverAt = time.Duration(v.StartMS) * time.Millisecond
+		plan.VoiceoverLength = time.Duration(min(ready.DurationMS, c.LengthMS()-v.StartMS)) * time.Millisecond
+	}
 	dir, err := os.MkdirTemp(r.TempDir, "render-")
 	if err != nil {
 		return fmt.Errorf("render work dir: %w", err)

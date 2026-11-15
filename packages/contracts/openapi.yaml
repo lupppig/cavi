@@ -1247,6 +1247,159 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/voices:
+    get:
+      operationId: listVoices
+      summary: The voices voiceovers can use
+      description: The first is the default.
+      tags: [voiceovers]
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Voices.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Voice" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/voiceovers:
+    get:
+      operationId: listVoiceovers
+      summary: A project's voiceovers, newest first (at most 100)
+      tags: [voiceovers]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: Voiceovers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Voiceover" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      operationId: createVoiceover
+      summary: Have a script spoken by an AI voice
+      description: |
+        Requires `editing.manage`. The script is sent to the organisation's
+        chosen model for the `voiceover` task, which speaks it in one of the
+        offered voices; the audio is checked (not empty, silent, truncated
+        or runaway) and stored. Use a ready voiceover in a montage's
+        `voiceover`. Recorded in the audit log.
+      tags: [voiceovers]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateVoiceoverRequest"
+      responses:
+        "202":
+          description: Voiceover queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Voiceover"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}:
+    get:
+      operationId: getVoiceover
+      summary: Get a voiceover, with a fresh signed URL once ready
+      tags: [voiceovers]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - name: voiceoverID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: The voiceover.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Voiceover"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      operationId: deleteVoiceover
+      summary: Delete a voiceover and its audio
+      description: Requires `editing.manage`. Clips already made keep their sound; new renders can't use it.
+      tags: [voiceovers]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - name: voiceoverID
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/projects/{projectID}/renders:
     get:
       operationId: listRenders
@@ -1433,7 +1586,7 @@ paths:
         - name: task
           in: path
           required: true
-          schema: { type: string, enum: [transcription, highlights, briefs] }
+          schema: { type: string, enum: [transcription, highlights, briefs, voiceover] }
       requestBody:
         required: true
         content:
@@ -2131,6 +2284,7 @@ components:
           description: Version 3 only. At least half a second each; 1 s to 10 min in total.
           items: { $ref: "#/components/schemas/MontageSegment" }
         hook: { $ref: "#/components/schemas/Hook" }
+        voiceover: { $ref: "#/components/schemas/VoiceoverMix" }
         source_asset_id: { type: string, format: uuid }
         start_ms: { type: integer, format: int64, minimum: 0 }
         end_ms: { type: integer, format: int64, description: Exclusive; 1 s to 10 min after `start_ms`. }
@@ -2142,6 +2296,51 @@ components:
           description: |
             Where the frame sits along the axis the source is cropped on:
             0 left or top, 0.5 centre, 1 right or bottom.
+
+    Voice:
+      type: object
+      required: [id, label]
+      properties:
+        id: { type: string, description: The voice's name; send it as `voice`. }
+        label: { type: string, description: How it sounds. }
+
+    Voiceover:
+      type: object
+      required: [id, project_id, script, voice, status, provider, model, model_label, prompt_version, duration_ms, error, created_at, completed_at, can_delete, url, url_expires_at]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        script: { type: string }
+        voice: { type: string }
+        status: { type: string, enum: [queued, running, ready, failed] }
+        provider: { type: string }
+        model: { type: string }
+        model_label: { type: string }
+        prompt_version: { type: string }
+        duration_ms: { type: [integer, "null"], format: int64 }
+        error: { type: [string, "null"] }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        can_delete: { type: boolean }
+        url: { type: [string, "null"], description: Signed URL to play the audio (WAV), once ready. }
+        url_expires_at: { type: [string, "null"], format: date-time }
+
+    CreateVoiceoverRequest:
+      type: object
+      required: [script]
+      properties:
+        script: { type: string, minLength: 1, maxLength: 1200 }
+        voice: { type: string, description: "One of GET /api/v1/voices; defaults to the first." }
+
+    VoiceoverMix:
+      type: object
+      description: A ready voiceover mixed into a montage. It must fit inside the clip from `start_ms`.
+      required: [voiceover_id, start_ms, duck]
+      properties:
+        voiceover_id: { type: string, format: uuid }
+        start_ms: { type: integer, format: int64, minimum: 0, description: Clip time. }
+        duck: { type: number, minimum: 0, maximum: 1, description: "The clip's own sound level while the voiceover plays (0.25 is a typical duck)." }
+        duration_ms: { type: integer, format: int64, readOnly: true, description: Copied from the voiceover when the render is requested. }
 
     TimeRange:
       type: object
@@ -2322,7 +2521,7 @@ components:
             type: object
             required: [task, model, custom, options]
             properties:
-              task: { type: string, enum: [transcription, highlights, briefs] }
+              task: { type: string, enum: [transcription, highlights, briefs, voiceover] }
               model: { $ref: "#/components/schemas/AIModel" }
               custom: { type: boolean }
               options:

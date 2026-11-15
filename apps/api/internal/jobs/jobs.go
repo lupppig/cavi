@@ -35,6 +35,7 @@ const (
 	KindMediaHighlights = "media.highlights"
 	KindRenderClip      = "render.clip"
 	KindBriefRead       = "brief.read"
+	KindVoiceoverSpeak  = "voiceover.speak"
 )
 
 // Message is what travels over NATS. It is versioned so workers can
@@ -46,6 +47,7 @@ type Message struct {
 	OrganisationID string `json:"organisation_id"`
 	MediaAssetID   string `json:"media_asset_id,omitempty"`
 	RenderID       string `json:"render_id,omitempty"`
+	SubjectID      string `json:"subject_id,omitempty"`
 	CorrelationID  string `json:"correlation_id,omitempty"`
 }
 
@@ -59,7 +61,11 @@ type Job struct {
 	OrganisationID string
 	MediaAssetID   string
 	RenderID       string
-	CorrelationID  string
+	// SubjectID is the job's resource when it is neither a media file nor
+	// a render (a voiceover, an edit plan run). Its handler checks the
+	// resource exists in the job's organisation.
+	SubjectID     string
+	CorrelationID string
 	// Attempt is 1 for the first run.
 	Attempt     int
 	MaxAttempts int
@@ -71,6 +77,7 @@ type New struct {
 	OrganisationID string
 	MediaAssetID   string
 	RenderID       string
+	SubjectID      string
 	CorrelationID  string
 	MaxAttempts    int
 }
@@ -86,9 +93,9 @@ func Enqueue(ctx context.Context, db bun.IDB, n New) (string, error) {
 	}
 	var id string
 	err := db.QueryRowContext(ctx, `
-		INSERT INTO jobs (kind, organisation_id, media_asset_id, render_id, correlation_id, max_attempts)
-		VALUES (?, ?, NULLIF(?, '')::uuid, NULLIF(?, '')::uuid, NULLIF(?, ''), ?) RETURNING id`,
-		n.Kind, n.OrganisationID, n.MediaAssetID, n.RenderID, n.CorrelationID, n.MaxAttempts).Scan(&id)
+		INSERT INTO jobs (kind, organisation_id, media_asset_id, render_id, subject_id, correlation_id, max_attempts)
+		VALUES (?, ?, NULLIF(?, '')::uuid, NULLIF(?, '')::uuid, NULLIF(?, '')::uuid, NULLIF(?, ''), ?) RETURNING id`,
+		n.Kind, n.OrganisationID, n.MediaAssetID, n.RenderID, n.SubjectID, n.CorrelationID, n.MaxAttempts).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("enqueue job: %w", err)
 	}
