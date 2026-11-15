@@ -281,5 +281,7 @@ func OverlayASS(c *Captions, h *Hook, aspect string) string {
 	style := fmt.Sprintf("Style: Hook,Inter Black,%d,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,%d,0,8,%d,%d,%d,1\n",
 		size, size/4, sh.Width/10, sh.Width/10, sh.Height/9)
 	s = strings.Replace(s, "\n[Events]", style+"\n[Events]", 1)
-	return s + fmt.Sprintf("Dialogue: 1,%s,%s,Hook,,0,0,0,,%s\n", assTime(0), assTime(h.EndMS), assText(h.Text, false))
+	// The script turns wrapping off for captions (they are split already);
+	// \q0 turns smart wrapping back on for the hook.
+	return s + fmt.Sprintf("Dialogue: 1,%s,%s,Hook,,0,0,0,,{\\q0}%s\n", assTime(0), assTime(h.EndMS), assText(h.Text, false))
 }

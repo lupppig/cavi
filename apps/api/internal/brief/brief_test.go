@@ -214,6 +214,13 @@ func TestBriefLifecycle(t *testing.T) {
 	if f := Flags(rules, 60_000, 200_000); len(f) != 1 || f[0].Kind != ai.RuleBlur {
 		t.Fatalf("Flags = %+v (priority must not be a flag)", f)
 	}
+	// A plate named at 3:13 is usually still on screen at 3:18.
+	if f := Flags(rules, 198_000, 220_000); len(f) != 1 || f[0].Kind != ai.RuleBlur {
+		t.Fatalf("Flags just after a single-moment rule = %+v", f)
+	}
+	if f := Flags(rules, 204_000, 220_000); len(f) != 0 {
+		t.Fatalf("Flags beyond the window = %+v", f)
+	}
 
 	// Review: edit the whole list.
 	edit := Edit{CampaignMessage: "Natural diamonds fund schools.", Guidance: "", Rules: []Rule{

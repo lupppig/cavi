@@ -98,7 +98,7 @@ func TestMontageCaptionsAndOverlay(t *testing.T) {
 		t.Fatalf("cues = %+v", cues)
 	}
 	ass := OverlayASS(nil, &Hook{Text: "How diamonds built Botswana", EndMS: 2000}, "9:16")
-	if !strings.Contains(ass, "Style: Hook,") || !strings.Contains(ass, "Dialogue: 1,0:00:00.00,0:00:02.00,Hook,,0,0,0,,How diamonds built Botswana") {
+	if !strings.Contains(ass, "Style: Hook,") || !strings.Contains(ass, "Dialogue: 1,0:00:00.00,0:00:02.00,Hook,,0,0,0,,{\\q0}How diamonds built Botswana") {
 		t.Fatalf("hook overlay:\n%s", ass)
 	}
 	caps := &Captions{CaptionOptions: CaptionOptions{Style: CaptionsBoxed}, Cues: cues}

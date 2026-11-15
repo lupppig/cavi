@@ -388,12 +388,27 @@ func Rules(ctx context.Context, db bun.IDB, orgID, assetID string) ([]ai.BriefRu
 	return out, rows.Err()
 }
 
+// FlagWindowMS widens a single-moment flag: briefs name the moment
+// something appears, but a licence plate or logo usually stays on screen
+// for a while around it.
+const FlagWindowMS = 10_000
+
 // Flags returns the rules a clip [startMS, endMS) touches, except
-// priority rules, which aren't warnings.
+// priority rules, which aren't warnings. Single-moment rules count when the
+// clip comes within FlagWindowMS of them; exclusions are hard limits on
+// the times written and are checked exactly (see Excluded), but are still
+// flagged when near.
 func Flags(rules []ai.BriefRule, startMS, endMS int64) []ai.BriefRule {
 	var out []ai.BriefRule
 	for _, r := range rules {
-		if r.Kind != ai.RulePriority && r.Overlaps(startMS, endMS) {
+		if r.Kind == ai.RulePriority {
+			continue
+		}
+		w := r
+		if r.StartMS == r.EndMS {
+			w.StartMS, w.EndMS = max(0, r.StartMS-FlagWindowMS), r.EndMS+FlagWindowMS
+		}
+		if w.Overlaps(startMS, endMS) {
 			out = append(out, r)
 		}
 	}
