@@ -433,11 +433,14 @@ Prefer clips that include the priority moments. Never choose a clip that include
 }
 
 // Speak implements Narrator with a Gemini text-to-speech model.
-func (g *Gemini) Speak(ctx context.Context, model Model, script, voice string) (Speech, Usage, error) {
+func (g *Gemini) Speak(ctx context.Context, model Model, script, voice, style string) (Speech, Usage, error) {
 	if model.Provider != ProviderGemini {
 		return Speech{}, Usage{}, fmt.Errorf("%w: model %s is not a Gemini model", ErrPermanent, model.ID)
 	}
-	if !ValidVoiceID(voice) {
+	if !ValidStyleFor(ProviderGemini, style) {
+		return Speech{}, Usage{}, fmt.Errorf("%w: Gemini voices can't perform the %q style", ErrPermanent, style)
+	}
+	if !ValidVoiceFor(ProviderGemini, voice) {
 		return Speech{}, Usage{}, fmt.Errorf("%w: voice %q is not offered", ErrPermanent, voice)
 	}
 	script, err := CleanScript(script)

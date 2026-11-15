@@ -24,25 +24,74 @@ const (
 
 // Voice is a prebuilt voice CAVI offers.
 type Voice struct {
-	ID    string // the provider's voice name
-	Label string // how it sounds, for people
+	Provider string
+	ID       string // the provider's voice name or ID
+	Label    string // how it sounds, for people
 }
 
-// Voices are the voices offered, the first the default. They are the
-// provider's prebuilt voices; arbitrary names are never accepted.
+// Voices are the voices offered, per provider, each provider's first its
+// default. They are the providers' prebuilt voices; arbitrary voices are
+// never accepted.
 var Voices = []Voice{
-	{ID: "Kore", Label: "Firm"},
-	{ID: "Puck", Label: "Upbeat"},
-	{ID: "Charon", Label: "Informative"},
-	{ID: "Aoede", Label: "Breezy"},
-	{ID: "Fenrir", Label: "Excitable"},
-	{ID: "Leda", Label: "Youthful"},
+	{Provider: ProviderGemini, ID: "Kore", Label: "Firm"},
+	{Provider: ProviderGemini, ID: "Puck", Label: "Upbeat"},
+	{Provider: ProviderGemini, ID: "Charon", Label: "Informative"},
+	{Provider: ProviderGemini, ID: "Aoede", Label: "Breezy"},
+	{Provider: ProviderGemini, ID: "Fenrir", Label: "Excitable"},
+	{Provider: ProviderGemini, ID: "Leda", Label: "Youthful"},
+	{Provider: ProviderGemini, ID: "Zephyr", Label: "Bright"},
+	{Provider: ProviderElevenLabs, ID: "JBFqnCBsd6RMkjVDRZzb", Label: "George · warm, captivating storyteller"},
+	{Provider: ProviderElevenLabs, ID: "nPczCjzI2devNBz1zQrb", Label: "Brian · deep, resonant"},
+	{Provider: ProviderElevenLabs, ID: "IKne3meq5aSn9XLyUdCD", Label: "Charlie · confident, energetic"},
+	{Provider: ProviderElevenLabs, ID: "TX3LPaxmHKxFdv7VOQHJ", Label: "Liam · energetic social-media creator"},
+	{Provider: ProviderElevenLabs, ID: "EXAVITQu4vr4xnSDxMaL", Label: "Sarah · mature, reassuring"},
 }
 
-// ValidVoiceID reports whether id is an offered voice.
-func ValidVoiceID(id string) bool {
+// VoicesFor returns the voices a provider offers, its default first.
+func VoicesFor(provider string) []Voice {
+	var out []Voice
 	for _, v := range Voices {
+		if v.Provider == provider {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// ValidVoiceFor reports whether id is a voice the provider offers.
+func ValidVoiceFor(provider, id string) bool {
+	for _, v := range VoicesFor(provider) {
 		if v.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// Delivery styles for voiceovers. Only expressive models take a style
+// other than natural (see StylesFor).
+const (
+	StyleNatural     = "natural"
+	StyleCurious     = "curious"
+	StyleExcited     = "excited"
+	StylePlayful     = "playful"
+	StyleWarm        = "warm"
+	StyleStoryteller = "storyteller"
+)
+
+// StylesFor returns the delivery styles a provider can perform. Gemini's
+// voices read any direction aloud, so they only speak naturally.
+func StylesFor(provider string) []string {
+	if provider == ProviderElevenLabs {
+		return []string{StyleNatural, StyleCurious, StyleExcited, StylePlayful, StyleWarm, StyleStoryteller}
+	}
+	return []string{StyleNatural}
+}
+
+// ValidStyleFor reports whether a provider can perform style.
+func ValidStyleFor(provider, style string) bool {
+	for _, s := range StylesFor(provider) {
+		if s == style {
 			return true
 		}
 	}
@@ -53,6 +102,9 @@ func ValidVoiceID(id string) bool {
 type Speech struct {
 	PCM        []byte
 	SampleRate int
+	// Words are the script's words timed by the provider, when it gives
+	// timings; otherwise empty and callers time them.
+	Words []Word
 }
 
 // DurationMS is the speech's length.
@@ -79,13 +131,28 @@ func (s Speech) WAV() []byte {
 	return b.Bytes()
 }
 
-// Narrator turns a script into speech.
+// Narrator turns a script into speech in a voice and delivery style.
 type Narrator interface {
-	Speak(ctx context.Context, model Model, script, voice string) (Speech, Usage, error)
+	Speak(ctx context.Context, model Model, script, voice, style string) (Speech, Usage, error)
 }
 
-// CleanScript trims a script and checks its length.
+// Narrators routes speech to the provider of the model asked for.
+type Narrators map[string]Narrator
+
+// Speak implements Narrator.
+func (n Narrators) Speak(ctx context.Context, model Model, script, voice, style string) (Speech, Usage, error) {
+	p, ok := n[model.Provider]
+	if !ok {
+		return Speech{}, Usage{}, fmt.Errorf("%w: provider %s is not configured", ErrPermanent, model.Provider)
+	}
+	return p.Speak(ctx, model, script, voice, style)
+}
+
+// CleanScript trims a script and checks its length. Square brackets are
+// removed: expressive models read them as direction, and direction comes
+// only from the chosen style.
 func CleanScript(script string) (string, error) {
+	script = strings.NewReplacer("[", "", "]", "").Replace(script)
 	script = strings.Join(strings.Fields(script), " ")
 	if script == "" || !utf8.ValidString(script) || utf8.RuneCountInString(script) > MaxScriptRunes {
 		return "", fmt.Errorf("script must be 1 to %d characters", MaxScriptRunes)
@@ -150,4 +217,56 @@ func pcmOf(data []byte, rate int) ([]byte, int, error) {
 		i += 8 + size + size%2
 	}
 	return bad("has no data")
+}
+
+// Music limits.
+const (
+	MusicPromptVersion  = "music-v1"
+	MaxMusicPromptRunes = 500
+	MinMusicMS          = 5_000
+	MaxMusicMS          = 180_000
+)
+
+// Track is composed music: an encoded audio file.
+type Track struct {
+	Data     []byte
+	MIMEType string
+}
+
+// Composer writes instrumental music to a description.
+type Composer interface {
+	Compose(ctx context.Context, model Model, prompt string, lengthMS int64) (Track, Usage, error)
+}
+
+// Composers routes music to the provider of the model asked for.
+type Composers map[string]Composer
+
+// Compose implements Composer.
+func (c Composers) Compose(ctx context.Context, model Model, prompt string, lengthMS int64) (Track, Usage, error) {
+	p, ok := c[model.Provider]
+	if !ok {
+		return Track{}, Usage{}, fmt.Errorf("%w: provider %s is not configured", ErrPermanent, model.Provider)
+	}
+	return p.Compose(ctx, model, prompt, lengthMS)
+}
+
+// CleanMusicPrompt trims a music description and checks its length.
+func CleanMusicPrompt(prompt string) (string, error) {
+	prompt = strings.Join(strings.Fields(prompt), " ")
+	if prompt == "" || !utf8.ValidString(prompt) || utf8.RuneCountInString(prompt) > MaxMusicPromptRunes {
+		return "", fmt.Errorf("describe the music in 1 to %d characters", MaxMusicPromptRunes)
+	}
+	return prompt, nil
+}
+
+// ValidateTrack checks composed music is an MP3 of some substance.
+func ValidateTrack(t Track) error {
+	d := t.Data
+	if len(d) < 8_000 {
+		return fmt.Errorf("%w: %d bytes of music", ErrInvalidOutput, len(d))
+	}
+	if !(string(d[:3]) == "ID3" || (d[0] == 0xFF && d[1]&0xE0 == 0xE0)) {
+		return fmt.Errorf("%w: music is not MP3", ErrInvalidOutput)
+	}
+	return nil
 }

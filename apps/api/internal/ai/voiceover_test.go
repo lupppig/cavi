@@ -74,7 +74,7 @@ func TestEvalVoiceover(t *testing.T) {
 				for _, wait := range []time.Duration{0, 20 * time.Second, 60 * time.Second} {
 					time.Sleep(wait)
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-					s, _, err = g.Speak(ctx, m, script, voice)
+					s, _, err = g.Speak(ctx, m, script, voice, StyleNatural)
 					cancel()
 					if err == nil || errors.Is(err, ErrPermanent) {
 						break
