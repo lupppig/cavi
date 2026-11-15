@@ -202,3 +202,22 @@ func TestHighlightStaysVisible(t *testing.T) {
 		t.Errorf("all-white highlight = %s", got)
 	}
 }
+
+func TestCuesExcludeWordsBeforeTheCut(t *testing.T) {
+	// A long line whose last word is stretched to the line's end, past
+	// the clip's start: "everyone." was said before the clip.
+	seg := ai.Segment{StartMS: 193_000, EndMS: 212_000, Speaker: "Speaker 3", Text: "It belongs to everyone.",
+		Words: []ai.Word{{StartMS: 204_000, EndMS: 204_200, Text: "It"}, {StartMS: 204_200, EndMS: 204_500, Text: "belongs"},
+			{StartMS: 204_500, EndMS: 204_800, Text: "to"}, {StartMS: 205_000, EndMS: 212_000, Text: "everyone."}}}
+	next := ai.Segment{StartMS: 206_500, EndMS: 208_000, Speaker: "Speaker 3", Text: "And that's why",
+		Words: []ai.Word{{StartMS: 206_500, EndMS: 206_800, Text: "And"}, {StartMS: 206_800, EndMS: 207_000, Text: "that's"}, {StartMS: 207_000, EndMS: 208_000, Text: "why"}}}
+	cues := BuildCues([]ai.Segment{seg, next}, 206_400, 210_000, "9:16", ModeWords)
+	for _, q := range cues {
+		if strings.Contains(q.Text, "everyone") {
+			t.Fatalf("captioned a word said before the clip: %+v", cues)
+		}
+	}
+	if len(cues) == 0 || !strings.HasPrefix(cues[0].Text, "And") {
+		t.Fatalf("cues = %+v", cues)
+	}
+}

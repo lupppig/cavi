@@ -228,6 +228,9 @@ func chunk(ws []ai.Word, maxChars int, mode string) [][][]ai.Word {
 	return cues
 }
 
+// maxWordMS is the longest one word is taken to last.
+const maxWordMS = 1200
+
 // BuildCues turns the transcript segments overlapping [startMS, endMS)
 // into caption cues for a shape and mode, timed from the clip's start.
 // Cues start and end on word times (estimated where the transcript has
@@ -240,9 +243,13 @@ func BuildCues(segments []ai.Segment, startMS, endMS int64, aspect, mode string)
 		if seg.EndMS <= startMS || seg.StartMS >= endMS {
 			continue
 		}
+		// Words mostly inside the clip are kept, judging a word to last at
+		// most maxWordMS: a line's last word is often stretched to the
+		// line's end, which can run on past a cut, and its midpoint would
+		// then put a word said before the clip into its captions.
 		var in []ai.Word
 		for _, w := range timedWords(seg) {
-			if mid := (w.StartMS + w.EndMS) / 2; mid >= startMS && mid < endMS {
+			if mid := (w.StartMS + min(w.EndMS, w.StartMS+maxWordMS)) / 2; mid >= startMS && mid < endMS {
 				in = append(in, w)
 			}
 		}
