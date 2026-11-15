@@ -14,11 +14,11 @@ CAVI does one thing for now: **clipping**. Live clipping is next.
 
 ### Clipping (available)
 
-1. **Upload** a long video. It goes straight to private storage; CAVI checks it and reads its length, size and sound.
+1. **Upload** a long video, or paste a YouTube, Twitch or Kick link. It goes to private storage; CAVI checks it, reads its length, size and sound, and finds the people in it for auto framing.
 2. **Transcribe** it. Every word is timed and each speaker is labelled.
 3. **Add the creator's brief.** Paste their guidelines as written. CAVI reads them into rules you can check and edit: moments to feature, moments that must never be used, and things to blur, mute or review. Every time in a rule must appear in the brief, so nothing is invented.
 4. **Find clips.** Highlights suggests stand-alone moments, ranked so the creator's priorities come first, each with a reason and how it connects to the campaign. Edit plans goes further and proposes finished short videos: which moments to join and in what order, a hook, and a voiceover script.
-5. **Edit.** Join moments from one or more videos, frame each for 9:16, 1:1, 4:5 or 16:9, open on a split screen of several scenes, blur licence plates or faces, mute uncleared music, add a hook, word-by-word or bouncing "pop" captions, an AI voiceover (captioned too), and a sign-off card ("Like and subscribe for more!") the narrator can say.
+5. **Edit.** Join moments from one or more videos, frame each for 9:16, 1:1, 4:5 or 16:9 by hand or let the camera follow the people in shot, open on a split screen of several scenes, blur licence plates or faces, mute uncleared music, add a hook, word-by-word or bouncing "pop" captions, an AI voiceover (captioned too), and a sign-off card ("Like and subscribe for more!") the narrator can say.
 6. **Render and download.** CAVI renders an MP4 and checks its size, length and sound before keeping it. Download it and post it.
 
 The brief is enforced, not just suggested: a clip that includes a "never use" moment can't be rendered, and clips near anything else the brief flags are marked so someone checks them.
@@ -51,7 +51,7 @@ Browser (Next.js) ──▶ Go API ──▶ PostgreSQL (source of truth)
 
 ## Status
 
-Working: sign-in with Google, organisations and teams with roles, projects with client sharing, uploads, transcription, creator briefs, highlights, edit plans, montages (several moments, split screens, blur, mute, hooks, captions), AI voiceovers and rendering.
+Working: sign-in with Google, organisations and teams with roles, projects with client sharing, uploads and imports from YouTube, Twitch and Kick links, transcription, creator briefs, highlights, edit plans, montages (several moments, split screens, blur, mute, hooks, captions), auto framing that follows the people in shot, AI voiceovers and rendering.
 
 Not built yet: live clipping, publishing to TikTok, YouTube or Instagram (download and post for now), editing transcripts and captions, speaker-aware reframing, blur boxes that follow movement, and live job updates (the page polls). The montage editor can't create split screens yet; the API can.
 
