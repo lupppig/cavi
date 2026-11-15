@@ -6,6 +6,7 @@ import { Banner } from "@/components/account/account-header";
 import { BriefCheck, FlagList } from "./brief-section";
 import { client, raise, type CaptionOptions, type Composition, type MediaAsset, type Project, type Render } from "@/lib/queries";
 import { CaptionOptionsPicker, CaptionPreview, captionLayout, defaultCaptionOptions, firstCaption } from "./caption-options";
+import { FramingChoice, FramingPreview, useFramingPath } from "./framing";
 import { useRequestTranscript, useTranscript } from "./transcript-panel";
 
 /** Output shapes, matching the API's composition aspects and render sizes. */
@@ -111,6 +112,7 @@ export function ClipComposer({
   const [end, setEnd] = useState(initial.endMS);
   const [aspect, setAspect] = useState<Composition["aspect"]>("9:16");
   const [focus, setFocus] = useState(50);
+  const [auto, setAuto] = useState(false);
   const [captions, setCaptions] = useState<CaptionOptions | null>(null);
   const create = useCreateRender(project, asset);
   const transcript = useTranscript(project, asset);
@@ -126,6 +128,7 @@ export function ClipComposer({
   const crops = srcW * shape.h !== srcH * shape.w;
   const horizontal = srcW * shape.h > srcH * shape.w; // the source is cropped left/right
   const len = end - start;
+  const path = useFramingPath(project, asset, aspect, start, end, focus / 100, auto && crops);
   const problem =
     len < MIN_MS ? "Clips must be at least a second long." : len > MAX_MS ? "Clips can be at most 10 minutes long." : null;
 
@@ -153,12 +156,13 @@ export function ClipComposer({
       {
         name: name.trim() || "Clip",
         composition: {
-          version: captions ? 2 : 1,
+          version: captions || (auto && crops) ? 2 : 1,
           source_asset_id: asset.id,
           start_ms: Math.round(start),
           end_ms: Math.round(end),
           aspect,
           focus: crops ? focus / 100 : 0.5,
+          ...(auto && crops ? { framing: "auto" as const } : {}),
         },
         captions: captions && {
           ...captions,
@@ -245,16 +249,27 @@ export function ClipComposer({
                   aspectRatio: `${shape.w} / ${shape.h}`,
                 }}
               >
-                <video
-                  ref={frame}
-                  src={url}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  aria-label="How the clip will be framed"
-                  className="block h-full w-full bg-stage"
-                  style={{ objectFit: "cover", objectPosition: `${focus}% ${focus}%` }}
-                />
+                {auto && crops && path.data ? (
+                  <FramingPreview
+                    url={url}
+                    startMS={start}
+                    endMS={end}
+                    keys={path.data}
+                    horizontal={horizontal}
+                    label="How the clip will be framed, following the people in shot"
+                  />
+                ) : (
+                  <video
+                    ref={frame}
+                    src={url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    aria-label="How the clip will be framed"
+                    className="block h-full w-full bg-stage"
+                    style={{ objectFit: "cover", objectPosition: `${focus}% ${focus}%` }}
+                  />
+                )}
                 {captions && spoken && (
                   <CaptionPreview
                     options={captions}
@@ -271,10 +286,18 @@ export function ClipComposer({
                 )}
               </div>
             </div>
+            {auto && crops && path.isError && <Banner>{path.error.message}</Banner>}
+            {crops && (
+              <div className="mt-2">
+                <FramingChoice project={project} assets={[asset]} auto={auto} onAuto={setAuto} canAnalyse={canTranscribe} />
+              </div>
+            )}
             {crops ? (
               <label className="mt-2 block">
                 <span className="text-xs font-semibold text-muted">
-                  Slide to choose what stays in frame ({horizontal ? "left to right" : "top to bottom"})
+                  {auto
+                    ? `Where the frame sits when nobody’s in shot (${horizontal ? "left to right" : "top to bottom"})`
+                    : `Slide to choose what stays in frame (${horizontal ? "left to right" : "top to bottom"})`}
                 </span>
                 <input
                   type="range"

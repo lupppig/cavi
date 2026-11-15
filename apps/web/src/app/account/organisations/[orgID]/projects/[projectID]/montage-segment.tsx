@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { BriefRule, Composition, MediaAsset, Project } from "@/lib/queries";
 import { BriefCheck, FLAG_WINDOW_MS, flagged, span, useBrief } from "./brief-section";
 import { shapes, stampTenths } from "./clips";
+import { focusAt, useFramingPath } from "./framing";
 import { stable } from "./media-section";
 
 /** The API's montage limits (internal/render/montage.go). */
@@ -105,6 +106,7 @@ export function SegmentEditor({
   draft,
   files,
   aspect,
+  auto,
   offsetMS,
   onChange,
   onMove,
@@ -116,6 +118,8 @@ export function SegmentEditor({
   draft: SegmentDraft;
   files: MediaAsset[];
   aspect: Composition["aspect"];
+  /** The montage follows people (auto framing). */
+  auto: boolean;
   /** Where this segment starts in the montage. */
   offsetMS: number;
   onChange: (patch: Partial<SegmentDraft>) => void;
@@ -380,9 +384,13 @@ export function SegmentEditor({
 
         {asset && (
           <SegmentFrame
+            project={project}
             asset={asset}
             aspect={aspect}
             focus={draft.focus}
+            auto={auto && timesOK}
+            startMS={checked.startMS}
+            endMS={checked.endMS}
             seekMS={seekMS}
             blur={draft.blur}
             active={active}
@@ -407,18 +415,27 @@ export function SegmentEditor({
  * live where it sits. Tapping the frame moves the selected box there.
  */
 function SegmentFrame({
+  project,
   asset,
   aspect,
   focus,
+  auto,
+  startMS,
+  endMS,
   seekMS,
   blur,
   active,
   onFocus,
   onPlace,
 }: {
+  project: Project;
   asset: MediaAsset;
   aspect: Composition["aspect"];
   focus: number;
+  /** Auto framing: the outline follows the camera path at seekMS. */
+  auto: boolean;
+  startMS: number;
+  endMS: number;
   seekMS: number;
   blur: BlurDraft[];
   active: number | null;
@@ -434,7 +451,9 @@ function SegmentFrame({
   const crops = srcW * shape.h !== srcH * shape.w;
   const keepW = horizontal ? (srcH * shape.w) / shape.h / srcW : 1;
   const keepH = horizontal ? 1 : (srcW * shape.h) / shape.w / srcH;
-  const keep = { left: (1 - keepW) * focus, top: (1 - keepH) * focus, width: keepW, height: keepH };
+  const path = useFramingPath(project, asset, aspect, startMS, endMS, focus, auto && crops);
+  const at = auto && path.data ? focusAt(path.data, seekMS - startMS) : focus;
+  const keep = { left: (1 - keepW) * at, top: (1 - keepH) * at, width: keepW, height: keepH };
 
   useEffect(() => {
     const el = video.current;
@@ -513,12 +532,16 @@ function SegmentFrame({
         {hasActive
           ? "Tap the frame to move the selected blur box there, then fine-tune it with the numbers."
           : crops
-            ? `The outline is what ${aspect} keeps.`
+            ? auto
+              ? `The outline is what ${aspect} keeps at ${stampTenths(seekMS)}; it moves with the people in shot.`
+              : `The outline is what ${aspect} keeps.`
             : `The whole frame fits ${aspect}.`}
       </p>
       {crops && (
         <label className="mt-1 block">
-          <span className="text-xs font-semibold text-muted">Framing ({horizontal ? "left to right" : "top to bottom"})</span>
+          <span className="text-xs font-semibold text-muted">
+            {auto ? "Where the frame sits when nobody’s in shot" : "Framing"} ({horizontal ? "left to right" : "top to bottom"})
+          </span>
           <input
             type="range"
             min={0}

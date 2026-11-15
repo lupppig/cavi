@@ -6,6 +6,7 @@ import { Banner } from "@/components/account/account-header";
 import { client, raise, type CaptionOptions, type Composition, type MontageSegment, type Project } from "@/lib/queries";
 import { CaptionOptionsPicker, defaultCaptionOptions } from "./caption-options";
 import { shapes, stampTenths } from "./clips";
+import { FramingChoice } from "./framing";
 import { useProjectMedia } from "./media-section";
 import {
   checkSegment,
@@ -94,6 +95,7 @@ export function MontageComposer({
     initial?.segments.length ? initial.segments.map(draftOf) : [draftOf({ assetID: "", startMS: 0, endMS: DEFAULT_SEGMENT_MS })],
   );
   const [captions, setCaptions] = useState<CaptionOptions | null>(null);
+  const [auto, setAuto] = useState(false);
   const [voiceover, setVoiceover] = useState<VoiceoverChoice>({ id: null, start: "0.5", duck: 0.25 });
   const chosenVoiceover = useChosenVoiceover(project, voiceover.id);
   const [signOff, setSignOff] = useState<SignOffChoice>(defaultSignOff);
@@ -112,6 +114,8 @@ export function MontageComposer({
     if (!c.problem) total += c.endMS - c.startMS;
   }
   const shape = shapes.find((s) => s.aspect === aspect)!;
+  // The videos the segments use, once each, for auto framing.
+  const used = files.filter((f) => drafts.some((d) => d.assetID === f.id));
 
   const create = useMutation({
     mutationFn: async (body: { name: string; composition: Composition; captions?: CaptionOptions }) => {
@@ -178,6 +182,7 @@ export function MontageComposer({
         end_ms: first.end_ms,
         aspect,
         focus: first.focus,
+        ...(auto ? { framing: "auto" as const } : {}),
         segments: segs,
         ...(hook.trim() ? { hook: { text: hook.trim(), end_ms: Math.round(Number(hookSeconds) * 1000) } } : {}),
         ...(voiceover.id
@@ -276,6 +281,11 @@ export function MontageComposer({
               </label>
             ))}
           </div>
+          {used.length > 0 && (
+            <div className="mt-2">
+              <FramingChoice project={project} assets={used} auto={auto} onAuto={setAuto} canAnalyse={canMakeVoiceover} />
+            </div>
+          )}
         </fieldset>
       </div>
 
@@ -297,6 +307,7 @@ export function MontageComposer({
               draft={d}
               files={files}
               aspect={aspect}
+              auto={auto}
               offsetMS={offsets[i]}
               onChange={(patch) => set(i, patch)}
               onMove={(by) => move(i, by)}
