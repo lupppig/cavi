@@ -147,6 +147,10 @@ func (t Track) shotPath(a, b int64, win Window, fallback float64) []point {
 	p, moving := at(float64(a)), false
 	var pts []point
 	for ms := float64(a); ms < float64(b); ms += stepMS {
+		now := int64(math.Round(ms))
+		if now >= b {
+			break
+		}
 		d := at(ms) - p
 		if !moving && math.Abs(d) > dz {
 			moving = true
@@ -158,7 +162,11 @@ func (t Track) shotPath(a, b int64, win Window, fallback float64) []point {
 				moving = false
 			}
 		}
-		pts = append(pts, point{int64(math.Round(ms)), clamp01(p)})
+		pts = append(pts, point{now, clamp01(p)})
+	}
+	// Hold to the shot's last millisecond, so the next shot starts clean.
+	if n := len(pts); n > 0 && pts[n-1].at < b-1 {
+		pts = append(pts, point{b - 1, pts[n-1].focus})
 	}
 	return pts
 }

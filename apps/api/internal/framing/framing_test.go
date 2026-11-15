@@ -212,3 +212,18 @@ func TestPathVertical(t *testing.T) {
 		t.Fatalf("vertical focus = %.3f", got)
 	}
 }
+
+func TestPathJumpsIntoAShotWithoutFaces(t *testing.T) {
+	// A face on the left, then (after a cut at 3 s) a shot of scenery:
+	// the camera jumps to the fallback at the cut instead of sliding.
+	tr := track(6, []int64{3000}, func(ms int64) []Face {
+		if ms < 3000 {
+			return []Face{{X: 0.2, Y: 0.4, S: 0.3, Q: 0.9}}
+		}
+		return nil
+	})
+	keys := tr.Path(0, 6000, vertical, 0.5)
+	if !near(FocusAt(keys, 2990), want(0.2)) || FocusAt(keys, 3000) != 0.5 || FocusAt(keys, 4500) != 0.5 {
+		t.Fatalf("keys = %+v", keys)
+	}
+}
