@@ -7,9 +7,9 @@ import { client, raise, useAIModelSettings, type Project, type Voice, type Voice
 import { stampTenths } from "./clips";
 import { stable } from "./media-section";
 
-const busy = (v: Voiceover) => v.status === "queued" || v.status === "running";
+export const busy = (v: Voiceover) => v.status === "queued" || v.status === "running";
 
-function useVoices() {
+export function useVoices() {
   return useQuery({
     queryKey: ["voices"],
     queryFn: async (): Promise<Voice[]> => {
@@ -35,7 +35,7 @@ function useVoiceovers(project: Project) {
 }
 
 /** One voiceover, polled until it's spoken; ready ones carry a fresh audio URL. */
-function useVoiceover(project: Project, voiceoverID: string | null) {
+export function useVoiceover(project: Project, voiceoverID: string | null) {
   const qc = useQueryClient();
   return useQuery({
     queryKey: ["project", project.id, "voiceovers", voiceoverID],
@@ -98,6 +98,8 @@ export function VoiceoverPicker({
   const offered = (voices.data ?? []).filter((vc) => !model || vc.provider === model.provider);
   const styles: VoiceStyle[] = offered[0]?.styles ?? ["natural"];
   const ready = (list.data ?? []).filter((v) => v.status === "ready");
+  // Voices are stored by provider ID; show their names.
+  const voiceName = (vid: string) => voices.data?.find((vc) => vc.id === vid)?.label.split(" · ")[0] ?? vid;
 
   const make = useMutation({
     mutationFn: async () => {
@@ -150,7 +152,7 @@ export function VoiceoverPicker({
             className="block w-full border border-line bg-surface px-3 py-2 text-base font-medium"
           />
           <div className="flex flex-wrap items-end gap-2">
-            <label className="min-w-0 flex-1 text-xs font-semibold">
+            <label className="min-w-0 flex-1 basis-40 text-xs font-semibold">
               Voice
               <select
                 value={voice}
@@ -168,7 +170,7 @@ export function VoiceoverPicker({
               </select>
             </label>
             {styles.length > 1 && (
-              <label className="min-w-0 flex-1 text-xs font-semibold">
+              <label className="min-w-0 flex-1 basis-40 text-xs font-semibold">
                 Delivery
                 <select
                   value={style}
@@ -207,7 +209,7 @@ export function VoiceoverPicker({
             {value.id && !ready.some((r) => r.id === value.id) && <option value={value.id}>The one being made</option>}
             {ready.map((r) => (
               <option key={r.id} value={r.id}>
-                {stampTenths(r.duration_ms ?? 0)} · {r.voice} · “{excerpt(r.script)}”
+                {stampTenths(r.duration_ms ?? 0)} · {voiceName(r.voice)} · “{excerpt(r.script)}”
               </option>
             ))}
           </select>
@@ -236,7 +238,7 @@ export function VoiceoverPicker({
             <>
               <p className="text-sm font-medium break-words">
                 <span className="font-semibold">
-                  {v.voice} · {stampTenths(v.duration_ms ?? 0)} long:{" "}
+                  {voiceName(v.voice)} · {stampTenths(v.duration_ms ?? 0)} long:{" "}
                 </span>
                 “{excerpt(v.script, 160)}”
               </p>

@@ -40,8 +40,8 @@ const voiceNames: Record<string, string> = { woman: "woman’s voice", man: "man
  * Caption size and placement in output pixels. Mirrors layoutFor in the
  * render worker (internal/render/captions.go) so the preview matches.
  */
-export function captionLayout(outW: number, outH: number, mode: string, position: string) {
-  const size = Math.round(Math.min(outW, outH) * (mode === "words" ? 0.095 : 0.075));
+export function captionLayout(outW: number, outH: number, mode: string, position: string, style = "") {
+  const size = Math.round(Math.min(outW, outH) * (style === "pop" ? 0.085 : mode === "words" ? 0.095 : 0.075));
   const vertical = outH > outW;
   const marginV =
     position === "middle" ? 0 : Math.round(outH * (position === "top" ? (vertical ? 0.14 : 0.08) : vertical ? 0.22 : 0.08));
@@ -121,7 +121,8 @@ export function CaptionPreview({
   outW: number;
   outH: number;
 }) {
-  const lay = captionLayout(outW, outH, options.mode, options.position);
+  const pop = options.style === "pop";
+  const lay = captionLayout(outW, outH, options.mode, options.position, options.style);
   const colors = options.colors ?? colorPresets[0].colors;
   const base = options.speaker_colors?.[speaker] ?? colors.text;
   const px = (n: number) => `${(n / outW) * 100}cqw`;
@@ -142,7 +143,7 @@ export function CaptionPreview({
         fontSize: px(lay.size),
         fontWeight: 900,
         letterSpacing: "normal",
-        textTransform: options.uppercase ? "uppercase" : "none",
+        textTransform: options.uppercase || pop ? "uppercase" : "none",
       }}
     >
       {lines.map((line, i) => (
@@ -151,11 +152,17 @@ export function CaptionPreview({
             style={
               options.style === "boxed"
                 ? { background: colors.stroke, padding: `0 ${px(lay.pad)}`, boxDecorationBreak: "clone" }
-                : { WebkitTextStroke: `${px(lay.outline * 2)} ${colors.stroke}`, paintOrder: "stroke fill" }
+                : pop
+                  ? {
+                      WebkitTextStroke: `${px(Math.round(lay.size * 0.12) * 2)} ${colors.stroke}`,
+                      paintOrder: "stroke fill",
+                      textShadow: `${px(Math.round(lay.size * 0.07))} ${px(Math.round(lay.size * 0.07))} 0 rgb(0 0 0 / 0.5)`,
+                    }
+                  : { WebkitTextStroke: `${px(lay.outline * 2)} ${colors.stroke}`, paintOrder: "stroke fill" }
             }
           >
             {line.map((w, j) => {
-              const lit = options.mode === "words" && k++ === 0;
+              const lit = (options.mode === "words" || pop) && k++ === 0;
               return (
                 <span key={j}>
                   {j > 0 && " "}
@@ -163,7 +170,7 @@ export function CaptionPreview({
                     style={{
                       color: lit ? highlightFor(base, colors) : base,
                       display: "inline-block",
-                      transform: lit ? "scale(1.1)" : undefined,
+                      transform: lit ? (pop ? "scale(1.12)" : "scale(1.1)") : undefined,
                     }}
                   >
                     {w}
@@ -240,16 +247,30 @@ export function CaptionOptionsPicker({
 
   return (
     <div className="space-y-3 border border-line p-2.5">
-      <Segmented legend="Look" value={value.style} options={[{ value: "bold", label: "Outline" }, { value: "boxed", label: "Box" }]} onChange={(style) => set({ style })} />
       <Segmented
-        legend="Timing"
-        value={value.mode}
+        legend="Look"
+        value={value.style}
         options={[
-          { value: "lines", label: "Lines" },
-          { value: "words", label: "Word by word" },
+          { value: "bold", label: "Outline" },
+          { value: "boxed", label: "Box" },
+          { value: "pop", label: "Pop" },
         ]}
-        onChange={(mode) => set({ mode })}
+        // Pop is always word by word in capitals.
+        onChange={(style) => set(style === "pop" ? { style, mode: "words", uppercase: true } : { style })}
       />
+      {value.style === "pop" ? (
+        <p className="text-xs font-semibold text-muted">Pop: a few words at a time in capitals, each word bouncing in as it’s said.</p>
+      ) : (
+        <Segmented
+          legend="Timing"
+          value={value.mode}
+          options={[
+            { value: "lines", label: "Lines" },
+            { value: "words", label: "Word by word" },
+          ]}
+          onChange={(mode) => set({ mode })}
+        />
+      )}
       <fieldset>
         <legend className="text-xs font-semibold uppercase text-muted">
           Colours <span className="font-semibold normal-case">· {preset >= 0 ? colorPresets[preset].name : "Custom"}</span>
@@ -297,10 +318,12 @@ export function CaptionOptionsPicker({
         ]}
         onChange={(position) => set({ position })}
       />
-      <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
-        <input type="checkbox" checked={value.uppercase} onChange={(e) => set({ uppercase: e.target.checked })} className="size-5 accent-[var(--ink)]" />
-        ALL CAPS
-      </label>
+      {value.style !== "pop" && (
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={value.uppercase} onChange={(e) => set({ uppercase: e.target.checked })} className="size-5 accent-[var(--ink)]" />
+          ALL CAPS
+        </label>
+      )}
       {speakers.length > 1 && (
         <div>
           <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">

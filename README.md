@@ -18,7 +18,7 @@ CAVI does one thing for now: **clipping**. Live clipping is next.
 2. **Transcribe** it. Every word is timed and each speaker is labelled.
 3. **Add the creator's brief.** Paste their guidelines as written. CAVI reads them into rules you can check and edit: moments to feature, moments that must never be used, and things to blur, mute or review. Every time in a rule must appear in the brief, so nothing is invented.
 4. **Find clips.** Highlights suggests stand-alone moments, ranked so the creator's priorities come first, each with a reason and how it connects to the campaign. Edit plans goes further and proposes finished short videos: which moments to join and in what order, a hook, and a voiceover script.
-5. **Edit.** Join moments from one or more videos, frame each for 9:16, 1:1, 4:5 or 16:9, open on a split screen of several scenes, blur licence plates or faces, mute uncleared music, add a hook, word-by-word captions and an AI voiceover (captioned too).
+5. **Edit.** Join moments from one or more videos, frame each for 9:16, 1:1, 4:5 or 16:9, open on a split screen of several scenes, blur licence plates or faces, mute uncleared music, add a hook, word-by-word or bouncing "pop" captions, an AI voiceover (captioned too), and a sign-off card ("Like and subscribe for more!") the narrator can say.
 6. **Render and download.** CAVI renders an MP4 and checks its size, length and sound before keeping it. Download it and post it.
 
 The brief is enforced, not just suggested: a clip that includes a "never use" moment can't be rendered, and clips near anything else the brief flags are marked so someone checks them.
@@ -46,7 +46,7 @@ Browser (Next.js) ──▶ Go API ──▶ PostgreSQL (source of truth)
 
 - **API** (`apps/api`, Go): sign-in, organisations and permissions, projects, media, briefs, plans, voiceovers and renders. Every request is checked against the organisation's membership and roles.
 - **Media worker** (`apps/api/cmd/media-worker`): probes files, transcribes, reads briefs, plans clips, makes voiceovers and renders with FFmpeg. Jobs are stored in Postgres and delivered over NATS, so they survive restarts and retry safely.
-- **AI** goes through one boundary (`internal/ai`) and returns structured, validated output. Each organisation chooses from models CAVI has tested; Gemini is the only provider so far. The AI suggests, people decide: it never runs commands or renders on its own.
+- **AI** goes through one boundary (`internal/ai`) and returns structured, validated output. Each organisation chooses from models CAVI has tested: Gemini for transcription, briefs, highlights and plans, and ElevenLabs or Gemini for voiceovers. The AI suggests, people decide: it never runs commands or renders on its own.
 - **Web** (`apps/web`, Next.js): the studio where you upload, review the brief, pick clips, edit and download.
 
 ## Status

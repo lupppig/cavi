@@ -16,6 +16,7 @@ import {
   SegmentEditor,
   type SegmentDraft,
 } from "./montage-segment";
+import { defaultSignOff, SignOffPicker, signOffProblem, type SignOffChoice } from "./sign-off-picker";
 import { useChosenVoiceover, VoiceoverPicker, voiceoverProblem, type VoiceoverChoice } from "./voiceover-picker";
 
 const MIN_TOTAL_MS = 1000;
@@ -95,6 +96,8 @@ export function MontageComposer({
   const [captions, setCaptions] = useState<CaptionOptions | null>(null);
   const [voiceover, setVoiceover] = useState<VoiceoverChoice>({ id: null, start: "0.5", duck: 0.25 });
   const chosenVoiceover = useChosenVoiceover(project, voiceover.id);
+  const [signOff, setSignOff] = useState<SignOffChoice>(defaultSignOff);
+  const spokenSignOff = useChosenVoiceover(project, signOff.voiceoverID);
   const [problem, setProblem] = useState<string | null>(null);
 
   // A new montage starts on the first video once the files load.
@@ -153,7 +156,10 @@ export function MontageComposer({
       const ms = Math.round(Number(hookSeconds) * 1000);
       if (!Number.isFinite(ms) || ms < 500 || ms > total) return `Show the hook for between 0.5 and ${(total / 1000).toFixed(1)} seconds.`;
     }
-    return voiceoverProblem(chosenVoiceover, voiceover, total);
+    const voProblem = voiceoverProblem(chosenVoiceover, voiceover, total);
+    if (voProblem) return voProblem;
+    const voEnd = voiceover.id && chosenVoiceover?.duration_ms ? Math.round(Number(voiceover.start) * 1000) + chosenVoiceover.duration_ms : null;
+    return signOffProblem(signOff, spokenSignOff, total, voEnd);
   }
 
   function submit(e: React.FormEvent) {
@@ -176,6 +182,9 @@ export function MontageComposer({
         ...(hook.trim() ? { hook: { text: hook.trim(), end_ms: Math.round(Number(hookSeconds) * 1000) } } : {}),
         ...(voiceover.id
           ? { voiceover: { voiceover_id: voiceover.id, start_ms: Math.round(Number(voiceover.start) * 1000), duck: voiceover.duck } }
+          : {}),
+        ...(signOff.on
+          ? { sign_off: { text: signOff.text.trim(), ...(signOff.voiceoverID ? { voiceover_id: signOff.voiceoverID } : {}) } }
           : {}),
       },
       ...(captions ? { captions } : {}),
@@ -335,6 +344,8 @@ export function MontageComposer({
         onChange={setVoiceover}
         totalMS={total}
       />
+
+      <SignOffPicker project={project} canMake={canMakeVoiceover} value={signOff} onChange={setSignOff} totalMS={total} />
 
       {(problem || create.isError) && <Banner>{problem ?? create.error?.message}</Banner>}
       <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
