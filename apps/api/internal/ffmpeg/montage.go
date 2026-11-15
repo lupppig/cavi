@@ -25,6 +25,10 @@ type MontagePart struct {
 	Start, Length time.Duration
 	// Crop is the source region, in display pixels, scaled to the output.
 	CropX, CropY, CropW, CropH int
+	// Pan, if set, moves the crop over time (CropX, or CropY when
+	// PanVertical), overriding it.
+	Pan         []PanKey
+	PanVertical bool
 	// Audio keeps the source's first audio stream; otherwise the part is
 	// silent.
 	Audio bool
@@ -110,13 +114,13 @@ func (m Montage) filterGraph() (string, error) {
 			cur = next
 		}
 		if len(p.Stack) == 0 {
-			fmt.Fprintf(&g, "%scrop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1,fps=%d,format=yuv420p,trim=duration=%s,setpts=PTS-STARTPTS[v%d];",
-				cur, p.CropW, p.CropH, p.CropX, p.CropY, m.Width, m.Height, m.FPS, secs(p.Length), i)
+			fmt.Fprintf(&g, "%s%s,scale=%d:%d:flags=lanczos,setsar=1,fps=%d,format=yuv420p,trim=duration=%s,setpts=PTS-STARTPTS[v%d];",
+				cur, cropFilter(p.CropW, p.CropH, p.CropX, p.CropY, p.Pan, p.PanVertical), m.Width, m.Height, m.FPS, secs(p.Length), i)
 		} else {
 			n := 1 + len(p.Stack)
 			ph := PanelHeight(m.Height, n)
 			panels := fmt.Sprintf("[p%dt0]", i)
-			fmt.Fprintf(&g, "%scrop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1[p%dt0];", cur, p.CropW, p.CropH, p.CropX, p.CropY, m.Width, ph, i)
+			fmt.Fprintf(&g, "%s%s,scale=%d:%d:flags=lanczos,setsar=1[p%dt0];", cur, cropFilter(p.CropW, p.CropH, p.CropX, p.CropY, p.Pan, p.PanVertical), m.Width, ph, i)
 			for k, t := range p.Stack {
 				if t.CropW <= 0 || t.CropH <= 0 {
 					return "", fmt.Errorf("ffmpeg: invalid tile %d in part %d", k, i)

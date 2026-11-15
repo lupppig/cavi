@@ -308,3 +308,71 @@ func TestRealMontageLocalInputs(t *testing.T) {
 		t.Fatal("read a playlist as a local input")
 	}
 }
+
+func TestPanExpr(t *testing.T) {
+	if got := panExpr([]PanKey{{0, 40}}); got != "40" {
+		t.Fatalf("one key = %q", got)
+	}
+	got := panExpr([]PanKey{{0, 0}, {time.Second, 100}, {1500 * time.Millisecond, 100}, {1501 * time.Millisecond, 300}})
+	want := "if(isnan(t)+lt(t,0.000),0,if(gte(t,1.501),300,if(lt(t,1.000),0+100*(t-0.000)/1.000,if(lt(t,1.500),100,100+200*(t-1.500)/0.001))))"
+	if got != want {
+		t.Fatalf("panExpr =\n %s\nwant\n %s", got, want)
+	}
+}
+
+// TestRealPan pans a crop across a frame that is white on the left and
+// black on the right: the clip starts white and ends black, and frames
+// read for analysis come out at the requested size and rate.
+func TestRealPan(t *testing.T) {
+	r := New()
+	if err := r.Available(); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "halves.mp4")
+	gen := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:size=640x360:rate=25",
+		"-vf", "drawbox=x=0:y=0:w=320:h=360:color=white:t=fill", "-t", "3", "-c:v", "libx264", "-pix_fmt", "yuv420p", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("generate: %v %s", err, out)
+	}
+	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	defer srv.Close()
+	ctx := context.Background()
+	pan := []PanKey{{500 * time.Millisecond, 0}, {2500 * time.Millisecond, 438}}
+	check := func(out string) {
+		t.Helper()
+		if b := brightness(t, out, 0.2, "100:100:50:130"); b < 200 {
+			t.Fatalf("start brightness %.0f, want white", b)
+		}
+		if b := brightness(t, out, 2.8, "100:100:50:130"); b > 50 {
+			t.Fatalf("end brightness %.0f, want black", b)
+		}
+		// Halfway the crop straddles the edge.
+		if b := brightness(t, out, 1.5, "202:360:0:0"); b < 60 || b > 200 {
+			t.Fatalf("middle brightness %.0f, want mixed", b)
+		}
+	}
+	clip := filepath.Join(dir, "clip.mp4")
+	if err := r.Clip(ctx, srv.URL+"/halves.mp4", clip, Clip{Length: 3 * time.Second, CropW: 202, CropH: 360, Width: 202, Height: 360, Pan: pan}, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	check(clip)
+	out := filepath.Join(dir, "pan.mp4")
+	m := Montage{Width: 202, Height: 360, FPS: 25, Parts: []MontagePart{{Input: src, Length: 3 * time.Second, CropW: 202, CropH: 360, Pan: pan}}}
+	if err := r.Montage(ctx, out, m, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	check(out)
+
+	n := 0
+	err := r.Frames(ctx, out, Sampling{FPS: 10, Width: 100, Height: 178}, time.Minute, func(i int, bgr []byte) error {
+		if i != n || len(bgr) != 100*178*3 {
+			t.Fatalf("frame %d (want %d) is %d bytes", i, n, len(bgr))
+		}
+		n++
+		return nil
+	})
+	if err != nil || n < 29 || n > 31 {
+		t.Fatalf("read %d frames, %v", n, err)
+	}
+}

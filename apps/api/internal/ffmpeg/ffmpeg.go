@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os/exec"
 	"regexp"
@@ -134,6 +135,10 @@ type Clip struct {
 	Width, Height int
 	// Audio keeps the first audio stream; otherwise the clip is silent.
 	Audio bool
+	// Pan, if set, moves the crop over time (CropX, or CropY when
+	// PanVertical), overriding it.
+	Pan         []PanKey
+	PanVertical bool
 	// Subtitles, if set, is a local ASS file burned into the output after
 	// scaling (so its coordinates are output pixels), with fonts from
 	// FontsDir. Both are paths CAVI made: plain characters only.
@@ -150,7 +155,7 @@ func (r *Runner) Clip(ctx context.Context, input, output string, c Clip, timeout
 	if c.Length <= 0 || c.CropW <= 0 || c.CropH <= 0 || c.Width <= 0 || c.Height <= 0 || c.Width%2 != 0 || c.Height%2 != 0 {
 		return fmt.Errorf("ffmpeg: invalid clip %+v", c)
 	}
-	filter := fmt.Sprintf("crop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1", c.CropW, c.CropH, c.CropX, c.CropY, c.Width, c.Height)
+	filter := cropFilter(c.CropW, c.CropH, c.CropX, c.CropY, c.Pan, c.PanVertical) + fmt.Sprintf(",scale=%d:%d:flags=lanczos,setsar=1", c.Width, c.Height)
 	if c.Subtitles != "" {
 		if !safePath.MatchString(c.Subtitles) || (c.FontsDir != "" && !safePath.MatchString(c.FontsDir)) {
 			return fmt.Errorf("ffmpeg: subtitle or font path has characters not allowed in a filter")
@@ -178,6 +183,51 @@ func (r *Runner) Clip(ctx context.Context, input, output string, c Clip, timeout
 		"-movflags", "+faststart", "-f", "mp4", output)
 	_, err := r.runFor(ctx, timeout, input, r.FFmpeg, args...)
 	return err
+}
+
+// PanKey is a point on a moving crop: At after the clip (or montage part)
+// starts, the crop's left (or top) edge is at Pos pixels. The crop moves
+// in a straight line between keys and holds still before the first and
+// after the last.
+type PanKey struct {
+	At  time.Duration
+	Pos int
+}
+
+// cropFilter is a crop of w×h at x, y, or, with pan, moving along x (or y
+// when vertical).
+func cropFilter(w, h, x, y int, pan []PanKey, vertical bool) string {
+	if len(pan) == 0 {
+		return fmt.Sprintf("crop=%d:%d:%d:%d", w, h, x, y)
+	}
+	if vertical {
+		return fmt.Sprintf("crop=w=%d:h=%d:x=%d:y='%s'", w, h, x, panExpr(pan))
+	}
+	return fmt.Sprintf("crop=w=%d:h=%d:x='%s':y=%d", w, h, panExpr(pan), y)
+}
+
+// panExpr is an FFmpeg expression of t (seconds) for the position along
+// keys: a balanced tree of comparisons, so its depth grows with the log
+// of the number of keys.
+func panExpr(keys []PanKey) string {
+	first, last := keys[0], keys[len(keys)-1]
+	if len(keys) == 1 {
+		return strconv.Itoa(first.Pos)
+	}
+	var build func(lo, hi int) string
+	build = func(lo, hi int) string {
+		if hi-lo == 1 {
+			a, b := keys[lo], keys[hi]
+			if b.At <= a.At || a.Pos == b.Pos {
+				return strconv.Itoa(b.Pos)
+			}
+			return fmt.Sprintf("%d+%d*(t-%s)/%s", a.Pos, b.Pos-a.Pos, secs(a.At), secs(b.At-a.At))
+		}
+		mid := (lo + hi) / 2
+		return fmt.Sprintf("if(lt(t,%s),%s,%s)", secs(keys[mid].At), build(lo, mid), build(mid, hi))
+	}
+	// t is unknown (NaN) while the filter is set up.
+	return fmt.Sprintf("if(isnan(t)+lt(t,%s),%d,if(gte(t,%s),%d,%s))", secs(first.At), first.Pos, secs(last.At), last.Pos, build(0, len(keys)-1))
 }
 
 // ProbeFile inspects a local file CAVI produced (never user input).
@@ -346,4 +396,69 @@ func rate(s string) float64 {
 		return 0
 	}
 	return math.Round(n/d*1000) / 1000
+}
+
+// Sampling is how Frames reads a video for analysis: FPS frames a second,
+// scaled to exactly Width×Height (display orientation), as packed 8-bit
+// BGR (3 bytes a pixel).
+type Sampling struct {
+	FPS           int
+	Width, Height int
+}
+
+// Frames decodes input (a signed URL or a local file CAVI made) and calls
+// fn with each sampled frame in order: i counts from 0, so the frame is at
+// i/FPS seconds. bgr is Width×Height×3 bytes, reused between calls. fn
+// returning an error stops decoding.
+func (r *Runner) Frames(ctx context.Context, in string, g Sampling, timeout time.Duration, fn func(i int, bgr []byte) error) error {
+	if g.FPS <= 0 || g.Width < 2 || g.Height < 2 || g.Width*g.Height > 4<<20 {
+		return fmt.Errorf("ffmpeg: invalid frame sampling %+v", g)
+	}
+	if timeout <= 0 {
+		timeout = r.Timeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	args := append([]string{"-v", "error", "-nostdin"}, input(in)...)
+	args = append(args, "-map", "0:v:0", "-an", "-sn",
+		"-vf", fmt.Sprintf("fps=%d,scale=%d:%d:flags=area,format=bgr24", g.FPS, g.Width, g.Height),
+		"-f", "rawvideo", "pipe:1")
+	cmd := exec.CommandContext(ctx, r.FFmpeg, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	pix := make([]byte, g.Width*g.Height*3)
+	var fnErr error
+	for i := 0; ; i++ {
+		if _, err := io.ReadFull(out, pix); err != nil {
+			break // end of stream (or a decode failure, reported by Wait)
+		}
+		if fnErr = fn(i, pix); fnErr != nil {
+			cancel()
+			break
+		}
+	}
+	_, _ = io.Copy(io.Discard, out)
+	waitErr := cmd.Wait()
+	switch {
+	case fnErr != nil:
+		return fnErr
+	case ctx.Err() != nil:
+		return fmt.Errorf("ffmpeg: %s timed out or was cancelled", r.FFmpeg)
+	case waitErr != nil:
+		msg := scrub(stderr.String(), in)
+		for _, sig := range unreadableSignals {
+			if strings.Contains(msg, sig) {
+				return fmt.Errorf("%w: %s", ErrUnreadable, msg)
+			}
+		}
+		return fmt.Errorf("ffmpeg: frames failed: %s", msg)
+	}
+	return nil
 }
