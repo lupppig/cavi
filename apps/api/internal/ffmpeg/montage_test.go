@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -26,7 +27,7 @@ func TestMontageFilterGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"crop=30:40:10:20,gblur", "overlay=10:20:enable='between(t,0.000,1.000)'",
-		"volume=0:enable='between(t,0.200,0.400)'", "anullsrc", "concat=n=2:v=1:a=1", "[ac]anull[aout]"} {
+		"volume=0:enable='between(t,0.200,0.400)'", "anullsrc", "concat=n=2:v=1:a=1", "[ac]anull[speech]", "[speech]alimiter"} {
 		if !strings.Contains(g, want) {
 			t.Errorf("graph lacks %q:\n%s", want, g)
 		}
@@ -199,4 +200,64 @@ func TestRealSplitScreen(t *testing.T) {
 	if v := loudness(t, out, 0.2, 1.5); v < -40 {
 		t.Errorf("split screen is %.1f dB: the main scene's sound should play", v)
 	}
+}
+
+// bandLoudness is the mean volume of path between from and from+length,
+// within a narrow band around hz.
+func bandLoudness(t *testing.T, path string, from, length float64, hz int) float64 {
+	t.Helper()
+	out, _ := exec.Command("ffmpeg", "-hide_banner", "-ss", strconv.FormatFloat(from, 'f', 2, 64), "-t", strconv.FormatFloat(length, 'f', 2, 64),
+		"-i", path, "-af", fmt.Sprintf("bandpass=f=%d:width_type=q:w=8,volumedetect", hz), "-vn", "-f", "null", "-").CombinedOutput()
+	m := meanVolume.FindSubmatch(out)
+	if m == nil {
+		t.Fatalf("no volume: %s", out)
+	}
+	v, _ := strconv.ParseFloat(string(m[1]), 64)
+	return v
+}
+
+func TestRealMusicBed(t *testing.T) {
+	r := New()
+	if err := r.Available(); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	for name, args := range map[string][]string{
+		// "Speech" is a 440 Hz tone; the b-roll is silent.
+		"talk.mp4":  {"-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"},
+		"broll.mp4": {"-f", "lavfi", "-i", "testsrc=size=640x360:rate=25", "-t", "4", "-c:v", "libx264", "-pix_fmt", "yuv420p"},
+		// "Music" is a 2-second 110 Hz loop: shorter than the clip.
+		"music.mp3": {"-f", "lavfi", "-i", "sine=frequency=110:sample_rate=44100", "-t", "2", "-ac", "2"},
+	} {
+		if out, err := exec.Command("ffmpeg", append([]string{"-v", "error", "-y"}, append(args, filepath.Join(dir, name))...)...).CombinedOutput(); err != nil {
+			t.Fatalf("generate %s: %v %s", name, err, out)
+		}
+	}
+	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	defer srv.Close()
+	out := filepath.Join(dir, "music.mp4")
+	m := Montage{Width: 360, Height: 640, FPS: 30, Music: srv.URL + "/music.mp3", MusicVolume: 0.5, Parts: []MontagePart{
+		{Input: srv.URL + "/talk.mp4", Length: 3 * time.Second, CropX: 219, CropW: 202, CropH: 360, Audio: true},
+		{Input: srv.URL + "/broll.mp4", Length: 4 * time.Second, CropX: 219, CropW: 202, CropH: 360},
+	}}
+	if err := r.Montage(context.Background(), out, m, 2*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := r.ProbeFile(context.Background(), out); err != nil || p.Duration < 6900*time.Millisecond || p.Duration > 7200*time.Millisecond {
+		t.Fatalf("montage = %+v, %v", p, err)
+	}
+	underSpeech, alone := bandLoudness(t, out, 1.0, 1.5, 110), bandLoudness(t, out, 4.0, 1.5, 110)
+	if alone < -40 {
+		t.Errorf("music alone is %.1f dB, want it audible (and looped past its 2 s)", alone)
+	}
+	if underSpeech > alone-4 {
+		t.Errorf("music under speech %.1f dB vs alone %.1f dB: not ducked", underSpeech, alone)
+	}
+	if v := bandLoudness(t, out, 1.0, 1.5, 440); v < -35 {
+		t.Errorf("speech is %.1f dB under the music", v)
+	}
+	if end := loudness(t, out, 6.85, 0.1); end > alone-10 {
+		t.Errorf("music doesn't fade out: %.1f dB at the end", end)
+	}
+	t.Logf("music under speech %.1f dB, alone %.1f dB", underSpeech, alone)
 }

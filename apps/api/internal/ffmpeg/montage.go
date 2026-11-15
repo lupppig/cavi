@@ -64,6 +64,11 @@ type Montage struct {
 	Voiceover                    string
 	VoiceoverAt, VoiceoverLength time.Duration
 	Duck                         float64
+	// Music, if set, is a background track looped to fill the montage at
+	// MusicVolume (0 to 1), faded in and out, and lowered further while
+	// anyone speaks (dialogue or voiceover) so the words stay clear.
+	Music       string
+	MusicVolume float64
 }
 
 // Length is the montage's total length.
@@ -153,11 +158,29 @@ func (m Montage) filterGraph() (string, error) {
 		// Synthesised voices arrive at full scale: level them to spoken-word
 		// loudness with headroom, and limit the mix so nothing clips.
 		fmt.Fprintf(&g, "[%d:a]highpass=f=70,loudnorm=I=-16:TP=-2:LRA=7,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=%d|%d,apad[vo];", next, at, at)
-		fmt.Fprintf(&g, "[ac]volume=%s:enable='between(t,%s,%s)'[ad];[ad][vo]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95:level=disabled[aout]",
+		fmt.Fprintf(&g, "[ac]volume=%s:enable='between(t,%s,%s)'[ad];[ad][vo]amix=inputs=2:duration=first:normalize=0[speech];",
 			strconv.FormatFloat(m.Duck, 'f', 2, 64), secs(m.VoiceoverAt), secs(m.VoiceoverAt+m.VoiceoverLength))
+		next++
 	} else {
-		g.WriteString("[ac]anull[aout]")
+		g.WriteString("[ac]anull[speech];")
 	}
+	if m.Music == "" {
+		g.WriteString("[speech]alimiter=limit=0.95:level=disabled[aout]")
+		return g.String(), nil
+	}
+	if m.MusicVolume <= 0 || m.MusicVolume > 1 {
+		return "", fmt.Errorf("ffmpeg: invalid music volume")
+	}
+	total := m.Length()
+	fade := min(1500*time.Millisecond, total/4)
+	// The music sits under the speech: its level is set, it fades in and
+	// out, and a compressor keyed by the speech pulls it down further
+	// whenever anyone talks.
+	fmt.Fprintf(&g, "[%d:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=duration=%s,asetpts=PTS-STARTPTS,"+
+		"volume=%s,afade=t=in:d=%s,afade=t=out:st=%s:d=%s[bed];",
+		next, secs(total), strconv.FormatFloat(m.MusicVolume, 'f', 2, 64), secs(fade/2), secs(total-fade), secs(fade))
+	g.WriteString("[speech]asplit=2[sp][key];[bed][key]sidechaincompress=threshold=0.02:ratio=6:attack=30:release=600:makeup=1[ducked];" +
+		"[sp][ducked]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95:level=disabled[aout]")
 	return g.String(), nil
 }
 
@@ -182,6 +205,9 @@ func (r *Runner) Montage(ctx context.Context, output string, m Montage, timeout 
 	}
 	if m.Voiceover != "" {
 		args = append(args, "-i", m.Voiceover)
+	}
+	if m.Music != "" {
+		args = append(args, "-stream_loop", "-1", "-i", m.Music)
 	}
 	args = append(args,
 		"-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
