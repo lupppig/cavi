@@ -184,3 +184,65 @@ func TestEvalHighlights(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateHighlightsWithCampaign(t *testing.T) {
+	segs := make([]Segment, 20)
+	for i := range segs {
+		segs[i] = Segment{StartMS: int64(i) * 10_000, EndMS: int64(i+1) * 10_000, Text: "x"}
+	}
+	brief := HighlightBrief{MinMS: 20_000, MaxMS: 60_000, Campaign: &Campaign{Message: "m", Rules: []BriefRule{
+		{Kind: RuleExclude, StartMS: 47_000, EndMS: 53_000, Note: "no"},
+		{Kind: RulePriority, StartMS: 150_000, EndMS: 150_000, Note: "feature"},
+	}}}
+	hs, err := ValidateHighlights([]Highlight{
+		{FirstSegment: 0, LastSegment: 2, Title: "clean", Reason: "r", CampaignLink: "ties in"},       // 0-30 s
+		{FirstSegment: 3, LastSegment: 5, Title: "excluded", Reason: "r", CampaignLink: "ties in"},    // 30-60 s
+		{FirstSegment: 8, LastSegment: 10, Title: "unconnected", Reason: "r"},                         // no link
+		{FirstSegment: 14, LastSegment: 16, Title: "priority", Reason: "r", CampaignLink: "features"}, // 140-170 s
+	}, segs, brief)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hs) != 2 || hs[0].Title != "priority" || hs[1].Title != "clean" {
+		t.Fatalf("clips = %+v", hs)
+	}
+	// Without a brief, links are dropped.
+	brief.Campaign = nil
+	hs, _ = ValidateHighlights([]Highlight{{FirstSegment: 0, LastSegment: 2, Title: "t", Reason: "r", CampaignLink: "x"}}, segs, brief)
+	if hs[0].CampaignLink != "" {
+		t.Fatalf("link kept without a brief: %+v", hs[0])
+	}
+}
+
+// TestEvalHighlightsCampaign checks a brief steers highlights: the
+// prioritised advice comes first, the excluded story is never chosen, and
+// every clip explains its campaign link.
+func TestEvalHighlightsCampaign(t *testing.T) {
+	g := evalProvider(t)
+	segs := podcast(t)
+	camp := &Campaign{
+		Message:  "Help independent musicians plan their releases.",
+		Guidance: "Practical, encouraging advice only.",
+		Rules: []BriefRule{
+			{Kind: RulePriority, StartMS: segs[20].StartMS, EndMS: segs[20].StartMS, Note: "Release planning advice"},
+			{Kind: RuleExclude, StartMS: segs[7].StartMS, EndMS: segs[12].EndMS, Note: "Power-cut story: not for this campaign"},
+		},
+	}
+	for _, m := range Models(TaskHighlights) {
+		t.Run(m.ID, func(t *testing.T) {
+			hs := highlights(t, g, m, segs, HighlightBrief{MinMS: 20_000, MaxMS: 90_000, Campaign: camp})
+			if len(hs) == 0 || !covers(hs[:1], 19, 22, 1) {
+				t.Errorf("best clip is not the prioritised advice: %+v", hs)
+			}
+			for _, h := range hs {
+				t.Logf("%d-%d %q: %s", h.FirstSegment, h.LastSegment, h.Title, h.CampaignLink)
+				if h.FirstSegment <= 12 && h.LastSegment >= 7 {
+					t.Errorf("chose the excluded story: %q", h.Title)
+				}
+				if h.CampaignLink == "" {
+					t.Errorf("no campaign link: %q", h.Title)
+				}
+			}
+		})
+	}
+}

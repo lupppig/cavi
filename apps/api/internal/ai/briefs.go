@@ -54,10 +54,10 @@ func ValidRuleKind(k string) bool {
 // BriefRule is one timed instruction from a brief. A single timestamp in
 // the brief has StartMS == EndMS.
 type BriefRule struct {
-	Kind    string
-	StartMS int64
-	EndMS   int64
-	Note    string
+	Kind    string `json:"kind"`
+	StartMS int64  `json:"start_ms"`
+	EndMS   int64  `json:"end_ms"`
+	Note    string `json:"note"`
 }
 
 // Overlaps reports whether the rule touches the clip [startMS, endMS).

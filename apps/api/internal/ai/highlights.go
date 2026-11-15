@@ -3,11 +3,15 @@ package ai
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 )
 
 // HighlightsPromptVersion identifies the highlights prompt and schema.
-const HighlightsPromptVersion = "highlights-v1"
+//
+// v2 adds the creator's brief: campaign message, guidance and timed rules,
+// and asks how each clip connects to the campaign.
+const HighlightsPromptVersion = "highlights-v2"
 
 // Limits on highlight detection.
 const (
@@ -19,6 +23,7 @@ const (
 	maxHighlightInputRunes = 1_500_000
 	maxTitleRunes          = 120
 	maxReasonRunes         = 600
+	maxCampaignLinkRunes   = 400
 	// lengthSlackMS lets a clip run a little outside the requested length,
 	// since clips are cut on whole transcript lines.
 	lengthSlackMS = 5000
@@ -30,6 +35,15 @@ type HighlightBrief struct {
 	Objective string
 	// MinMS and MaxMS bound each clip's length.
 	MinMS, MaxMS int64
+	// Campaign is the creator's brief for this video, if it has one.
+	Campaign *Campaign
+}
+
+// Campaign is what highlight detection needs from a creator brief.
+type Campaign struct {
+	Message  string      `json:"message"`
+	Guidance string      `json:"guidance"`
+	Rules    []BriefRule `json:"rules"`
 }
 
 // Highlight is a candidate clip: a contiguous run of transcript segments.
@@ -42,6 +56,9 @@ type Highlight struct {
 	EndMS        int64
 	Title        string
 	Reason       string
+	// CampaignLink says how the clip connects to the campaign message;
+	// empty when there is no brief.
+	CampaignLink string
 }
 
 // Highlighter finds candidate clips in a transcript.
@@ -85,6 +102,10 @@ func ValidateHighlights(hs []Highlight, segments []Segment, brief HighlightBrief
 		}
 		h.Title = strings.TrimSpace(h.Title)
 		h.Reason = strings.TrimSpace(h.Reason)
+		h.CampaignLink = strings.TrimSpace(h.CampaignLink)
+		if len([]rune(h.CampaignLink)) > maxCampaignLinkRunes {
+			return bad("highlight %d campaign link is too long", i)
+		}
 		if h.Title == "" || h.Reason == "" {
 			return bad("highlight %d has no title or reason", i)
 		}
@@ -102,12 +123,46 @@ func ValidateHighlights(hs []Highlight, segments []Segment, brief HighlightBrief
 		if overlapsMost(h, out) {
 			continue
 		}
+		if brief.Campaign != nil {
+			// Every clip must connect back to the campaign, and none may
+			// include a moment the brief excludes.
+			if h.CampaignLink == "" || excludes(brief.Campaign.Rules, h.StartMS, h.EndMS) {
+				continue
+			}
+		} else {
+			h.CampaignLink = ""
+		}
 		out = append(out, h)
 		if len(out) == MaxHighlights {
 			break
 		}
 	}
+	if brief.Campaign != nil {
+		// Clips that feature a moment the creator prioritised come first,
+		// keeping the model's order otherwise.
+		sort.SliceStable(out, func(i, j int) bool {
+			return featuresPriority(brief.Campaign.Rules, out[i]) && !featuresPriority(brief.Campaign.Rules, out[j])
+		})
+	}
 	return out, nil
+}
+
+func excludes(rules []BriefRule, startMS, endMS int64) bool {
+	for _, r := range rules {
+		if r.Kind == RuleExclude && r.Overlaps(startMS, endMS) {
+			return true
+		}
+	}
+	return false
+}
+
+func featuresPriority(rules []BriefRule, h Highlight) bool {
+	for _, r := range rules {
+		if r.Kind == RulePriority && r.Overlaps(h.StartMS, h.EndMS+1) {
+			return true
+		}
+	}
+	return false
 }
 
 // overlapsMost reports whether more than half of h is covered by one clip
