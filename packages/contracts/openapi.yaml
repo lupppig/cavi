@@ -1291,7 +1291,7 @@ paths:
         - name: task
           in: path
           required: true
-          schema: { type: string, enum: [transcription, highlights] }
+          schema: { type: string, enum: [transcription, highlights, briefs] }
       requestBody:
         required: true
         content:
@@ -2019,7 +2019,7 @@ components:
             type: object
             required: [task, model, custom, options]
             properties:
-              task: { type: string, enum: [transcription, highlights] }
+              task: { type: string, enum: [transcription, highlights, briefs] }
               model: { $ref: "#/components/schemas/AIModel" }
               custom: { type: boolean }
               options:

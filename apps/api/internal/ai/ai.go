@@ -17,6 +17,7 @@ import (
 const (
 	TaskTranscription = "transcription"
 	TaskHighlights    = "highlights"
+	TaskBriefs        = "briefs"
 )
 
 // Providers.
@@ -47,10 +48,16 @@ var catalogue = map[string][]Model{
 		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
 		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (lower cost)"},
 	},
+	// Briefs models must pass TestEvalBriefs: every timestamp read with
+	// the right kind, nothing invented.
+	TaskBriefs: {
+		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
+		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (lower cost)"},
+	},
 }
 
 // Tasks returns every task, in a stable order.
-func Tasks() []string { return []string{TaskTranscription, TaskHighlights} }
+func Tasks() []string { return []string{TaskTranscription, TaskHighlights, TaskBriefs} }
 
 // Models returns the supported models for task.
 func Models(task string) []Model { return catalogue[task] }

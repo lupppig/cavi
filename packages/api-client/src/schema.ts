@@ -1232,7 +1232,7 @@ export interface components {
         AIModelSettingList: {
             data: {
                 /** @enum {string} */
-                task: "transcription" | "highlights";
+                task: "transcription" | "highlights" | "briefs";
                 model: components["schemas"]["AIModel"];
                 custom: boolean;
                 options: components["schemas"]["AIModel"][];
@@ -2515,7 +2515,7 @@ export interface operations {
             header?: never;
             path: {
                 orgID: components["parameters"]["OrgID"];
-                task: "transcription" | "highlights";
+                task: "transcription" | "highlights" | "briefs";
             };
             cookie?: never;
         };
