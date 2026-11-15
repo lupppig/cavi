@@ -101,3 +101,44 @@ func TestEvalPlans(t *testing.T) {
 		})
 	}
 }
+
+// TestEvalPlansFeaturedPerson checks a brief that requires someone to be
+// the main focus: plans centre on them and the narration names them.
+func TestEvalPlansFeaturedPerson(t *testing.T) {
+	g := evalProvider(t)
+	segs := podcast(t)
+	files := []PlanFile{{ID: "pod", Name: "podcast.mp3", Segments: segs}}
+	brief := PlanBrief{MinMS: 20_000, MaxMS: 75_000,
+		Campaign: &Campaign{Message: "Promote Maya Okafor's first headline tour.", Guidance: "Submitted videos must feature Maya Okafor as the primary focus."}}
+	for _, m := range Models(TaskPlans) {
+		t.Run(m.ID, func(t *testing.T) {
+			var ps []Plan
+			var err error
+			for _, wait := range []time.Duration{0, 20 * time.Second, 60 * time.Second} {
+				time.Sleep(wait)
+				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+				ps, _, err = g.Plans(ctx, m, files, brief)
+				cancel()
+				if err == nil || errors.Is(err, ErrPermanent) {
+					break
+				}
+				t.Logf("retrying after: %v", err)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ps) == 0 {
+				t.Fatal("no usable plans")
+			}
+			for _, p := range ps {
+				t.Logf("%q hook %q vo %q", p.Title, p.Hook, p.VoiceoverScript)
+				if !strings.Contains(p.VoiceoverScript, "Maya") {
+					t.Errorf("narration doesn't name Maya: %q", p.VoiceoverScript)
+				}
+				if n := len(strings.Fields(p.VoiceoverScript)); n < 8 || n > 40 {
+					t.Errorf("narration is %d words", n)
+				}
+			}
+		})
+	}
+}

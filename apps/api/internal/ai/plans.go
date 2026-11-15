@@ -8,7 +8,11 @@ import (
 )
 
 // PlansPromptVersion identifies the edit-plan prompt and schema.
-const PlansPromptVersion = "plans-v1"
+//
+// v2 centres plans on a person the brief says must be featured, and asks
+// for a voiceover in every plan: about that person by name, in a curious,
+// playful narrator's voice that sets up what the video is about.
+const PlansPromptVersion = "plans-v2"
 
 // Edit plan limits.
 const (
