@@ -2004,6 +2004,16 @@ components:
           description: Equal to `start_ms` for a single timestamp.
         note: { type: string, minLength: 1, maxLength: 300 }
 
+    BriefFlag:
+      type: object
+      description: A creator brief rule a clip touches (any kind but `priority`), from the brief as it is now.
+      required: [kind, start_ms, end_ms, note]
+      properties:
+        kind: { $ref: "#/components/schemas/BriefRuleKind" }
+        start_ms: { type: integer, format: int64 }
+        end_ms: { type: integer, format: int64 }
+        note: { type: string }
+
     Brief:
       type: object
       required: [id, project_id, media_asset_id, text, campaign_message, guidance, status, provider, model, model_label, prompt_version, error, requested_at, updated_at, completed_at, rules, can_edit]
@@ -2072,9 +2082,12 @@ components:
             Candidate clips, best first. Each spans whole transcript lines
             `first_segment` to `last_segment` (indexes into the transcript's
             segments when the clips were found); times are in the source file.
+            Clips that include content the project's brief excludes are
+            dropped when found; `flags` lists the other brief rules a clip
+            touches.
           items:
             type: object
-            required: [start_ms, end_ms, first_segment, last_segment, title, reason]
+            required: [start_ms, end_ms, first_segment, last_segment, title, reason, flags]
             properties:
               start_ms: { type: integer, format: int64 }
               end_ms: { type: integer, format: int64 }
@@ -2082,6 +2095,9 @@ components:
               last_segment: { type: integer }
               title: { type: string }
               reason: { type: string, description: Why the model chose the moment. }
+              flags:
+                type: array
+                items: { $ref: "#/components/schemas/BriefFlag" }
 
     Composition:
       type: object
@@ -2168,7 +2184,7 @@ components:
 
     Render:
       type: object
-      required: [id, project_id, source_asset_id, name, composition, status, error, requested_by, created_at, completed_at, can_delete, output]
+      required: [id, project_id, source_asset_id, name, composition, status, error, requested_by, created_at, completed_at, can_delete, output, flags]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
@@ -2186,6 +2202,10 @@ components:
             - type: "null"
         created_at: { type: string, format: date-time }
         completed_at: { type: [string, "null"], format: date-time }
+        flags:
+          type: array
+          description: The project brief's rules (other than priorities) this clip touches. Clips can't be rendered over an `exclude` rule.
+          items: { $ref: "#/components/schemas/BriefFlag" }
         can_delete: { type: boolean }
         output:
           description: The finished file, once `status` is `ready`.

@@ -19,6 +19,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
+	"github.com/lupppig/cavi/apps/api/internal/brief"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/project"
@@ -61,6 +62,9 @@ type Render struct {
 	CreatedAt       time.Time
 	CompletedAt     time.Time
 	CanDelete       bool
+	// Flags are the creator brief's rules (other than priorities) the clip
+	// touches, from the brief as it is now.
+	Flags []ai.BriefRule
 	// Output, once ready.
 	URL          string
 	URLExpiresAt time.Time
@@ -174,6 +178,13 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		}
 		if err := c.Validate(src); err != nil {
 			return err
+		}
+		rules, err := brief.Rules(ctx, tx, orgID, c.SourceAssetID)
+		if err != nil {
+			return err
+		}
+		if r, ok := brief.Excluded(rules, c.StartMS, c.EndMS); ok {
+			return brief.ExcludedError("composition.start_ms", r)
 		}
 		spec, err := json.Marshal(c)
 		if err != nil {
@@ -317,7 +328,31 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID, renderID s
 	if errors.Is(err, sql.ErrNoRows) {
 		return Render{}, ErrNotFound
 	}
+	if err != nil {
+		return Render{}, err
+	}
+	err = s.flag(ctx, orgID, []*Render{&r})
 	return r, err
+}
+
+// flag sets each render's Flags from its source's brief rules.
+func (s *Service) flag(ctx context.Context, orgID string, rs []*Render) error {
+	rules := map[string][]ai.BriefRule{}
+	for _, r := range rs {
+		if r.SourceAssetID == "" {
+			continue
+		}
+		rr, ok := rules[r.SourceAssetID]
+		if !ok {
+			var err error
+			if rr, err = brief.Rules(ctx, s.db, orgID, r.SourceAssetID); err != nil {
+				return err
+			}
+			rules[r.SourceAssetID] = rr
+		}
+		r.Flags = brief.Flags(rr, r.Composition.StartMS, r.Composition.EndMS)
+	}
+	return nil
 }
 
 // List returns a project's renders, newest first, optionally only those
@@ -369,6 +404,13 @@ func (s *Service) List(ctx context.Context, actorID, orgID, projectID, sourceAss
 		page.Renders = page.Renders[:limit]
 		last := page.Renders[limit-1]
 		page.NextCursor = encodeCursor(last.CreatedAt, last.ID)
+	}
+	ptrs := make([]*Render, len(page.Renders))
+	for i := range page.Renders {
+		ptrs[i] = &page.Renders[i]
+	}
+	if err := s.flag(ctx, orgID, ptrs); err != nil {
+		return Page{}, err
 	}
 	return page, nil
 }

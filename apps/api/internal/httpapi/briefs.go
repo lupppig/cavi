@@ -135,3 +135,19 @@ func (h briefHandler) delete(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
+
+// briefFlag is a brief rule a clip touches.
+type briefFlag struct {
+	Kind    string `json:"kind"`
+	StartMS int64  `json:"start_ms"`
+	EndMS   int64  `json:"end_ms"`
+	Note    string `json:"note"`
+}
+
+func toFlags(rs []ai.BriefRule) []briefFlag {
+	out := make([]briefFlag, len(rs))
+	for i, r := range rs {
+		out[i] = briefFlag{Kind: r.Kind, StartMS: r.StartMS, EndMS: r.EndMS, Note: r.Note}
+	}
+	return out
+}

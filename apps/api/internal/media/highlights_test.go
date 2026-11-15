@@ -266,3 +266,59 @@ func TestHighlightFailures(t *testing.T) {
 		t.Fatalf("stale transcript: %+v", h)
 	}
 }
+
+// briefRules gives the project a ready brief with these rules on assetID.
+func (w *world) briefRules(org, proj, assetID string, rules ...ai.BriefRule) {
+	w.t.Helper()
+	var id string
+	if err := w.db.QueryRowContext(w.ctx, `
+		INSERT INTO briefs (organisation_id, project_id, media_asset_id, source_text, status, provider, model, prompt_version, completed_at)
+		VALUES (?, ?, ?, 'brief', 'ready', 'gemini', 'gemini-3.5-flash', 'briefs-v1', now()) RETURNING id`,
+		org, proj, assetID).Scan(&id); err != nil {
+		w.t.Fatal(err)
+	}
+	for i, r := range rules {
+		if _, err := w.db.ExecContext(w.ctx, `
+			INSERT INTO brief_rules (brief_id, position, organisation_id, media_asset_id, kind, start_ms, end_ms, note)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, id, i, org, assetID, r.Kind, r.StartMS, r.EndMS, r.Note); err != nil {
+			w.t.Fatal(err)
+		}
+	}
+}
+
+func TestHighlightsFollowTheBrief(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	a := w.transcribed(ana, org, proj, "vlog.mp4", 30)
+	w.briefRules(org, proj, a.ID,
+		ai.BriefRule{Kind: ai.RuleExclude, StartMS: 47_000, EndMS: 53_000, Note: "Not to be used"},
+		ai.BriefRule{Kind: ai.RuleBlur, StartMS: 193_000, EndMS: 193_000, Note: "Licence plate"},
+		ai.BriefRule{Kind: ai.RulePriority, StartMS: 200_000, EndMS: 200_000, Note: "Schools"},
+	)
+	if _, err := w.svc.RequestHighlights(w.ctx, ana.id, org, proj, a.ID, anyLength); err != nil {
+		t.Fatal(err)
+	}
+	p := &fakeHighlighter{clips: []ai.Highlight{
+		{FirstSegment: 4, LastSegment: 6, Title: "Excluded", Reason: "Covers 0:47."},    // 40-70 s
+		{FirstSegment: 18, LastSegment: 21, Title: "Plate", Reason: "Covers 3:13."},     // 180-220 s
+		{FirstSegment: 10, LastSegment: 12, Title: "Clean", Reason: "Touches nothing."}, // 100-130 s
+	}}
+	if err := w.highlighter(p).Process(w.ctx, w.highlightsJob(a.ID)); err != nil {
+		t.Fatal(err)
+	}
+	h, err := w.svc.Highlights(w.ctx, ana.id, org, proj, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(h.Clips) != 2 || h.Clips[0].Title != "Plate" || h.Clips[1].Title != "Clean" {
+		t.Fatalf("clips = %+v, want the excluded one dropped", h.Clips)
+	}
+	if f := h.Clips[0].Flags; len(f) != 1 || f[0].Kind != ai.RuleBlur || f[0].Note != "Licence plate" {
+		t.Errorf("plate flags = %+v (priority rules are not flags)", f)
+	}
+	if len(h.Clips[1].Flags) != 0 {
+		t.Errorf("clean flags = %+v", h.Clips[1].Flags)
+	}
+}

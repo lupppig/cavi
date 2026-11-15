@@ -15,6 +15,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
+	"github.com/lupppig/cavi/apps/api/internal/brief"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 )
@@ -60,7 +61,14 @@ type Highlights struct {
 	CreatedAt     time.Time
 	CompletedAt   time.Time
 	// Clips are best first.
-	Clips []ai.Highlight
+	Clips []Clip
+}
+
+// Clip is a candidate clip and the creator brief's rules (other than
+// priorities) it touches, from the brief as it is now.
+type Clip struct {
+	ai.Highlight
+	Flags []ai.BriefRule
 }
 
 func (r HighlightRequest) validate(durationMS int64) (HighlightRequest, error) {
@@ -197,7 +205,7 @@ func (s *Service) Highlights(ctx context.Context, actorID, orgID, projectID, ass
 	if m, ok := ai.Lookup(ai.TaskHighlights, h.Provider, h.Model); ok {
 		h.ModelLabel = m.Label
 	}
-	h.Clips = []ai.Highlight{}
+	h.Clips = []Clip{}
 	if h.Status != HighlightsReady {
 		return h, nil
 	}
@@ -209,13 +217,23 @@ func (s *Service) Highlights(ctx context.Context, actorID, orgID, projectID, ass
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var c ai.Highlight
+		var c Clip
 		if err := rows.Scan(&c.FirstSegment, &c.LastSegment, &c.StartMS, &c.EndMS, &c.Title, &c.Reason); err != nil {
 			return Highlights{}, err
 		}
 		h.Clips = append(h.Clips, c)
 	}
-	return h, rows.Err()
+	if err := rows.Err(); err != nil {
+		return Highlights{}, err
+	}
+	rules, err := brief.Rules(ctx, s.db, orgID, assetID)
+	if err != nil {
+		return Highlights{}, err
+	}
+	for i := range h.Clips {
+		h.Clips[i].Flags = brief.Flags(rules, h.Clips[i].StartMS, h.Clips[i].EndMS)
+	}
+	return h, nil
 }
 
 // Highlighter handles media.highlights jobs in the media worker.
@@ -279,6 +297,19 @@ func (h *Highlighter) Process(ctx context.Context, job jobs.Job) error {
 		}
 		return err // includes invalid output, which may pass on retry
 	}
+	// Clips that include content the creator's brief excludes can't be
+	// used, so they aren't offered.
+	rules, err := brief.Rules(ctx, h.db, job.OrganisationID, job.MediaAssetID)
+	if err != nil {
+		return err
+	}
+	kept := clips[:0]
+	for _, c := range clips {
+		if _, excluded := brief.Excluded(rules, c.StartMS, c.EndMS); !excluded {
+			kept = append(kept, c)
+		}
+	}
+	clips = kept
 
 	return h.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		res, err := tx.ExecContext(ctx, `

@@ -99,6 +99,7 @@ type renderResponse struct {
 	CompletedAt   *string             `json:"completed_at"`
 	CanDelete     bool                `json:"can_delete"`
 	Output        *renderOutput       `json:"output"`
+	Flags         []briefFlag         `json:"flags"`
 }
 
 type renderPage struct {
@@ -113,6 +114,7 @@ func toRenderResponse(r render.Render) renderResponse {
 		Composition: compositionResponse{compositionBody: compositionBody{Version: c.Version, SourceAssetID: c.SourceAssetID,
 			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus}},
 		Status: r.Status, Error: ptr(r.Error), CreatedAt: ts(r.CreatedAt), CanDelete: r.CanDelete,
+		Flags: toFlags(r.Flags),
 	}
 	if c.Captions != nil {
 		out.Composition.Captions = summarise(c.Captions)

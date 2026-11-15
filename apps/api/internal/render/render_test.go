@@ -17,6 +17,7 @@ import (
 	"github.com/uptrace/bun"
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
+	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
@@ -530,5 +531,90 @@ func TestRenderWithCaptions(t *testing.T) {
 	}
 	if err := w.renderer(ff).Process(w.ctx, w.job(r2.ID)); err != nil || ff.clips[1].Subtitles != "" {
 		t.Fatalf("plain render had subtitles: %+v, %v", ff.clips[1], err)
+	}
+}
+
+// briefRules gives the project a ready brief with these rules on assetID.
+func (w *world) briefRules(org, proj, assetID string, rules ...ai.BriefRule) string {
+	w.t.Helper()
+	var id string
+	if err := w.db.QueryRowContext(w.ctx, `
+		INSERT INTO briefs (organisation_id, project_id, media_asset_id, source_text, status, provider, model, prompt_version, completed_at)
+		VALUES (?, ?, ?, 'brief', 'ready', 'gemini', 'gemini-3.5-flash', 'briefs-v1', now()) RETURNING id`,
+		org, proj, assetID).Scan(&id); err != nil {
+		w.t.Fatal(err)
+	}
+	for i, r := range rules {
+		w.addRule(org, id, assetID, i, r)
+	}
+	return id
+}
+
+func (w *world) addRule(org, briefID, assetID string, position int, r ai.BriefRule) {
+	w.t.Helper()
+	if _, err := w.db.ExecContext(w.ctx, `
+		INSERT INTO brief_rules (brief_id, position, organisation_id, media_asset_id, kind, start_ms, end_ms, note)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, briefID, position, org, assetID, r.Kind, r.StartMS, r.EndMS, r.Note); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+func TestRendersFollowTheBrief(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 600_000, true)
+	briefID := w.briefRules(org, proj, src,
+		ai.BriefRule{Kind: ai.RuleExclude, StartMS: 47_000, EndMS: 53_000, Note: "Not to be used"},
+		ai.BriefRule{Kind: ai.RuleMute, StartMS: 100_000, EndMS: 100_000, Note: "Copyright music"},
+	)
+	clip := func(start, end int64) Composition {
+		return Composition{Version: 1, SourceAssetID: src, StartMS: start, EndMS: end, Aspect: "9:16", Focus: 0.5}
+	}
+
+	// Any overlap with an excluded range is refused, at either end.
+	for _, c := range []Composition{clip(30_000, 48_000), clip(50_000, 70_000), clip(40_000, 60_000)} {
+		_, err := w.svc.Create(w.ctx, ana.id, org, proj, "x", c, nil)
+		wantField(t, err, "composition.start_ms")
+		if !strings.Contains(err.Error(), "0:47–0:53") {
+			t.Errorf("message %q doesn't say which part is excluded", err)
+		}
+	}
+	// Right up to its edges is fine; touching a mute rule is flagged.
+	before, err := w.svc.Create(w.ctx, ana.id, org, proj, "before", clip(30_000, 47_000), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	music, err := w.svc.Create(w.ctx, ana.id, org, proj, "music", clip(53_000, 120_000), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(before.Flags) != 0 || len(music.Flags) != 1 || music.Flags[0].Kind != ai.RuleMute {
+		t.Fatalf("flags: before %+v, music %+v", before.Flags, music.Flags)
+	}
+	page, err := w.svc.List(w.ctx, ana.id, org, proj, "", "", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range page.Renders {
+		if (r.ID == music.ID) != (len(r.Flags) == 1) {
+			t.Errorf("listed %s flags = %+v", r.Name, r.Flags)
+		}
+	}
+
+	// If the brief changes to exclude a queued clip, it isn't rendered.
+	w.addRule(org, briefID, src, 2, ai.BriefRule{Kind: ai.RuleExclude, StartMS: 110_000, EndMS: 110_000, Note: "Alcohol"})
+	ff := &fakeFFmpeg{}
+	j := w.job(music.ID)
+	err = w.renderer(ff).Process(w.ctx, j)
+	if !jobs.IsPermanent(err) || len(ff.clips) != 0 {
+		t.Fatalf("render over a newly excluded moment: err %v, clips %d", err, len(ff.clips))
+	}
+	if err := w.renderer(ff).Failed(w.ctx, j, err); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := w.svc.Get(w.ctx, ana.id, org, proj, music.ID); r.Status != StatusFailed || r.Error != msgExcluded {
+		t.Fatalf("render = %s %q", r.Status, r.Error)
 	}
 }

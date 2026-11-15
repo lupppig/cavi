@@ -303,12 +303,13 @@ func (h mediaHandler) transcript(c *gin.Context) {
 }
 
 type highlightResponse struct {
-	StartMS      int64  `json:"start_ms"`
-	EndMS        int64  `json:"end_ms"`
-	FirstSegment int    `json:"first_segment"`
-	LastSegment  int    `json:"last_segment"`
-	Title        string `json:"title"`
-	Reason       string `json:"reason"`
+	StartMS      int64       `json:"start_ms"`
+	EndMS        int64       `json:"end_ms"`
+	FirstSegment int         `json:"first_segment"`
+	LastSegment  int         `json:"last_segment"`
+	Title        string      `json:"title"`
+	Reason       string      `json:"reason"`
+	Flags        []briefFlag `json:"flags"`
 }
 
 type highlightsResponse struct {
@@ -341,7 +342,7 @@ func toHighlightsResponse(h media.Highlights) highlightsResponse {
 	}
 	for i, c := range h.Clips {
 		r.Clips[i] = highlightResponse{StartMS: c.StartMS, EndMS: c.EndMS, FirstSegment: c.FirstSegment,
-			LastSegment: c.LastSegment, Title: c.Title, Reason: c.Reason}
+			LastSegment: c.LastSegment, Title: c.Title, Reason: c.Reason, Flags: toFlags(c.Flags)}
 	}
 	return r
 }

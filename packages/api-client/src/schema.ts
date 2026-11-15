@@ -1136,6 +1136,15 @@ export interface components {
             end_ms: number;
             note: string;
         };
+        /** @description A creator brief rule a clip touches (any kind but `priority`), from the brief as it is now. */
+        BriefFlag: {
+            kind: components["schemas"]["BriefRuleKind"];
+            /** Format: int64 */
+            start_ms: number;
+            /** Format: int64 */
+            end_ms: number;
+            note: string;
+        };
         Brief: {
             /** Format: uuid */
             id: string;
@@ -1206,6 +1215,9 @@ export interface components {
              * @description Candidate clips, best first. Each spans whole transcript lines
              *     `first_segment` to `last_segment` (indexes into the transcript's
              *     segments when the clips were found); times are in the source file.
+             *     Clips that include content the project's brief excludes are
+             *     dropped when found; `flags` lists the other brief rules a clip
+             *     touches.
              */
             clips: {
                 /** Format: int64 */
@@ -1217,6 +1229,7 @@ export interface components {
                 title: string;
                 /** @description Why the model chose the moment. */
                 reason: string;
+                flags: components["schemas"]["BriefFlag"][];
             }[];
         };
         /**
@@ -1315,6 +1328,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             completed_at: string | null;
+            /** @description The project brief's rules (other than priorities) this clip touches. Clips can't be rendered over an `exclude` rule. */
+            flags: components["schemas"]["BriefFlag"][];
             can_delete: boolean;
             /** @description The finished file, once `status` is `ready`. */
             output: {

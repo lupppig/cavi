@@ -13,6 +13,7 @@ import (
 
 	"github.com/uptrace/bun"
 
+	"github.com/lupppig/cavi/apps/api/internal/brief"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
@@ -52,6 +53,7 @@ var _ jobs.Handler = (*Renderer)(nil)
 var (
 	errSourceGone = errors.New("render: source is gone or no longer a processed video")
 	errBadOutput  = errors.New("render: output failed checks")
+	errExcluded   = errors.New("render: clip includes content the brief excludes")
 )
 
 // User-facing failure messages.
@@ -60,6 +62,7 @@ const (
 	msgUnreadable = "The source file couldn’t be read, so this clip can’t be made."
 	msgBadOutput  = "The rendered clip didn’t come out right, so we didn’t keep it. Try again."
 	msgGaveUp     = "Rendering kept failing, so we stopped trying. Try again."
+	msgExcluded   = "The creator brief now excludes part of this clip, so it wasn’t made. Choose another stretch."
 )
 
 // timeoutFor bounds one FFmpeg run: generous for the clip's length, within
@@ -102,6 +105,14 @@ func (r *Renderer) Process(ctx context.Context, job jobs.Job) error {
 	// The source may have been reprocessed since: check again.
 	if err := c.Validate(src); err != nil {
 		return jobs.Permanent(fmt.Errorf("%w: %v", errSourceGone, err))
+	}
+	// The brief may have changed since the clip was requested.
+	rules, err := brief.Rules(ctx, r.db, job.OrganisationID, sourceID)
+	if err != nil {
+		return err
+	}
+	if rule, ok := brief.Excluded(rules, c.StartMS, c.EndMS); ok {
+		return jobs.Permanent(fmt.Errorf("%w: %s", errExcluded, rule.Note))
 	}
 	if _, err := r.db.ExecContext(ctx, `UPDATE renders SET status = 'running', updated_at = now() WHERE id = ?`, job.RenderID); err != nil {
 		return err
@@ -196,6 +207,8 @@ func (r *Renderer) Failed(ctx context.Context, job jobs.Job, err error) error {
 		msg = msgUnreadable
 	case errors.Is(err, errBadOutput):
 		msg = msgBadOutput
+	case errors.Is(err, errExcluded):
+		msg = msgExcluded
 	}
 	_, dbErr := r.db.ExecContext(ctx, `
 		UPDATE renders SET status = 'failed', error = ?, updated_at = now()
