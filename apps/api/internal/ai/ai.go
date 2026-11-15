@@ -19,6 +19,7 @@ const (
 	TaskHighlights    = "highlights"
 	TaskBriefs        = "briefs"
 	TaskVoiceover     = "voiceover"
+	TaskPlans         = "plans"
 )
 
 // Providers.
@@ -55,6 +56,11 @@ var catalogue = map[string][]Model{
 		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
 		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (lower cost)"},
 	},
+	// Plans models must pass TestEvalPlans.
+	TaskPlans: {
+		{Provider: ProviderGemini, ID: "gemini-3.5-flash", Label: "Gemini 3.5 Flash", Default: true},
+		{Provider: ProviderGemini, ID: "gemini-3.5-flash-lite", Label: "Gemini 3.5 Flash-Lite (lower cost)"},
+	},
 	// Voiceover models must pass TestEvalVoiceover: speech of a plausible
 	// length for the script, in every offered voice.
 	TaskVoiceover: {
@@ -65,7 +71,7 @@ var catalogue = map[string][]Model{
 
 // Tasks returns every task, in a stable order.
 func Tasks() []string {
-	return []string{TaskTranscription, TaskHighlights, TaskBriefs, TaskVoiceover}
+	return []string{TaskTranscription, TaskHighlights, TaskBriefs, TaskPlans, TaskVoiceover}
 }
 
 // Models returns the supported models for task.
