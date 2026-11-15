@@ -8,7 +8,9 @@ import { Banner } from "@/components/account/account-header";
 import { client, raise, type MediaAsset, type Project } from "@/lib/queries";
 import { acceptedFiles, formatBytes, maxUploadBytes, sendFile, UploadAborted } from "@/lib/upload";
 import { ClipsPanel } from "./clips";
+import { framingBusy } from "./framing";
 import { HighlightsPanel } from "./highlights-panel";
+import { ImportLinkForm, importing, shortLink } from "./import-link";
 import { TranscriptPanel } from "./transcript-panel";
 
 type Job = {
@@ -43,6 +45,8 @@ export function Studio({
   const listKey = ["project", project.id, "media"];
   const orgID = project.organisation_id;
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [linking, setLinking] = useState(false);
+  const router = useRouter();
 
   const media = useProjectMedia(project);
 
@@ -129,8 +133,27 @@ export function Studio({
           <h2 id={`${id}-h`} className="mr-auto text-xl">
             Media{items.length > 0 && <span className="text-muted"> · {items.length}{media.hasNextPage ? "+" : ""}</span>}
           </h2>
+          {canUpload && (
+            <button
+              type="button"
+              onClick={() => setLinking((l) => !l)}
+              aria-expanded={linking}
+              className="btn btn-secondary min-h-11 px-3 text-sm"
+            >
+              {linking ? "Close" : "+ Link"}
+            </button>
+          )}
           {canUpload && <UploadButton onFiles={(files) => files.forEach(upload)} />}
         </div>
+        {canUpload && linking && (
+          <ImportLinkForm
+            project={project}
+            onDone={(a) => {
+              setLinking(false);
+              router.push(hrefFor(a.id), { scroll: false });
+            }}
+          />
+        )}
 
         {visibleJobs.length > 0 && (
           <ul className="space-y-2 border-b border-line p-2" aria-label="Uploads">
@@ -249,7 +272,15 @@ function MediaRow({ asset, href, selected }: { asset: MediaAsset; href: string; 
   const thumb = stable(`${asset.id}:thumb`, asset.thumbnail_url, asset.url_expires_at);
   const status = asset.processing.status;
   const state =
-    status === "pending" || status === "processing" ? "Processing…" : status === "failed" ? "Couldn’t process" : null;
+    asset.status === "importing"
+      ? asset.import_error
+        ? "Import failed"
+        : "Importing…"
+      : status === "pending" || status === "processing"
+        ? "Processing…"
+        : status === "failed"
+          ? "Couldn’t process"
+          : null;
   const length = asset.metadata?.duration_ms ? formatDuration(asset.metadata.duration_ms) : null;
   return (
     <Link
@@ -462,7 +493,8 @@ function MediaViewer({
     onSettled: refresh,
   });
   const status = asset.processing.status;
-  const busy = status === "pending" || status === "processing";
+  const incoming = asset.status === "importing";
+  const busy = !incoming && (status === "pending" || status === "processing");
   const details = describe(asset);
   const search = useSearchParams();
   const pathname = usePathname();
@@ -486,7 +518,7 @@ function MediaViewer({
         <div className="min-w-0 flex-1">
           <h2 className="text-xl break-all normal-case [font-stretch:100%] sm:text-2xl">{asset.filename}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-xs font-semibold uppercase text-muted">
-            {[asset.kind, ...details, formatBytes(asset.size_bytes), asset.uploaded_by?.name].filter(Boolean).join(" · ")}
+            {[asset.kind, ...details, incoming ? null : formatBytes(asset.size_bytes), asset.uploaded_by?.name].filter(Boolean).join(" · ")}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -554,7 +586,30 @@ function MediaViewer({
           </span>
         )}
       </div>
-      {status === "failed" && (
+      {incoming && (
+        <div className="m-3 space-y-1 border border-line bg-surface-2 p-3 text-sm font-semibold sm:m-4" role="status">
+          {asset.import_error ? (
+            <>
+              <p>{asset.import_error}</p>
+              <p className="text-xs text-muted">Delete this file, then paste the link again to retry.</p>
+            </>
+          ) : (
+            <p className="flex items-center gap-2">
+              <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />
+              Importing… Long videos take a few minutes. You can leave this page.
+            </p>
+          )}
+          {asset.source_url && (
+            <p className="truncate text-xs text-muted">
+              From{" "}
+              <a href={asset.source_url} target="_blank" rel="noreferrer" className="underline decoration-2 underline-offset-2">
+                {shortLink(asset.source_url)}
+              </a>
+            </p>
+          )}
+        </div>
+      )}
+      {!incoming && status === "failed" && (
         <div className="m-3 border border-line bg-surface-2 p-3 text-sm font-semibold sm:m-4" role="status">
           <p>{asset.processing.error ?? "Processing failed."}</p>
           {canUpload && (
@@ -632,11 +687,14 @@ export function useProjectMedia(project: Project) {
       return data;
     },
     getNextPageParam: (last) => last.next_cursor ?? undefined,
-    // Poll while anything is still processing. (Live updates over a
+    // Poll while anything is still processing or being analysed. (Live updates over a
     // WebSocket can replace this later.)
-    refetchInterval: (q) =>
-      q.state.data?.pages.some((p) => p.data.some((a) => a.processing.status === "pending" || a.processing.status === "processing"))
-        ? 2000
-        : false,
+    refetchInterval: (q) => {
+      const assets = q.state.data?.pages.flatMap((p) => p.data) ?? [];
+      if (assets.some((a) => a.status === "uploaded" && (a.processing.status === "pending" || a.processing.status === "processing"))) return 2000;
+      if (assets.some(importing)) return 3000;
+      // Framing analysis takes minutes: check less often.
+      return assets.some(framingBusy) ? 5000 : false;
+    },
   });
 }
