@@ -16,6 +16,9 @@ const (
 	CaptionsBold = "bold"
 	// CaptionsBoxed is text on a solid box.
 	CaptionsBoxed = "boxed"
+	// CaptionsPop is short-form style: a few capitalised words at a time,
+	// heavy outline and shadow, the spoken word bouncing in.
+	CaptionsPop = "pop"
 
 	// ModeLines shows whole lines; ModeWords shows a few words at a time
 	// and highlights the one being said.
@@ -97,8 +100,12 @@ func oneOf(v string, allowed ...string) bool {
 
 // Normalize fills defaults and checks the options.
 func (o CaptionOptions) Normalize() (CaptionOptions, error) {
-	if !oneOf(o.Style, CaptionsBold, CaptionsBoxed) {
-		return o, invalid("captions.style", "Choose bold or boxed captions.")
+	if !oneOf(o.Style, CaptionsBold, CaptionsBoxed, CaptionsPop) {
+		return o, invalid("captions.style", "Choose bold, boxed or pop captions.")
+	}
+	if o.Style == CaptionsPop {
+		// Pop is word by word in capitals by definition.
+		o.Mode, o.Uppercase = ModeWords, true
 	}
 	if o.Mode == "" {
 		o.Mode = ModeLines
@@ -137,9 +144,12 @@ type captionLayout struct {
 	FontSize, MarginV, MaxChars, Alignment int
 }
 
-func layoutFor(sh Shape, mode, position string) captionLayout {
+func layoutFor(sh Shape, style, mode, position string) captionLayout {
 	scale := 0.075
-	if mode == ModeWords {
+	switch {
+	case style == CaptionsPop:
+		scale = 0.085 // capitals run wider
+	case mode == ModeWords:
 		scale = 0.095 // fewer words, bigger
 	}
 	size := int(math.Round(float64(min(sh.Width, sh.Height)) * scale))
@@ -237,7 +247,7 @@ const maxWordMS = 1200
 // none); words mostly outside the clip are dropped.
 func BuildCues(segments []ai.Segment, startMS, endMS int64, aspect, mode string) []Cue {
 	sh, _ := shape(aspect)
-	lay := layoutFor(sh, mode, PositionBottom)
+	lay := layoutFor(sh, "", mode, PositionBottom)
 	var cues []Cue
 	for _, seg := range segments {
 		if seg.EndMS <= startMS || seg.StartMS >= endMS {
@@ -365,17 +375,22 @@ func assTime(ms int64) string {
 func ASS(c Captions, aspect string) string {
 	sh, _ := shape(aspect)
 	opts, _ := c.CaptionOptions.Normalize()
-	lay := layoutFor(sh, opts.Mode, opts.Position)
-	border, outline := 1, int(math.Round(float64(lay.FontSize)*0.09))
-	if opts.Style == CaptionsBoxed {
+	lay := layoutFor(sh, opts.Style, opts.Mode, opts.Position)
+	border, outline, shadow := 1, int(math.Round(float64(lay.FontSize)*0.09)), 0
+	back := assColor(opts.Colors.Stroke)
+	switch opts.Style {
+	case CaptionsBoxed:
 		border, outline = 3, int(math.Round(float64(lay.FontSize)*0.2)) // the box's padding
+	case CaptionsPop:
+		outline, shadow = int(math.Round(float64(lay.FontSize)*0.12)), int(math.Round(float64(lay.FontSize)*0.07))
+		back = "&H80000000" // a soft drop shadow
 	}
 	text, stroke := assColor(opts.Colors.Text), assColor(opts.Colors.Stroke)
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\nScaledBorderAndShadow: yes\n\n", sh.Width, sh.Height)
 	b.WriteString("[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-	fmt.Fprintf(&b, "Style: Cap,Inter Black,%d,%s,%s,%s,%s,-1,0,0,0,100,100,0,0,%d,%d,0,%d,%d,%d,%d,1\n\n",
-		lay.FontSize, text, text, stroke, stroke, border, outline, lay.Alignment, sh.Width/12, sh.Width/12, lay.MarginV)
+	fmt.Fprintf(&b, "Style: Cap,Inter Black,%d,%s,%s,%s,%s,-1,0,0,0,100,100,0,0,%d,%d,%d,%d,%d,%d,%d,1\n\n",
+		lay.FontSize, text, text, stroke, back, border, outline, shadow, lay.Alignment, sh.Width/12, sh.Width/12, lay.MarginV)
 	b.WriteString("[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 	for _, q := range c.Cues {
 		baseHex := opts.Colors.Text
@@ -401,9 +416,13 @@ func ASS(c Captions, aspect string) string {
 						out.WriteString(" ")
 					}
 					w := assText(q.Words[i].Text, opts.Uppercase)
-					if i == k {
+					switch {
+					case i == k && opts.Style == CaptionsPop:
+						// Bounces in as it's said: small, overshoot, settle.
+						fmt.Fprintf(&out, `{\1c%s&\fscx80\fscy80\t(0,90,\fscx125\fscy125)\t(90,170,\fscx112\fscy112)}%s{\1c%s&\fscx100\fscy100}`, hl, w, base)
+					case i == k:
 						fmt.Fprintf(&out, `{\1c%s&\fscx110\fscy110}%s{\1c%s&\fscx100\fscy100}`, hl, w, base)
-					} else {
+					default:
 						out.WriteString(w)
 					}
 					i++

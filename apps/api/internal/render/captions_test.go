@@ -21,7 +21,7 @@ func TestLayout(t *testing.T) {
 		{v, ModeWords, PositionMiddle, 103, 0, 14, 5},
 		{v, ModeLines, PositionTop, 81, 269, 18, 8},
 	} {
-		got := layoutFor(tc.sh, tc.mode, tc.pos)
+		got := layoutFor(tc.sh, "", tc.mode, tc.pos)
 		if got.FontSize != tc.size || got.MarginV != tc.margin || got.MaxChars != tc.maxChars || got.Alignment != tc.align {
 			t.Errorf("%s %s %s = %+v", tc.sh.Aspect, tc.mode, tc.pos, got)
 		}
@@ -219,5 +219,22 @@ func TestCuesExcludeWordsBeforeTheCut(t *testing.T) {
 	}
 	if len(cues) == 0 || !strings.HasPrefix(cues[0].Text, "And") {
 		t.Fatalf("cues = %+v", cues)
+	}
+}
+
+func TestPopCaptions(t *testing.T) {
+	o, err := CaptionOptions{Style: CaptionsPop, Mode: ModeLines}.Normalize()
+	if err != nil || o.Mode != ModeWords || !o.Uppercase {
+		t.Fatalf("pop options = %+v, %v", o, err)
+	}
+	c := Captions{CaptionOptions: o, Cues: []Cue{{StartMS: 0, EndMS: 1000, Text: "no way bro",
+		Words: []CueWord{{0, 300, "no"}, {300, 600, "way"}, {600, 1000, "bro"}}}}}
+	ass := ASS(c, "9:16")
+	// Outline and a shadow, capitals, and the spoken word bouncing in.
+	if !strings.Contains(ass, ",&H80000000,-1,") || !strings.Contains(ass, `\t(0,90,\fscx125\fscy125)`) || !strings.Contains(ass, "WAY") {
+		t.Fatalf("pop ASS = %s", ass)
+	}
+	if n := strings.Count(ass, "Dialogue:"); n != 3 {
+		t.Fatalf("want one event per word, got %d", n)
 	}
 }
