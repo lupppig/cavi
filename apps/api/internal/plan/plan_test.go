@@ -185,6 +185,15 @@ func TestPlans(t *testing.T) {
 		t.Fatalf("another tenant's file: %v", err)
 	}
 
+	// Audio-only files can't go in a montage, so they aren't planned from.
+	podcast := w.transcribed(org, proj, "podcast.mp3", 5)
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE media_assets SET kind = 'audio', width = NULL, height = NULL WHERE id = ?`, podcast); err != nil {
+		t.Fatal(err)
+	}
+	_, err = w.svc.Request(w.ctx, ana.id, org, proj, Request{MinSeconds: 30, MaxSeconds: 60, MediaAssetIDs: []string{podcast}})
+	if !errors.As(err, &v) || v.Field != "media_asset_ids" {
+		t.Fatalf("audio-only file: %v", err)
+	}
 	run, err := w.svc.Request(w.ctx, ana.id, org, proj, req)
 	if err != nil {
 		t.Fatal(err)

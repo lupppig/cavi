@@ -201,12 +201,14 @@ func (s *Service) Request(ctx context.Context, actorID, orgID, projectID string,
 	return s.Get(ctx, actorID, orgID, projectID)
 }
 
-// transcribed checks the files to plan from have ready transcripts with
-// speech, or picks the project's newest such files.
+// transcribed checks the files to plan from are processed videos (what
+// montages are made of) with ready transcripts with speech, or picks the
+// project's newest such files.
 func transcribed(ctx context.Context, tx bun.Tx, orgID, projectID string, ids []string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT m.id::text FROM media_assets m JOIN transcripts tr ON tr.media_asset_id = m.id
 		WHERE m.project_id = ? AND m.organisation_id = ? AND m.status = 'uploaded' AND tr.status = 'ready'
+			AND m.kind = 'video' AND m.processing_status = 'ready'
 			AND EXISTS (SELECT 1 FROM transcript_segments s WHERE s.transcript_id = tr.id)
 		ORDER BY m.created_at DESC`, projectID, orgID)
 	if err != nil {
@@ -228,14 +230,14 @@ func transcribed(ctx context.Context, tx bun.Tx, orgID, projectID string, ids []
 	}
 	if len(ids) == 0 {
 		if len(newest) == 0 {
-			return nil, invalid("media_asset_ids", "Transcribe a file in this project first. Plans are made from transcripts.")
+			return nil, invalid("media_asset_ids", "Transcribe a video in this project first. Plans are made from video transcripts.")
 		}
 		return newest[:min(len(newest), ai.MaxPlanFiles)], nil
 	}
 	seen := map[string]bool{}
 	for _, id := range ids {
 		if !ready[id] || seen[id] {
-			return nil, invalid("media_asset_ids", "Choose different files from this project that have finished transcripts with speech.")
+			return nil, invalid("media_asset_ids", "Choose different videos from this project that have finished transcripts with speech.")
 		}
 		seen[id] = true
 	}

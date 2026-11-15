@@ -1281,7 +1281,7 @@ paths:
       summary: Have the AI propose montages for this project
       description: |
         Requires `editing.manage`. Plans are made from the transcripts of
-        `media_asset_ids` (default: the project's newest transcribed files,
+        `media_asset_ids` (processed videos; default: the project's newest transcribed videos,
         up to 5) and the project's creator brief, if it has one. The
         transcripts' text and the brief, not the media, are sent to the
         organisation's chosen model for the `plans` task; the brief and
