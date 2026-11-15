@@ -1,4 +1,5 @@
-# Media worker: Go binary plus FFmpeg. Build from apps/api:
+# Media worker: Go binary plus FFmpeg, yt-dlp (imports from links) and a
+# small face finder (framing). Build from apps/api:
 #   docker build -f Dockerfile.media-worker -t cavi-media-worker .
 FROM golang:1.26.8-alpine AS build
 WORKDIR /src
@@ -7,10 +8,42 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/media-worker ./cmd/media-worker
 
+# cavi-faces: OpenCV's YuNet face detector, built from a minimal static
+# OpenCV (no GUI, video or image codecs) so the image stays small.
+FROM alpine:3.22 AS faces
+ARG OPENCV_VERSION=4.11.0
+ARG OPENCV_SHA256=9a7c11f924eff5f8d8070e297b322ee68b9227e003fd600d4b8122198091665f
+RUN apk add --no-cache build-base cmake linux-headers curl
+WORKDIR /build
+RUN curl -fsSL -o opencv.tgz https://github.com/opencv/opencv/archive/refs/tags/${OPENCV_VERSION}.tar.gz \
+    && echo "${OPENCV_SHA256}  opencv.tgz" | sha256sum -c - \
+    && tar xzf opencv.tgz \
+    && cmake -S opencv-${OPENCV_VERSION} -B cv -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/opencv \
+        -DBUILD_LIST=core,imgproc,flann,features2d,calib3d,dnn,objdetect -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_EXAMPLES=OFF -DBUILD_opencv_apps=OFF -DBUILD_DOCS=OFF \
+        -DBUILD_JAVA=OFF -DBUILD_opencv_python3=OFF -DWITH_OPENCL=OFF -DWITH_IPP=OFF -DWITH_ITT=OFF \
+        -DWITH_GTK=OFF -DWITH_QT=OFF -DWITH_FFMPEG=OFF -DWITH_GSTREAMER=OFF -DWITH_V4L=OFF -DWITH_OPENEXR=OFF \
+        -DWITH_JPEG=OFF -DWITH_PNG=OFF -DWITH_TIFF=OFF -DWITH_WEBP=OFF -DWITH_OPENJPEG=OFF -DWITH_JASPER=OFF \
+        -DWITH_EIGEN=OFF -DWITH_LAPACK=OFF -DWITH_TBB=OFF -DWITH_OPENMP=OFF -DWITH_ADE=OFF -DWITH_VA=OFF \
+        -DWITH_1394=OFF -DWITH_AVIF=OFF -DWITH_IMGCODEC_HDR=OFF -DBUILD_ZLIB=ON -DWITH_PROTOBUF=ON -DBUILD_PROTOBUF=ON \
+        -DOPENCV_GENERATE_PKGCONFIG=ON -DCV_TRACE=OFF \
+    && cmake --build cv -j"$(nproc)" && cmake --install cv
+COPY faces/faces.cpp .
+RUN apk add --no-cache pkgconf && mkdir -p /out && g++ -O2 -std=c++17 -static -o /out/cavi-faces faces.cpp \
+        $(PKG_CONFIG_PATH=/opt/opencv/lib/pkgconfig pkg-config --static --cflags --libs opencv4) \
+    && strip /out/cavi-faces
+
 FROM alpine:3.22
-# font-inter: the caption font (render.DefaultFontsDir).
-RUN apk add --no-cache ffmpeg ca-certificates font-inter \
+# font-inter: the caption font (render.DefaultFontsDir). python3 and
+# nodejs run yt-dlp, which YouTube needs a JavaScript runtime for.
+ARG YTDLP_VERSION=2026.10.26
+RUN apk add --no-cache ffmpeg ca-certificates font-inter python3 nodejs \
+    && python3 -m venv /opt/yt-dlp \
+    && /opt/yt-dlp/bin/pip install --no-cache-dir "yt-dlp[default]==${YTDLP_VERSION}" \
+    && ln -s /opt/yt-dlp/bin/yt-dlp /usr/local/bin/yt-dlp \
     && adduser -D -H -u 10001 worker
-USER worker
+COPY faces/face_detection_yunet_2023mar.onnx /usr/local/share/cavi/yunet.onnx
+COPY --from=faces /out/cavi-faces /usr/local/bin/cavi-faces
 COPY --from=build /out/media-worker /usr/local/bin/media-worker
+USER worker
 ENTRYPOINT ["media-worker"]
