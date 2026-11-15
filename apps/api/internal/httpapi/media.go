@@ -309,7 +309,9 @@ type highlightResponse struct {
 	LastSegment  int         `json:"last_segment"`
 	Title        string      `json:"title"`
 	Reason       string      `json:"reason"`
+	CampaignLink string      `json:"campaign_link"`
 	Flags        []briefFlag `json:"flags"`
+	Priorities   []briefFlag `json:"priorities"`
 }
 
 type highlightsResponse struct {
@@ -323,6 +325,7 @@ type highlightsResponse struct {
 	Objective     string              `json:"objective"`
 	MinSeconds    int64               `json:"min_seconds"`
 	MaxSeconds    int64               `json:"max_seconds"`
+	UsedBrief     bool                `json:"used_brief"`
 	Error         *string             `json:"error"`
 	RequestedAt   string              `json:"requested_at"`
 	CompletedAt   *string             `json:"completed_at"`
@@ -333,7 +336,7 @@ func toHighlightsResponse(h media.Highlights) highlightsResponse {
 	r := highlightsResponse{
 		ID: h.ID, MediaAssetID: h.MediaAssetID, Status: h.Status, Provider: h.Provider, Model: h.Model,
 		ModelLabel: h.ModelLabel, PromptVersion: h.PromptVersion, Objective: h.Objective,
-		MinSeconds: h.MinMS / 1000, MaxSeconds: h.MaxMS / 1000, Error: ptr(h.Error),
+		MinSeconds: h.MinMS / 1000, MaxSeconds: h.MaxMS / 1000, UsedBrief: h.UsedBrief, Error: ptr(h.Error),
 		RequestedAt: ts(h.CreatedAt), Clips: make([]highlightResponse, len(h.Clips)),
 	}
 	if !h.CompletedAt.IsZero() && h.Status == media.HighlightsReady {
@@ -342,7 +345,8 @@ func toHighlightsResponse(h media.Highlights) highlightsResponse {
 	}
 	for i, c := range h.Clips {
 		r.Clips[i] = highlightResponse{StartMS: c.StartMS, EndMS: c.EndMS, FirstSegment: c.FirstSegment,
-			LastSegment: c.LastSegment, Title: c.Title, Reason: c.Reason, Flags: toFlags(c.Flags)}
+			LastSegment: c.LastSegment, Title: c.Title, Reason: c.Reason, CampaignLink: c.CampaignLink,
+			Flags: toFlags(c.Flags), Priorities: toFlags(c.Priorities)}
 	}
 	return r
 }

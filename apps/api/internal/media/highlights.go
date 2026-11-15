@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -57,9 +58,11 @@ type Highlights struct {
 	Objective     string
 	MinMS         int64
 	MaxMS         int64
-	Error         string
-	CreatedAt     time.Time
-	CompletedAt   time.Time
+	// UsedBrief reports whether the run followed the creator brief.
+	UsedBrief   bool
+	Error       string
+	CreatedAt   time.Time
+	CompletedAt time.Time
 	// Clips are best first.
 	Clips []Clip
 }
@@ -69,6 +72,8 @@ type Highlights struct {
 type Clip struct {
 	ai.Highlight
 	Flags []ai.BriefRule
+	// Priorities are the brief's priority moments the clip features.
+	Priorities []ai.BriefRule
 }
 
 func (r HighlightRequest) validate(durationMS int64) (HighlightRequest, error) {
@@ -144,18 +149,32 @@ func (s *Service) RequestHighlights(ctx context.Context, actorID, orgID, project
 		if err != nil {
 			return err
 		}
+		// The brief is copied onto the run, so it runs (and retries) as
+		// asked even if the brief changes meanwhile.
+		camp, err := brief.Campaign(ctx, tx, orgID, assetID)
+		if err != nil {
+			return err
+		}
+		var campaign any
+		if camp != nil {
+			b, err := json.Marshal(camp)
+			if err != nil {
+				return err
+			}
+			campaign = string(b)
+		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO highlight_runs (organisation_id, media_asset_id, status, provider, model, prompt_version,
-				objective, min_ms, max_ms, requested_by_user_id)
-			VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?)
+				objective, min_ms, max_ms, requested_by_user_id, campaign)
+			VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
 			ON CONFLICT (media_asset_id) DO UPDATE SET
 				status = 'queued', provider = EXCLUDED.provider, model = EXCLUDED.model,
 				prompt_version = EXCLUDED.prompt_version, objective = EXCLUDED.objective,
-				min_ms = EXCLUDED.min_ms, max_ms = EXCLUDED.max_ms,
+				min_ms = EXCLUDED.min_ms, max_ms = EXCLUDED.max_ms, campaign = EXCLUDED.campaign,
 				requested_by_user_id = EXCLUDED.requested_by_user_id,
 				error = NULL, updated_at = now(), created_at = now(), completed_at = NULL`,
 			orgID, assetID, model.Provider, model.ID, ai.HighlightsPromptVersion, req.Objective,
-			int64(req.MinSeconds)*1000, int64(req.MaxSeconds)*1000, actorID); err != nil {
+			int64(req.MinSeconds)*1000, int64(req.MaxSeconds)*1000, actorID, campaign); err != nil {
 			return fmt.Errorf("queue highlights: %w", err)
 		}
 		if _, err := jobs.Enqueue(ctx, tx, jobs.New{Kind: jobs.KindMediaHighlights, OrganisationID: orgID,
@@ -163,7 +182,7 @@ func (s *Service) RequestHighlights(ctx context.Context, actorID, orgID, project
 			return err
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "media.highlights_requested", "media_asset", assetID,
-			map[string]any{"provider": model.Provider, "model": model.ID})
+			map[string]any{"provider": model.Provider, "model": model.ID, "brief": camp != nil})
 	})
 	if err != nil {
 		return Highlights{}, err
@@ -190,10 +209,10 @@ func (s *Service) Highlights(ctx context.Context, actorID, orgID, projectID, ass
 	var completed sql.NullTime
 	err = s.db.QueryRowContext(ctx, `
 		SELECT id, media_asset_id, status, provider, model, prompt_version, objective, min_ms, max_ms,
-			coalesce(error, ''), created_at, completed_at
+			campaign IS NOT NULL, coalesce(error, ''), created_at, completed_at
 		FROM highlight_runs WHERE media_asset_id = ? AND organisation_id = ?`, assetID, orgID).
 		Scan(&h.ID, &h.MediaAssetID, &h.Status, &h.Provider, &h.Model, &h.PromptVersion, &h.Objective,
-			&h.MinMS, &h.MaxMS, &h.Error, &h.CreatedAt, &completed)
+			&h.MinMS, &h.MaxMS, &h.UsedBrief, &h.Error, &h.CreatedAt, &completed)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Highlights{}, ErrNotFound
 	}
@@ -210,7 +229,7 @@ func (s *Service) Highlights(ctx context.Context, actorID, orgID, projectID, ass
 		return h, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT first_segment, last_segment, start_ms, end_ms, title, reason
+		SELECT first_segment, last_segment, start_ms, end_ms, title, reason, campaign_link
 		FROM highlights WHERE highlight_run_id = ? ORDER BY position`, h.ID)
 	if err != nil {
 		return Highlights{}, fmt.Errorf("load highlights: %w", err)
@@ -218,7 +237,7 @@ func (s *Service) Highlights(ctx context.Context, actorID, orgID, projectID, ass
 	defer rows.Close()
 	for rows.Next() {
 		var c Clip
-		if err := rows.Scan(&c.FirstSegment, &c.LastSegment, &c.StartMS, &c.EndMS, &c.Title, &c.Reason); err != nil {
+		if err := rows.Scan(&c.FirstSegment, &c.LastSegment, &c.StartMS, &c.EndMS, &c.Title, &c.Reason, &c.CampaignLink); err != nil {
 			return Highlights{}, err
 		}
 		h.Clips = append(h.Clips, c)
@@ -232,6 +251,7 @@ func (s *Service) Highlights(ctx context.Context, actorID, orgID, projectID, ass
 	}
 	for i := range h.Clips {
 		h.Clips[i].Flags = brief.Flags(rules, h.Clips[i].StartMS, h.Clips[i].EndMS)
+		h.Clips[i].Priorities = brief.Priorities(rules, h.Clips[i].StartMS, h.Clips[i].EndMS)
 	}
 	return h, nil
 }
@@ -266,10 +286,11 @@ var errTranscriptGone = errors.New("media: transcript is no longer ready")
 func (h *Highlighter) Process(ctx context.Context, job jobs.Job) error {
 	var runID, provider, modelID, objective string
 	var minMS, maxMS int64
+	var campaign []byte
 	err := h.db.QueryRowContext(ctx, `
-		SELECT id, provider, model, objective, min_ms, max_ms FROM highlight_runs
+		SELECT id, provider, model, objective, min_ms, max_ms, campaign FROM highlight_runs
 		WHERE media_asset_id = ? AND organisation_id = ? AND status IN ('queued', 'running')`,
-		job.MediaAssetID, job.OrganisationID).Scan(&runID, &provider, &modelID, &objective, &minMS, &maxMS)
+		job.MediaAssetID, job.OrganisationID).Scan(&runID, &provider, &modelID, &objective, &minMS, &maxMS, &campaign)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // deleted, or superseded; nothing to do
 	}
@@ -289,7 +310,14 @@ func (h *Highlighter) Process(ctx context.Context, job jobs.Job) error {
 		return err
 	}
 
-	clips, usage, err := h.ai.Highlights(ctx, model, segments, ai.HighlightBrief{Objective: objective, MinMS: minMS, MaxMS: maxMS})
+	req := ai.HighlightBrief{Objective: objective, MinMS: minMS, MaxMS: maxMS}
+	if len(campaign) > 0 {
+		req.Campaign = &ai.Campaign{}
+		if err := json.Unmarshal(campaign, req.Campaign); err != nil {
+			return jobs.Permanent(fmt.Errorf("highlight run %s campaign: %w", runID, err))
+		}
+	}
+	clips, usage, err := h.ai.Highlights(ctx, model, segments, req)
 	h.recordUsage(ctx, job, model, usage, err == nil)
 	if err != nil {
 		if errors.Is(err, ai.ErrPermanent) {
@@ -326,9 +354,9 @@ func (h *Highlighter) Process(ctx context.Context, job jobs.Job) error {
 		}
 		for i, c := range clips {
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO highlights (highlight_run_id, position, start_ms, end_ms, first_segment, last_segment, title, reason)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-				runID, i, c.StartMS, c.EndMS, c.FirstSegment, c.LastSegment, c.Title, c.Reason); err != nil {
+				INSERT INTO highlights (highlight_run_id, position, start_ms, end_ms, first_segment, last_segment, title, reason, campaign_link)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				runID, i, c.StartMS, c.EndMS, c.FirstSegment, c.LastSegment, c.Title, c.Reason, c.CampaignLink); err != nil {
 				return fmt.Errorf("save highlight: %w", err)
 			}
 		}

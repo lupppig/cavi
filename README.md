@@ -201,6 +201,7 @@ A project can hold the creator's brief for its campaign: paste it, choose the vi
 - Rule kinds: `priority` (moments to feature), `exclude` (must never appear), `blur` (something on screen to blur or crop out), `mute` (audio not to use, such as uncleared music), `caution` (sensitive topics, third-party branding) and `review` (a person must check it). A single timestamp is a rule with the same start and end.
 - The model can't invent moments: every rule time must be written in the brief and lie within the video, or the output is rejected and the read retried. Models for the `briefs` task must pass `TestEvalBriefs` (`make ai-eval`).
 - Only the brief's text goes to the AI provider, never the media. The provider, model and prompt version are stored with the brief; usage is recorded per organisation.
+- Highlights follow the brief: when highlights are requested for the brief's video, its campaign message, guidance and rules are copied onto the run. Each clip must say how it connects to the campaign (`campaign_link`), clips over excluded moments are dropped, and clips featuring a priority moment are listed first.
 - Reading needs `project.update` (creators: only on their own projects). Anyone who can see the project can read the brief.
 
 ## Background jobs

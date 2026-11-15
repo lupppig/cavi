@@ -301,9 +301,9 @@ func TestHighlightsFollowTheBrief(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := &fakeHighlighter{clips: []ai.Highlight{
-		{FirstSegment: 4, LastSegment: 6, Title: "Excluded", Reason: "Covers 0:47."},    // 40-70 s
-		{FirstSegment: 18, LastSegment: 21, Title: "Plate", Reason: "Covers 3:13."},     // 180-220 s
-		{FirstSegment: 10, LastSegment: 12, Title: "Clean", Reason: "Touches nothing."}, // 100-130 s
+		{FirstSegment: 4, LastSegment: 6, Title: "Excluded", Reason: "Covers 0:47.", CampaignLink: "Ties in."},    // 40-70 s
+		{FirstSegment: 18, LastSegment: 21, Title: "Plate", Reason: "Covers 3:13.", CampaignLink: "Ties in."},     // 180-220 s
+		{FirstSegment: 10, LastSegment: 12, Title: "Clean", Reason: "Touches nothing.", CampaignLink: "Ties in."}, // 100-130 s
 	}}
 	if err := w.highlighter(p).Process(w.ctx, w.highlightsJob(a.ID)); err != nil {
 		t.Fatal(err)
@@ -314,6 +314,12 @@ func TestHighlightsFollowTheBrief(t *testing.T) {
 	}
 	if len(h.Clips) != 2 || h.Clips[0].Title != "Plate" || h.Clips[1].Title != "Clean" {
 		t.Fatalf("clips = %+v, want the excluded one dropped", h.Clips)
+	}
+	if c := p.calls[0].Campaign; c == nil || len(c.Rules) != 3 || !h.UsedBrief {
+		t.Fatalf("provider got campaign %+v; used brief %v", c, h.UsedBrief)
+	}
+	if pr := h.Clips[0].Priorities; len(pr) != 1 || pr[0].Note != "Schools" || h.Clips[0].CampaignLink != "Ties in." {
+		t.Errorf("plate priorities %+v, link %q", pr, h.Clips[0].CampaignLink)
 	}
 	if f := h.Clips[0].Flags; len(f) != 1 || f[0].Kind != ai.RuleBlur || f[0].Note != "Licence plate" {
 		t.Errorf("plate flags = %+v (priority rules are not flags)", f)

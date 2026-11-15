@@ -2061,7 +2061,7 @@ components:
 
     Highlights:
       type: object
-      required: [id, media_asset_id, status, provider, model, model_label, prompt_version, objective, min_seconds, max_seconds, error, requested_at, completed_at, clips]
+      required: [id, media_asset_id, status, provider, model, model_label, prompt_version, objective, min_seconds, max_seconds, used_brief, error, requested_at, completed_at, clips]
       properties:
         id: { type: string, format: uuid }
         media_asset_id: { type: string, format: uuid }
@@ -2073,6 +2073,9 @@ components:
         objective: { type: string, description: The objective as requested; empty if none. }
         min_seconds: { type: integer }
         max_seconds: { type: integer }
+        used_brief:
+          type: boolean
+          description: Whether the run followed the project's creator brief for this file (copied when highlights were requested).
         error: { type: [string, "null"], description: User-facing reason when failed. }
         requested_at: { type: string, format: date-time }
         completed_at: { type: [string, "null"], format: date-time }
@@ -2087,7 +2090,7 @@ components:
             touches.
           items:
             type: object
-            required: [start_ms, end_ms, first_segment, last_segment, title, reason, flags]
+            required: [start_ms, end_ms, first_segment, last_segment, title, reason, campaign_link, flags, priorities]
             properties:
               start_ms: { type: integer, format: int64 }
               end_ms: { type: integer, format: int64 }
@@ -2097,6 +2100,13 @@ components:
               reason: { type: string, description: Why the model chose the moment. }
               flags:
                 type: array
+                items: { $ref: "#/components/schemas/BriefFlag" }
+              campaign_link:
+                type: string
+                description: How the clip connects to the brief's campaign message; empty when the run had no brief.
+              priorities:
+                type: array
+                description: The brief's priority moments this clip features. Such clips are listed first.
                 items: { $ref: "#/components/schemas/BriefFlag" }
 
     Composition:

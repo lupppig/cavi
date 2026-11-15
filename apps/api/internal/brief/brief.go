@@ -531,3 +531,37 @@ func (r *Reader) Failed(ctx context.Context, job jobs.Job, err error) error {
 		msg, job.MediaAssetID, job.OrganisationID)
 	return dbErr
 }
+
+// Campaign returns what highlight detection needs from the brief on a
+// video, or nil if the video has no ready brief. Callers must already have
+// authorised access to the video.
+func Campaign(ctx context.Context, db bun.IDB, orgID, assetID string) (*ai.Campaign, error) {
+	var c ai.Campaign
+	err := db.QueryRowContext(ctx, `
+		SELECT campaign_message, guidance FROM briefs
+		WHERE media_asset_id = ? AND organisation_id = ? AND status = 'ready'`, assetID, orgID).Scan(&c.Message, &c.Guidance)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("load brief: %w", err)
+	}
+	if c.Rules, err = Rules(ctx, db, orgID, assetID); err != nil {
+		return nil, err
+	}
+	if c.Rules == nil {
+		c.Rules = []ai.BriefRule{}
+	}
+	return &c, nil
+}
+
+// Priorities returns the priority rules a clip [startMS, endMS] features.
+func Priorities(rules []ai.BriefRule, startMS, endMS int64) []ai.BriefRule {
+	var out []ai.BriefRule
+	for _, r := range rules {
+		if r.Kind == ai.RulePriority && r.Overlaps(startMS, endMS+1) {
+			out = append(out, r)
+		}
+	}
+	return out
+}

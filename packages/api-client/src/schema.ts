@@ -1205,6 +1205,8 @@ export interface components {
             objective: string;
             min_seconds: number;
             max_seconds: number;
+            /** @description Whether the run followed the project's creator brief for this file (copied when highlights were requested). */
+            used_brief: boolean;
             /** @description User-facing reason when failed. */
             error: string | null;
             /** Format: date-time */
@@ -1230,6 +1232,10 @@ export interface components {
                 /** @description Why the model chose the moment. */
                 reason: string;
                 flags: components["schemas"]["BriefFlag"][];
+                /** @description How the clip connects to the brief's campaign message; empty when the run had no brief. */
+                campaign_link: string;
+                /** @description The brief's priority moments this clip features. Such clips are listed first. */
+                priorities: components["schemas"]["BriefFlag"][];
             }[];
         };
         /**

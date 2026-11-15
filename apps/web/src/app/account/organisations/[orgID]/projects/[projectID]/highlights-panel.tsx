@@ -181,6 +181,13 @@ export function HighlightsPanel({
                         {stamp(c.start_ms)}–{stamp(c.end_ms)} · {seconds(c.end_ms - c.start_ms)}
                       </p>
                       <p className="mt-1 text-sm font-medium break-words">{c.reason}</p>
+                      {c.campaign_link && (
+                        <p className="mt-1 text-sm font-medium break-words">
+                          <span className="font-semibold text-accent-text">Campaign: </span>
+                          {c.campaign_link}
+                        </p>
+                      )}
+                      <FlagList flags={c.priorities} />
                       <FlagList flags={c.flags} />
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button
@@ -215,6 +222,7 @@ export function HighlightsPanel({
               </button>
             )}
             <span className="min-w-0 text-xs font-semibold break-words text-muted">
+              {h.used_brief ? <>Following the creator brief · </> : null}
               {h.objective ? <>Asked for “{h.objective}” · </> : null}
               {lengths.find((l) => l.min === h.min_seconds && l.max === h.max_seconds)?.label ?? `${h.min_seconds}–${h.max_seconds}s`}
               {" "}· Suggested by {h.model_label}. Check each clip before you use it.
