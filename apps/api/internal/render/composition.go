@@ -14,6 +14,7 @@ import (
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
+	"github.com/lupppig/cavi/apps/api/internal/framing"
 )
 
 // CompositionVersion is the composition schema this code writes. Version
@@ -62,6 +63,9 @@ type Composition struct {
 	// Focus places the frame along the axis the source is cropped on: 0 is
 	// the left (or top) edge, 0.5 the centre, 1 the right (or bottom).
 	Focus float64 `json:"focus"`
+	// Framing is FramingFixed (the default, at Focus) or FramingAuto
+	// (following the people in shot; Focus where there are none).
+	Framing string `json:"framing,omitempty"`
 	// Captions (version 2) are burned in when present.
 	Captions *Captions `json:"captions,omitempty"`
 	// Segments and Hook are used by montages (version 3); the fields
@@ -92,6 +96,9 @@ func (c Composition) Validate(src Source) error {
 	}
 	if c.Version == 1 && c.Captions != nil {
 		return invalid("composition.version", "Captions need composition version 2.")
+	}
+	if err := validFraming(c); err != nil {
+		return err
 	}
 	if src.Width < 2 || src.Height < 2 || src.DurationMS <= 0 {
 		return invalid("composition.source_asset_id", "Choose a processed video file.")
@@ -128,9 +135,9 @@ func even(n float64) int {
 }
 
 // Plan works out the FFmpeg clip for a valid composition: the largest
-// region of the source with the output's aspect ratio, placed by Focus,
-// scaled to the output size.
-func Plan(c Composition, src Source) ffmpeg.Clip {
+// region of the source with the output's aspect ratio, placed by Focus
+// (or moving along path, when auto framed), scaled to the output size.
+func Plan(c Composition, src Source, path []framing.Key) ffmpeg.Clip {
 	sh, _ := shape(c.Aspect)
 	cl := ffmpeg.Clip{
 		Start:  time.Duration(c.StartMS) * time.Millisecond,
@@ -148,6 +155,9 @@ func Plan(c Composition, src Source) ffmpeg.Clip {
 		cl.CropW = sw - sw%2
 		cl.CropH = min(even(float64(sw)*float64(sh.Height)/float64(sh.Width)), shh-shh%2)
 		cl.CropY = int(math.Round(float64(shh-cl.CropH) * c.Focus))
+	}
+	if len(path) > 0 {
+		cl.Pan, cl.PanVertical = pan(path, sh, src)
 	}
 	return cl
 }

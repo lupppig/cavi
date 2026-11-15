@@ -26,6 +26,7 @@ type MediaService interface {
 	SetSpeakerVoice(ctx context.Context, actorID, orgID, projectID, assetID, label, voice string) (media.Transcript, error)
 	RequestHighlights(ctx context.Context, actorID, orgID, projectID, assetID string, req media.HighlightRequest) (media.Highlights, error)
 	Highlights(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Highlights, error)
+	RequestFraming(ctx context.Context, actorID, orgID, projectID, assetID string) (media.Asset, error)
 }
 
 type mediaHandler struct {
@@ -50,6 +51,9 @@ type assetResponse struct {
 	ThumbnailURL *string            `json:"thumbnail_url"`
 	Processing   processingResponse `json:"processing"`
 	Metadata     *metadataResponse  `json:"metadata"`
+	// Framing is finding the people in a video for auto framing; null
+	// when it hasn't been asked for.
+	Framing *processingResponse `json:"framing"`
 }
 
 type processingResponse struct {
@@ -118,6 +122,9 @@ func toAssetResponse(a media.Asset) assetResponse {
 	}
 	r.ThumbnailURL = ptr(a.ThumbnailURL)
 	r.Processing = processingResponse{Status: a.ProcessingStatus, Error: ptr(a.ProcessingError)}
+	if a.FramingStatus != "" {
+		r.Framing = &processingResponse{Status: a.FramingStatus, Error: ptr(a.FramingError)}
+	}
 	if a.ProcessingStatus == media.ProcessingReady {
 		r.Metadata = &metadataResponse{
 			Container: ptr(a.Container), DurationMS: ptr(a.DurationMS), Width: ptr(a.Width), Height: ptr(a.Height),
@@ -137,6 +144,8 @@ func (h mediaHandler) fail(c *gin.Context, err error) {
 		writeError(c, http.StatusConflict, CodeTranscriptionInProgress, "This file is already being transcribed.")
 	case errors.Is(err, media.ErrHighlightsInProgress):
 		writeError(c, http.StatusConflict, CodeHighlightsInProgress, "Highlights are already being found for this file.")
+	case errors.Is(err, media.ErrFramingInProgress):
+		writeError(c, http.StatusConflict, CodeFramingInProgress, "This video is already being analysed for framing.")
 	case errors.Is(err, media.ErrProcessingInProgress):
 		writeError(c, http.StatusConflict, CodeProcessingInProgress, "This file is already being processed.")
 	case errors.Is(err, media.ErrNotReceived):
@@ -399,4 +408,14 @@ func (h mediaHandler) setSpeakerVoice(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, toTranscriptResponse(t))
+}
+
+func (h mediaHandler) requestFraming(c *gin.Context) {
+	a, err := h.svc.RequestFraming(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusAccepted, toAssetResponse(a))
 }

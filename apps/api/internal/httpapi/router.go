@@ -137,6 +137,7 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	med.PATCH("/:assetID/transcript/speakers/:label", mediaH.setSpeakerVoice)
 	med.GET("/:assetID/highlights", mediaH.highlights)
 	med.POST("/:assetID/highlights", mediaH.requestHighlights)
+	med.POST("/:assetID/framing", mediaH.requestFraming)
 
 	briefs := briefHandler{svc: opts.Briefs, orgHandler: orgs}
 	br := proj.Group("/:projectID/brief", requireService(opts.Briefs != nil))
@@ -164,6 +165,8 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	rend.POST("", renders.create)
 	rend.GET("/:renderID", renders.get)
 	rend.DELETE("/:renderID", renders.delete)
+	// The camera path is computed by the render service.
+	med.GET("/:assetID/framing/path", requireService(opts.Renders != nil), renders.framingPath)
 
 	aiH := aiHandler{svc: opts.AISettings, orgHandler: orgs}
 	aiGroup := signedIn.Group("/organisations/:orgID/ai-models", requireService(opts.AISettings != nil))

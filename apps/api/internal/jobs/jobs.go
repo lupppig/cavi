@@ -37,6 +37,7 @@ const (
 	KindBriefRead       = "brief.read"
 	KindVoiceoverSpeak  = "voiceover.speak"
 	KindPlansCreate     = "plans.create"
+	KindMediaFraming    = "media.framing"
 )
 
 // Message is what travels over NATS. It is versioned so workers can

@@ -111,24 +111,38 @@ func (p *Processor) Process(ctx context.Context, job jobs.Job) error {
 		}
 	}
 
-	res, err := p.db.ExecContext(ctx, `
-		UPDATE media_assets SET
-			processing_status = 'ready', processing_error = NULL, processed_at = now(), updated_at = now(),
-			container = NULLIF(?, ''), duration_ms = ?, bit_rate = ?,
-			width = ?, height = ?, frame_rate = ?, video_codec = NULLIF(?, ''),
-			audio_codec = NULLIF(?, ''), audio_channels = ?, sample_rate = ?,
-			thumbnail_key = NULLIF(?, '')
-		WHERE id = ? AND organisation_id = ?`,
-		probe.Container, nullInt(probe.Duration.Milliseconds()), nullInt(probe.BitRate),
-		nullInt(int64(probe.Width)), nullInt(int64(probe.Height)), nullFloat(probe.FrameRate), probe.VideoCodec,
-		probe.AudioCodec, nullInt(int64(probe.AudioChannels)), nullInt(int64(probe.SampleRate)),
-		thumbKey, job.MediaAssetID, job.OrganisationID)
+	// Videos are then analysed for auto framing, queued with the results.
+	frame := kind == KindVideo && probe.HasVideo
+	err = p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+			UPDATE media_assets SET
+				processing_status = 'ready', processing_error = NULL, processed_at = now(), updated_at = now(),
+				container = NULLIF(?, ''), duration_ms = ?, bit_rate = ?,
+				width = ?, height = ?, frame_rate = ?, video_codec = NULLIF(?, ''),
+				audio_codec = NULLIF(?, ''), audio_channels = ?, sample_rate = ?,
+				thumbnail_key = NULLIF(?, '')
+			WHERE id = ? AND organisation_id = ?`,
+			probe.Container, nullInt(probe.Duration.Milliseconds()), nullInt(probe.BitRate),
+			nullInt(int64(probe.Width)), nullInt(int64(probe.Height)), nullFloat(probe.FrameRate), probe.VideoCodec,
+			probe.AudioCodec, nullInt(int64(probe.AudioChannels)), nullInt(int64(probe.SampleRate)),
+			thumbKey, job.MediaAssetID, job.OrganisationID)
+		if err != nil {
+			return fmt.Errorf("save processing results: %w", err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			// Deleted while we worked: don't leave the thumbnail behind.
+			if thumbKey != "" {
+				_, err = tx.ExecContext(ctx, `INSERT INTO storage_deletions (storage_key) VALUES (?)`, thumbKey)
+			}
+			return err
+		}
+		if frame {
+			return queueFraming(ctx, tx, job.OrganisationID, job.MediaAssetID)
+		}
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("save processing results: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 && thumbKey != "" {
-		// Deleted while we worked: don't leave the thumbnail behind.
-		_, _ = p.db.ExecContext(ctx, `INSERT INTO storage_deletions (storage_key) VALUES (?)`, thumbKey)
+		return err
 	}
 	return nil
 }

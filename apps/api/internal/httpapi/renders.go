@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/lupppig/cavi/apps/api/internal/account"
+	"github.com/lupppig/cavi/apps/api/internal/framing"
 	"github.com/lupppig/cavi/apps/api/internal/render"
 )
 
@@ -17,6 +19,7 @@ type RenderService interface {
 	List(ctx context.Context, actorID, orgID, projectID, sourceAssetID, cursor string, limit int) (render.Page, error)
 	Get(ctx context.Context, actorID, orgID, projectID, renderID string) (render.Render, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, renderID string) error
+	FramingPreview(ctx context.Context, actorID, orgID, projectID, assetID, aspect string, startMS, endMS int64, focus float64) ([]framing.Key, error)
 }
 
 type renderHandler struct {
@@ -31,6 +34,7 @@ type compositionBody struct {
 	EndMS         int64   `json:"end_ms"`
 	Aspect        string  `json:"aspect"`
 	Focus         float64 `json:"focus"`
+	Framing       string  `json:"framing,omitempty"`
 	// Montages (version 3). The composition's segment and hook shapes are
 	// the API's: they are plain, validated data.
 	Segments  []render.Segment     `json:"segments,omitempty"`
@@ -118,7 +122,7 @@ func toRenderResponse(r render.Render) renderResponse {
 	out := renderResponse{
 		ID: r.ID, ProjectID: r.ProjectID, SourceAssetID: ptr(r.SourceAssetID), Name: r.Name,
 		Composition: compositionResponse{compositionBody: compositionBody{Version: c.Version, SourceAssetID: c.SourceAssetID,
-			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus, Segments: c.Segments, Hook: c.Hook, Voiceover: c.Voiceover, SignOff: c.SignOff}},
+			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus, Framing: c.Framing, Segments: c.Segments, Hook: c.Hook, Voiceover: c.Voiceover, SignOff: c.SignOff}},
 		Status: r.Status, Error: ptr(r.Error), CreatedAt: ts(r.CreatedAt), CanDelete: r.CanDelete,
 		Flags: toFlags(r.Flags),
 	}
@@ -157,7 +161,7 @@ func (h renderHandler) create(c *gin.Context) {
 	}
 	r, err := h.svc.Create(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Name,
 		render.Composition{Version: b.Version, SourceAssetID: b.SourceAssetID, StartMS: b.StartMS, EndMS: b.EndMS,
-			Aspect: b.Aspect, Focus: b.Focus, Segments: b.Segments, Hook: b.Hook, Voiceover: b.Voiceover, SignOff: b.SignOff}, captions)
+			Aspect: b.Aspect, Focus: b.Focus, Framing: b.Framing, Segments: b.Segments, Hook: b.Hook, Voiceover: b.Voiceover, SignOff: b.SignOff}, captions)
 	if err != nil {
 		h.fail(c, err)
 		return
@@ -208,4 +212,42 @@ func (h renderHandler) delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+type framingPathResponse struct {
+	Keys []framing.Key `json:"keys"`
+}
+
+// framingPath is the camera path auto framing follows for a stretch of a
+// file, for the editor's preview.
+func (h renderHandler) framingPath(c *gin.Context) {
+	num := func(name string) (float64, bool) {
+		v, err := strconv.ParseFloat(c.Query(name), 64)
+		if err != nil {
+			h.fail(c, &account.ValidationError{Field: name, Message: "Give " + name + " as a number."})
+			return 0, false
+		}
+		return v, true
+	}
+	start, ok := num("start_ms")
+	if !ok {
+		return
+	}
+	end, ok := num("end_ms")
+	if !ok {
+		return
+	}
+	focus := 0.5
+	if c.Query("focus") != "" {
+		if focus, ok = num("focus"); !ok {
+			return
+		}
+	}
+	keys, err := h.svc.FramingPreview(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("assetID"),
+		c.Query("aspect"), int64(start), int64(end), focus)
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, framingPathResponse{Keys: keys})
 }

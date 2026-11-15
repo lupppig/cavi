@@ -13,8 +13,10 @@ import (
 
 	"github.com/uptrace/bun"
 
+	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/brief"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
+	"github.com/lupppig/cavi/apps/api/internal/framing"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 	"github.com/lupppig/cavi/apps/api/internal/voiceover"
@@ -57,6 +59,7 @@ var (
 	errBadOutput     = errors.New("render: output failed checks")
 	errExcluded      = errors.New("render: clip includes content the brief excludes")
 	errVoiceoverGone = errors.New("render: voiceover was deleted")
+	errFramingGone   = errors.New("render: framing analysis is gone")
 )
 
 // User-facing failure messages.
@@ -67,6 +70,7 @@ const (
 	msgGaveUp        = "Rendering kept failing, so we stopped trying. Try again."
 	msgExcluded      = "The creator brief now excludes part of this clip, so it wasn’t made. Choose another stretch."
 	msgVoiceoverGone = "The voiceover was deleted, so this clip can’t be made. Make it again with another voiceover."
+	msgFramingGone   = "Auto framing for a source isn’t available any more (it was reprocessed). Make the clip again once it’s ready."
 )
 
 // timeoutFor bounds one FFmpeg run: generous for the clip's length, within
@@ -125,7 +129,15 @@ func (r *Renderer) Process(ctx context.Context, job jobs.Job) error {
 		return err
 	}
 
-	plan := Plan(c, src)
+	tracks, err := framingTracks(ctx, r.db, job.OrganisationID, c)
+	if err != nil {
+		return framingLost(err)
+	}
+	var path []framing.Key
+	if t, ok := tracks[sourceID]; ok {
+		path = FramingPath(t, src, c.Aspect, c.StartMS, c.EndMS, c.Focus)
+	}
+	plan := Plan(c, src, path)
 	url, _, err := r.store.PresignDownload(ctx, key, timeoutFor(plan.Length)+10*time.Minute)
 	if err != nil {
 		return err
@@ -160,6 +172,16 @@ func (r *Renderer) Process(ctx context.Context, job jobs.Job) error {
 		return jobs.Permanent(err)
 	}
 	return r.finish(ctx, job, projectID, name, out, probe, took, plan.Length)
+}
+
+// framingLost is the job error when a source's framing analysis can't be
+// loaded: gone (reprocessed since the clip was requested) is permanent.
+func framingLost(err error) error {
+	var v *account.ValidationError
+	if errors.As(err, &v) {
+		return jobs.Permanent(fmt.Errorf("%w: %v", errFramingGone, err))
+	}
+	return err
 }
 
 // check verifies the output is what was asked for: a zero exit from
@@ -198,6 +220,8 @@ func (r *Renderer) Failed(ctx context.Context, job jobs.Job, err error) error {
 		msg = msgExcluded
 	case errors.Is(err, errVoiceoverGone):
 		msg = msgVoiceoverGone
+	case errors.Is(err, errFramingGone):
+		msg = msgFramingGone
 	}
 	_, dbErr := r.db.ExecContext(ctx, `
 		UPDATE renders SET status = 'failed', error = ?, updated_at = now()
@@ -265,6 +289,10 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 			}
 		}
 	}
+	tracks, err := framingTracks(ctx, r.db, job.OrganisationID, c)
+	if err != nil {
+		return framingLost(err)
+	}
 	if _, err := r.db.ExecContext(ctx, `UPDATE renders SET status = 'running', updated_at = now() WHERE id = ?`, job.RenderID); err != nil {
 		return err
 	}
@@ -299,7 +327,7 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 		}
 		inputs[id] = url
 	}
-	plan := PlanMontage(c, srcs, inputs)
+	plan := PlanMontage(c, srcs, inputs, tracks)
 	// voice adds a ready voiceover to the plan, at clip time at, for at
 	// most length.
 	voice := func(id string, at, length int64, duck float64) error {

@@ -42,6 +42,8 @@ const (
 	CodeUploadRejected   = "upload_rejected"
 	// CodeProcessingInProgress: the file is already queued or processing.
 	CodeProcessingInProgress = "processing_in_progress"
+	// CodeFramingInProgress: framing analysis is already queued or running.
+	CodeFramingInProgress = "framing_in_progress"
 	// CodeTranscriptionInProgress: a transcript is already queued or running.
 	CodeTranscriptionInProgress = "transcription_in_progress"
 	// CodeHighlightsInProgress: highlight detection is already queued or running.

@@ -108,6 +108,10 @@ type Asset struct {
 	SampleRate       int
 	// ThumbnailURL is a signed link to a JPEG preview, when there is one.
 	ThumbnailURL string
+	// FramingStatus is where finding the people in a video for auto
+	// framing has got to; empty if never requested.
+	FramingStatus string
+	FramingError  string
 
 	thumbnailKey string
 }
@@ -247,7 +251,8 @@ const assetColumns = `
 	m.created_at, coalesce(m.uploaded_at, m.created_at), m.storage_key,
 	m.processing_status, coalesce(m.processing_error, ''), coalesce(m.container, ''), coalesce(m.duration_ms, 0),
 	coalesce(m.width, 0), coalesce(m.height, 0), coalesce(m.frame_rate, 0)::float8, coalesce(m.video_codec, ''),
-	coalesce(m.audio_codec, ''), coalesce(m.audio_channels, 0), coalesce(m.sample_rate, 0), coalesce(m.thumbnail_key, '')`
+	coalesce(m.audio_codec, ''), coalesce(m.audio_channels, 0), coalesce(m.sample_rate, 0), coalesce(m.thumbnail_key, ''),
+	coalesce(m.framing_status, ''), coalesce(m.framing_error, '')`
 
 const assetFrom = `
 	FROM media_assets m LEFT JOIN users u ON u.id = m.uploaded_by_user_id`
@@ -261,7 +266,8 @@ func scanAsset(row scanner) (Asset, string, error) {
 		&a.Status, &a.UploadedByID, &a.UploadedByName, &a.CreatedAt, &a.UploadedAt, &key,
 		&a.ProcessingStatus, &a.ProcessingError, &a.Container, &a.DurationMS,
 		&a.Width, &a.Height, &a.FrameRate, &a.VideoCodec,
-		&a.AudioCodec, &a.AudioChannels, &a.SampleRate, &a.thumbnailKey)
+		&a.AudioCodec, &a.AudioChannels, &a.SampleRate, &a.thumbnailKey,
+		&a.FramingStatus, &a.FramingError)
 	return a, key, err
 }
 

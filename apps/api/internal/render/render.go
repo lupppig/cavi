@@ -176,7 +176,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
 			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.LengthMS(), "segments": max(1, len(c.Segments)),
-				"hook": c.Hook != nil, "voiceover": c.Voiceover != nil, "sign_off": c.SignOff != nil, "captions": captions != nil})
+				"hook": c.Hook != nil, "framing": c.Framing, "voiceover": c.Voiceover != nil, "sign_off": c.SignOff != nil, "captions": captions != nil})
 	})
 	if err != nil {
 		return Render{}, err
@@ -524,6 +524,9 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 		if err := c.ValidateMontage(srcs); err != nil {
 			return err
 		}
+		if _, err := framingTracks(ctx, tx, orgID, *c); err != nil {
+			return err
+		}
 		for i, s := range c.Segments {
 			for _, part := range s.Ranges() {
 				rules, err := brief.Rules(ctx, tx, orgID, part.SourceAssetID)
@@ -558,6 +561,9 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 		c.Captions = &Captions{CaptionOptions: opts, Cues: BuildCues(segs, c.StartMS, c.EndMS, c.Aspect, opts.Mode)}
 	}
 	if err := c.Validate(src); err != nil {
+		return err
+	}
+	if _, err := framingTracks(ctx, tx, orgID, *c); err != nil {
 		return err
 	}
 	rules, err := brief.Rules(ctx, tx, orgID, c.SourceAssetID)

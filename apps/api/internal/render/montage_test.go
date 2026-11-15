@@ -70,7 +70,7 @@ func TestPlanMontage(t *testing.T) {
 			Blur: []BlurBox{{Range: Range{StartMS: 1500, EndMS: 2500}, X: 0.5, Y: 0.5, W: 0.25, H: 0.1}}},
 		Segment{SourceAssetID: "b", StartMS: 0, EndMS: 3000, Focus: 0},
 	)
-	m := PlanMontage(c, srcs, map[string]string{"a": "https://a", "b": "https://b"})
+	m := PlanMontage(c, srcs, map[string]string{"a": "https://a", "b": "https://b"}, nil)
 	if m.Width != 1080 || m.Height != 1920 || len(m.Parts) != 2 || m.Length() != 7*time.Second {
 		t.Fatalf("plan = %+v", m)
 	}
@@ -381,7 +381,7 @@ func TestSplitScreenSegments(t *testing.T) {
 	if ids := c.SourceIDs(); len(ids) != 2 {
 		t.Fatalf("SourceIDs = %v", ids)
 	}
-	m := PlanMontage(c, srcs, map[string]string{"a": "A", "b": "B"})
+	m := PlanMontage(c, srcs, map[string]string{"a": "A", "b": "B"}, nil)
 	p := m.Parts[0]
 	// Three 1080x640 panels: each crop is the 1080:640 region of its source.
 	if len(p.Stack) != 2 || p.CropW != 1822 || p.CropH != 1080 || p.Stack[0].Input != "B" || p.Stack[0].Start != 2*time.Second || p.Stack[1].CropX != 20 {

@@ -522,6 +522,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/framing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyse a video for auto framing
+         * @description Requires `editing.manage`. Finds the people (faces) and shot changes
+         *     in a processed video so clips can follow them (`framing: auto`).
+         *     Videos are analysed automatically after processing; use this for
+         *     files processed before auto framing existed, or to retry a failed
+         *     analysis. An analysed video is returned unchanged; one being
+         *     analysed is `framing_in_progress` (409). Not a video is
+         *     `validation_failed`.
+         */
+        post: operations["requestFraming"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/framing/path": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Auto framing camera path
+         * @description The path auto framing follows for a stretch of an analysed video
+         *     cropped to `aspect`: the same path a render with `framing: auto`
+         *     uses, for previews. Anyone who can see the project can read it. A
+         *     video that isn't analysed yet is `validation_failed` on `framing`.
+         */
+        get: operations["getFramingPath"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript": {
         parameters: {
             query?: never;
@@ -1120,6 +1169,29 @@ export interface components {
             };
             /** @description What processing learned; null until ready. Fields that don't apply are null. */
             metadata: components["schemas"]["MediaMetadata"] | null;
+            /**
+             * @description Finding the people in a video for auto framing, queued after
+             *     processing; null when never asked for (not a video, or processed
+             *     before auto framing existed). `failed` carries a user-facing
+             *     `error` and can be retried with `POST .../framing`.
+             */
+            framing: {
+                /** @enum {string} */
+                status: "pending" | "processing" | "ready" | "failed";
+                error: string | null;
+            } | null;
+        };
+        FramingPath: {
+            /**
+             * @description Where the crop sits over time, as composition focus: at `at_ms`
+             *     after the stretch starts the crop is at `focus`, moving in a
+             *     straight line to the next key, and holding after the last.
+             */
+            keys: {
+                /** Format: int64 */
+                at_ms: number;
+                focus: number;
+            }[];
         };
         MediaMetadata: {
             container: string | null;
@@ -1372,6 +1444,17 @@ export interface components {
              *     0 left or top, 0.5 centre, 1 right or bottom.
              */
             focus: number;
+            /**
+             * @description `fixed` (the default) holds the frame at `focus`. `auto` (version 2 and 3)
+             *     follows the people in shot, moving smoothly and cutting with
+             *     shot changes, using each file's framing analysis (see
+             *     `MediaAsset.framing`; every segment's file must be analysed);
+             *     shots with nobody in them sit at the segment's `focus`.
+             *     Split-screen tiles keep their own focus. It follows the most
+             *     prominent face, not necessarily whoever is speaking.
+             * @enum {string}
+             */
+            framing?: "fixed" | "auto";
         };
         RequestPlansRequest: {
             objective?: string;
@@ -2635,6 +2718,73 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    requestFraming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Analysis queued (or the video is already analysed). */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAsset"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getFramingPath: {
+        parameters: {
+            query: {
+                aspect: "9:16" | "1:1" | "4:5" | "16:9";
+                start_ms: number;
+                /** @description At most 10 minutes after start_ms. */
+                end_ms: number;
+                /** @description Where the crop sits in shots with nobody in them. */
+                focus?: number;
+            };
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                assetID: components["parameters"]["AssetID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The camera path. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FramingPath"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

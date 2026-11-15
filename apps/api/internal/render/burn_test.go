@@ -37,7 +37,7 @@ func TestBurnCaptions(t *testing.T) {
 	if err := c.Validate(srcInfo); err != nil {
 		t.Fatal(err)
 	}
-	plan := Plan(c, srcInfo)
+	plan := Plan(c, srcInfo, nil)
 	plan.Subtitles = filepath.Join(dir, "captions.ass")
 	plan.FontsDir = fonts
 	if err := os.WriteFile(plan.Subtitles, []byte(ASS(*c.Captions, c.Aspect)), 0o600); err != nil {

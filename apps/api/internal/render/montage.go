@@ -10,6 +10,7 @@ import (
 
 	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
+	"github.com/lupppig/cavi/apps/api/internal/framing"
 )
 
 // MontageVersion is the composition version for montages: one or more
@@ -184,6 +185,9 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 	if _, ok := shape(c.Aspect); !ok {
 		return invalid("composition.aspect", "Choose 9:16, 1:1, 4:5 or 16:9.")
 	}
+	if err := validFraming(*c); err != nil {
+		return err
+	}
 	for i, s := range c.Segments {
 		field := fmt.Sprintf("composition.segments[%d]", i)
 		src, ok := srcs[s.SourceAssetID]
@@ -306,8 +310,10 @@ func region(sh Shape, src Source, focus float64) (x, y, w, h int) {
 }
 
 // PlanMontage works out the FFmpeg montage for a valid version-3
-// composition. inputs maps each source to where FFmpeg reads it.
-func PlanMontage(c Composition, srcs map[string]Source, inputs map[string]string) ffmpeg.Montage {
+// composition. inputs maps each source to where FFmpeg reads it; tracks
+// holds the framing analysis of each segment's source when c is auto
+// framed.
+func PlanMontage(c Composition, srcs map[string]Source, inputs map[string]string, tracks map[string]framing.Track) ffmpeg.Montage {
 	sh, _ := shape(c.Aspect)
 	m := ffmpeg.Montage{Width: sh.Width, Height: sh.Height, FPS: montageFPS}
 	ms := func(v int64) time.Duration { return time.Duration(v) * time.Millisecond }
@@ -321,6 +327,9 @@ func PlanMontage(c Composition, srcs map[string]Source, inputs map[string]string
 		p := ffmpeg.MontagePart{
 			Input: inputs[s.SourceAssetID], Start: ms(s.StartMS), Length: ms(s.EndMS - s.StartMS),
 			CropX: x, CropY: y, CropW: w, CropH: h, Audio: src.HasAudio,
+		}
+		if t, ok := tracks[s.SourceAssetID]; ok && c.Auto() {
+			p.Pan, p.PanVertical = pan(t.Path(s.StartMS, s.EndMS, window(panel, src), s.Focus), panel, src)
 		}
 		for _, t := range s.Tiles {
 			tx, ty, tw, th := region(panel, srcs[t.SourceAssetID], t.Focus)

@@ -1,5 +1,6 @@
 // Command media-worker processes uploaded media: it probes each file with
-// FFmpeg, makes thumbnails and renders clips, and, when GEMINI_API_KEY is set, transcribes
+// FFmpeg, makes thumbnails, finds the people in videos for auto framing
+// and renders clips, and, when GEMINI_API_KEY is set, transcribes
 // speech and finds highlights with the organisation's AI model. It is deployed
 // separately from the API (it needs FFmpeg, more CPU and the AI key) and
 // scales by running more copies.
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -20,6 +22,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/config"
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
+	"github.com/lupppig/cavi/apps/api/internal/framing"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/media"
 	"github.com/lupppig/cavi/apps/api/internal/plan"
@@ -76,6 +79,14 @@ func run() error {
 		// FFmpeg's own timeout (at most 25 minutes) stays inside the lease.
 		jobs.NewWorker(db, bus, jobs.KindRenderClip, render.NewRenderer(db, store, ff, logger), logger,
 			jobs.WorkerOptions{Concurrency: max(1, cfg.Concurrency/2), Lease: 30 * time.Minute}),
+		// Framing analysis decodes whole videos: one at a time, with a lease
+		// longer than its own timeout (at most 110 minutes).
+		jobs.NewWorker(db, bus, jobs.KindMediaFraming,
+			media.NewFramer(db, store, ff, media.HelperDetectors(framing.DefaultHelper, framing.DefaultModel), logger), logger,
+			jobs.WorkerOptions{Concurrency: 1, Lease: 2 * time.Hour}),
+	}
+	if _, err := exec.LookPath(framing.DefaultHelper); err != nil {
+		logger.Warn("auto framing disabled: the cavi-faces helper isn't installed; framing analysis will fail (it is in the media worker image)")
 	}
 	if cfg.GeminiAPIKey != "" {
 		gemini, err := ai.NewGemini(ctx, cfg.GeminiAPIKey)

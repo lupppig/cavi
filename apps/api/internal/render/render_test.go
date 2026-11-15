@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
+	"github.com/lupppig/cavi/apps/api/internal/framing"
 	"github.com/lupppig/cavi/apps/api/internal/identity"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/project"
@@ -370,7 +372,7 @@ func TestRenderClip(t *testing.T) {
 	}
 	want := ffmpeg.Clip{Start: 87 * time.Second, Length: 63 * time.Second, CropX: 656, CropW: 608, CropH: 1080,
 		Width: 1080, Height: 1920, Audio: true}
-	if len(ff.clips) != 1 || ff.clips[0] != want {
+	if len(ff.clips) != 1 || !reflect.DeepEqual(ff.clips[0], want) {
 		t.Fatalf("clips = %+v", ff.clips)
 	}
 	got, err := w.svc.Get(w.ctx, ana.id, org, proj, r.ID)
@@ -441,7 +443,7 @@ func TestRenderFailures(t *testing.T) {
 	}
 	// A clip that's too short is caught too; a silent source makes a silent clip.
 	if err := check(ffmpeg.Probe{HasVideo: true, Width: 1080, Height: 1920, Duration: 50 * time.Second},
-		Plan(vertical(src), Source{Width: 1920, Height: 1080, DurationMS: 151_000})); !errors.Is(err, errBadOutput) {
+		Plan(vertical(src), Source{Width: 1920, Height: 1080, DurationMS: 151_000}, nil)); !errors.Is(err, errBadOutput) {
 		t.Errorf("short output passed: %v", err)
 	}
 	if ff.clips[0].Audio {
@@ -653,5 +655,121 @@ func TestCheckCatchesShortVideo(t *testing.T) {
 	short.VideoDuration = 34500 * time.Millisecond
 	if err := check(short, want); !errors.Is(err, errBadOutput) {
 		t.Fatalf("video stopping at 34.5 s under 60 s of audio passed: %v", err)
+	}
+}
+
+// analysed stores a framing track for asset with one face at x (as a
+// fraction of the width) throughout.
+func (w *world) analysed(org, asset string, x float64, ms int64) {
+	w.t.Helper()
+	tr := framing.Track{Version: framing.Version, IntervalMS: framing.FaceIntervalMS, Cuts: []int64{}}
+	for at := int64(0); at < ms; at += framing.FaceIntervalMS {
+		tr.Faces = append(tr.Faces, []framing.Face{{X: x, Y: 0.4, S: 0.3, Q: 0.9}})
+	}
+	raw, _ := json.Marshal(tr)
+	if _, err := w.db.ExecContext(w.ctx, `INSERT INTO media_framing (media_asset_id, organisation_id, analyser_version, track) VALUES (?, ?, ?, ?)`,
+		asset, org, framing.Version, string(raw)); err != nil {
+		w.t.Fatal(err)
+	}
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE media_assets SET framing_status = 'ready' WHERE id = ?`, asset); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+func TestRenderAutoFraming(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 151_000, true)
+	c := vertical(src)
+	c.Version, c.Framing = CompositionVersion, FramingAuto
+	// Not analysed yet.
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Auto", c, nil)
+	wantField(t, err, "composition.framing")
+	bad := vertical(src)
+	bad.Framing = "wobbly"
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Bad", bad, nil)
+	wantField(t, err, "composition.framing")
+
+	w.analysed(org, src, 0.8, 151_000)
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Auto", c, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Composition.Framing != FramingAuto {
+		t.Fatalf("framing not kept: %+v", r.Composition)
+	}
+	ff := &fakeFFmpeg{}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err != nil {
+		t.Fatal(err)
+	}
+	// The crop (608 wide in 1920) sits on the face at 0.8: its left edge
+	// at 0.8×1920 − 304 = 1232, held still.
+	p := ff.clips[0].Pan
+	if len(p) == 0 || ff.clips[0].PanVertical || p[0].At != 0 {
+		t.Fatalf("pan = %+v", ff.clips[0])
+	}
+	for _, k := range p {
+		if k.Pos < 1228 || k.Pos > 1236 {
+			t.Fatalf("pan = %+v, want about 1232", p)
+		}
+	}
+
+	// A montage follows faces in every segment.
+	m := Composition{Version: MontageVersion, Aspect: "9:16", Framing: FramingAuto, Segments: []Segment{
+		{SourceAssetID: src, StartMS: 1000, EndMS: 5000, Focus: 0.5},
+		{SourceAssetID: src, StartMS: 9000, EndMS: 12000, Focus: 0.5},
+	}}
+	mr, err := w.svc.Create(w.ctx, ana.id, org, proj, "Auto montage", m, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.renderer(ff).Process(w.ctx, w.job(mr.ID)); err != nil {
+		t.Fatal(err)
+	}
+	for i, part := range ff.montages[0].Parts {
+		if len(part.Pan) == 0 || part.Pan[0].Pos < 1228 || part.Pan[0].Pos > 1236 {
+			t.Fatalf("part %d pan = %+v", i, part.Pan)
+		}
+	}
+
+	// Reprocessing the source since the clip was requested loses its
+	// analysis: the render fails for good with a reason.
+	again, err := w.svc.Create(w.ctx, ana.id, org, proj, "Auto again", c, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE media_assets SET framing_status = 'pending' WHERE id = ?`, src); err != nil {
+		t.Fatal(err)
+	}
+	err = w.renderer(ff).Process(w.ctx, w.job(again.ID))
+	if !jobs.IsPermanent(err) || !errors.Is(err, errFramingGone) {
+		t.Fatalf("err = %v", err)
+	}
+	if err := w.renderer(ff).Failed(w.ctx, w.job(again.ID), err); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := w.svc.Get(w.ctx, ana.id, org, proj, again.ID); got.Error != msgFramingGone {
+		t.Fatalf("error = %q", got.Error)
+	}
+}
+
+func TestPanFollowsTheShape(t *testing.T) {
+	keys := []framing.Key{{AtMS: 0, Focus: 0}, {AtMS: 1000, Focus: 1}}
+	// 16:9 made 9:16 pans across.
+	p, vert := pan(keys, Shape{Aspect: "9:16", Width: 1080, Height: 1920}, Source{Width: 1920, Height: 1080})
+	if vert || p[0].Pos != 0 || p[1].Pos != 1312 || p[1].At != time.Second {
+		t.Fatalf("horizontal pan = %+v, %v", p, vert)
+	}
+	// 9:16 made 16:9 pans up and down.
+	p, vert = pan(keys, Shape{Aspect: "16:9", Width: 1920, Height: 1080}, Source{Width: 1080, Height: 1920})
+	if !vert || p[1].Pos != 1920-608 {
+		t.Fatalf("vertical pan = %+v, %v", p, vert)
+	}
+	// Auto framing needs version 2 or later.
+	c := Composition{Version: 1, SourceAssetID: "x", EndMS: 2000, Aspect: "9:16", Focus: 0.5, Framing: FramingAuto}
+	if err := c.Validate(Source{Width: 1920, Height: 1080, DurationMS: 5000}); err == nil {
+		t.Fatal("version 1 accepted auto framing")
 	}
 }

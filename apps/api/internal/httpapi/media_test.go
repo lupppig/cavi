@@ -166,6 +166,17 @@ func TestMediaOverHTTP(t *testing.T) {
 	expect(t, w.call(eve, "POST", one+"/highlights", brief), http.StatusNotFound, CodeNotFound)
 	expect(t, w.call(eve, "GET", one+"/highlights", ""), http.StatusNotFound, CodeNotFound)
 
+	// Framing waits for processing; its camera path needs an analysis.
+	if done.Framing != nil {
+		t.Fatalf("framing before processing = %+v", done.Framing)
+	}
+	rec = w.call(ana, "POST", one+"/framing", "")
+	expect(t, rec, http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(eve, "POST", one+"/framing", ""), http.StatusNotFound, CodeNotFound)
+	expect(t, w.call(ana, "GET", one+"/framing/path?aspect=9:16&start_ms=0&end_ms=1000", ""), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(ana, "GET", one+"/framing/path?aspect=9:16&start_ms=soon&end_ms=1000", ""), http.StatusUnprocessableEntity, CodeValidation)
+	expect(t, w.call(eve, "GET", one+"/framing/path?aspect=9:16&start_ms=0&end_ms=1000", ""), http.StatusNotFound, CodeNotFound)
+
 	expect(t, w.call(ana, "DELETE", one, ""), http.StatusNoContent, "")
 	expect(t, w.call(ana, "GET", one, ""), http.StatusNotFound, CodeNotFound)
 }

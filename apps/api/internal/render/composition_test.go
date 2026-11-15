@@ -3,6 +3,7 @@ package render
 import (
 	"errors"
 	"math"
+	"reflect"
 	"testing"
 	"time"
 
@@ -43,8 +44,8 @@ func TestPlan(t *testing.T) {
 			if err := tc.c.Validate(tc.src); err != nil {
 				t.Fatal(err)
 			}
-			got := Plan(tc.c, tc.src)
-			if got != tc.want {
+			got := Plan(tc.c, tc.src, nil)
+			if !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("plan = %+v\nwant   %+v", got, tc.want)
 			}
 			// The crop stays inside the source, is even, and has the
