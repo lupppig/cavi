@@ -3,6 +3,7 @@ package render
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -284,4 +285,38 @@ func OverlayASS(c *Captions, h *Hook, aspect string) string {
 	// The script turns wrapping off for captions (they are split already);
 	// \q0 turns smart wrapping back on for the hook.
 	return s + fmt.Sprintf("Dialogue: 1,%s,%s,Hook,,0,0,0,,{\\q0}%s\n", assTime(0), assTime(h.EndMS), assText(h.Text, false))
+}
+
+// VoiceoverCues are caption cues for a voiceover's script, timed by its
+// words, placed at startMS on the clip's timeline.
+func VoiceoverCues(script string, words []ai.Word, durationMS, startMS int64, aspect, mode string) []Cue {
+	seg := ai.Segment{StartMS: 0, EndMS: durationMS, Speaker: "Voiceover", Text: script, Words: words}
+	cues := BuildCues([]ai.Segment{seg}, 0, durationMS, aspect, mode)
+	for i := range cues {
+		cues[i].StartMS += startMS
+		cues[i].EndMS += startMS
+		for j := range cues[i].Words {
+			cues[i].Words[j].StartMS += startMS
+			cues[i].Words[j].EndMS += startMS
+		}
+	}
+	return cues
+}
+
+// WithVoiceover captions the voiceover while it plays: dialogue cues that
+// overlap it are dropped (the dialogue is lowered under it anyway).
+func WithVoiceover(cues, vo []Cue) []Cue {
+	if len(vo) == 0 {
+		return cues
+	}
+	from, to := vo[0].StartMS, vo[len(vo)-1].EndMS
+	out := make([]Cue, 0, len(cues)+len(vo))
+	for _, q := range cues {
+		if q.EndMS <= from || q.StartMS >= to {
+			out = append(out, q)
+		}
+	}
+	out = append(out, vo...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].StartMS < out[j].StartMS })
+	return out
 }

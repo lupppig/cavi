@@ -474,6 +474,15 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 			}
 			srcs[id] = src
 		}
+		var vo voiceover.Ready
+		if c.Voiceover != nil {
+			var err error
+			vo, err = voiceover.Load(ctx, tx, orgID, projectID, c.Voiceover.VoiceoverID)
+			if err != nil {
+				return invalid("composition.voiceover.voiceover_id", "Choose a finished voiceover from this project.")
+			}
+			c.Voiceover.DurationMS = vo.DurationMS
+		}
 		if captions != nil {
 			opts, err := captions.Normalize()
 			if err != nil {
@@ -490,14 +499,11 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 				}
 				transcripts[id] = segs
 			}
-			c.Captions = &Captions{CaptionOptions: opts, Cues: MontageCaptions(c.Segments, transcripts, c.Aspect, opts.Mode)}
-		}
-		if c.Voiceover != nil {
-			v, err := voiceover.Load(ctx, tx, orgID, projectID, c.Voiceover.VoiceoverID)
-			if err != nil {
-				return invalid("composition.voiceover.voiceover_id", "Choose a finished voiceover from this project.")
+			cues := MontageCaptions(c.Segments, transcripts, c.Aspect, opts.Mode)
+			if c.Voiceover != nil {
+				cues = WithVoiceover(cues, VoiceoverCues(vo.Script, vo.Words, vo.DurationMS, c.Voiceover.StartMS, c.Aspect, opts.Mode))
 			}
-			c.Voiceover.DurationMS = v.DurationMS
+			c.Captions = &Captions{CaptionOptions: opts, Cues: cues}
 		}
 		if err := c.ValidateMontage(srcs); err != nil {
 			return err

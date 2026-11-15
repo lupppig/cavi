@@ -248,3 +248,34 @@ func TestRenderMontageWithVoiceover(t *testing.T) {
 		t.Fatalf("message = %q", got.Error)
 	}
 }
+
+func TestVoiceoverCaptions(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 60_000, true)
+	w.transcribe(org, src, [3]any{10_000, 14_000, "People talk over the opening"}, [3]any{20_000, 24_000, "and later about schools"})
+	vo := w.readyVoiceover(org, proj, 5000)
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE voiceovers SET words = ?::jsonb WHERE id = ?`,
+		`[{"start_ms":0,"end_ms":1500,"text":"Diamonds"},{"start_ms":1500,"end_ms":3000,"text":"paid"},{"start_ms":3000,"end_ms":5000,"text":"here."}]`, vo); err != nil {
+		t.Fatal(err)
+	}
+	c := montageOf(Segment{SourceAssetID: src, StartMS: 10_000, EndMS: 25_000, Focus: 0.5})
+	c.Voiceover = &VoiceoverMix{VoiceoverID: vo, StartMS: 500, Duck: 0.2}
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Captioned voiceover", c, &CaptionOptions{Style: CaptionsBoxed, Mode: ModeWords})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var voText, laterText bool
+	for _, q := range r.Composition.Captions.Cues {
+		if q.StartMS < 5500 && q.EndMS > 500 && strings.Contains(q.Text, "People") {
+			t.Fatalf("dialogue captioned under the voiceover: %+v", q)
+		}
+		voText = voText || (strings.Contains(q.Text, "Diamonds") && q.StartMS == 500)
+		laterText = laterText || strings.Contains(q.Text, "schools")
+	}
+	if !voText || !laterText {
+		t.Fatalf("cues = %+v", r.Composition.Captions.Cues)
+	}
+}

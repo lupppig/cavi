@@ -136,7 +136,7 @@ func (w *world) job(id string) jobs.Job {
 }
 
 func (w *world) narrator(f *fakeNarrator) *Narrator {
-	return NewNarrator(w.db, w.store, f, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return NewNarrator(w.db, w.store, f, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 const script = "In Botswana, natural diamonds helped pay for schools and roads."
@@ -225,5 +225,34 @@ func TestVoiceovers(t *testing.T) {
 	_ = w.db.QueryRowContext(w.ctx, `SELECT count(*) FROM storage_deletions WHERE storage_key = ?`, key).Scan(&queued)
 	if queued != 1 {
 		t.Fatalf("audio deletion queued %d times", queued)
+	}
+}
+
+// fakeTimer hears the given words.
+type fakeTimer struct{ words []ai.Word }
+
+func (f fakeTimer) Transcribe(context.Context, ai.Model, []byte, string, int64) (ai.Transcript, ai.Usage, error) {
+	return ai.Transcript{Segments: []ai.Segment{{Words: f.words}}}, ai.Usage{InputTokens: 7}, nil
+}
+
+func TestTimeWords(t *testing.T) {
+	sp := ai.Speech{PCM: make([]byte, 2*24000*4), SampleRate: 24000} // 4 s
+	script := "Diamonds paid for this school"
+	// Heard words line up: the script's spelling, the audio's times.
+	heard := []ai.Word{{StartMS: 300, Text: "diamonds"}, {StartMS: 900, Text: "paid"}, {StartMS: 1300, Text: "for"},
+		{StartMS: 1500, Text: "this"}, {StartMS: 1800, Text: "school."}}
+	ws, _ := TimeWords(context.Background(), fakeTimer{heard}, script, sp)
+	if len(ws) != 5 || ws[0].Text != "Diamonds" || ws[0].StartMS != 300 || ws[4].StartMS != 1800 || ws[4].EndMS != 4000 || ws[1].EndMS != 1300 {
+		t.Fatalf("aligned = %+v", ws)
+	}
+	// Heard nothing usable: spread by length across the speech.
+	ws, _ = TimeWords(context.Background(), fakeTimer{}, script, sp)
+	if len(ws) != 5 || ws[0].StartMS != 0 || ws[4].StartMS <= ws[3].StartMS || ws[4].StartMS >= 4000 {
+		t.Fatalf("estimated = %+v", ws)
+	}
+	for i := 1; i < len(ws); i++ {
+		if ws[i].StartMS < ws[i-1].StartMS || ws[i-1].EndMS != ws[i].StartMS {
+			t.Fatalf("not in order: %+v", ws)
+		}
 	}
 }

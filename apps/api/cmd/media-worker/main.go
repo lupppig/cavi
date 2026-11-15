@@ -100,7 +100,7 @@ func run() error {
 				plan.NewPlanner(db, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 10 * time.Minute, RetryDelay: providerRetry}),
 			jobs.NewWorker(db, bus, jobs.KindVoiceoverSpeak,
-				voiceover.NewNarrator(db, store, gemini, logger), logger,
+				voiceover.NewNarrator(db, store, gemini, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute, RetryDelay: providerRetry}))
 	} else {
 		logger.Warn("AI disabled: GEMINI_API_KEY is not set; transcription, highlight and brief jobs will wait")

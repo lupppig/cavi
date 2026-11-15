@@ -9,9 +9,12 @@ package voiceover
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -227,6 +230,15 @@ func (s *Service) Delete(ctx context.Context, actorID, orgID, projectID, id stri
 type Ready struct {
 	StorageKey string
 	DurationMS int64
+	Script     string
+	// Words are the script's words timed against the audio, for captions.
+	Words []ai.Word
+}
+
+type wordJSON struct {
+	StartMS int64  `json:"start_ms"`
+	EndMS   int64  `json:"end_ms"`
+	Text    string `json:"text"`
 }
 
 // Load returns a ready voiceover in the project. Callers must already have
@@ -236,14 +248,80 @@ func Load(ctx context.Context, db bun.IDB, orgID, projectID, id string) (Ready, 
 		return Ready{}, ErrNotFound
 	}
 	var r Ready
+	var words []byte
 	err := db.QueryRowContext(ctx, `
-		SELECT storage_key, duration_ms FROM voiceovers
+		SELECT storage_key, duration_ms, script, words FROM voiceovers
 		WHERE id = ? AND project_id = ? AND organisation_id = ? AND status = 'ready'`, id, projectID, orgID).
-		Scan(&r.StorageKey, &r.DurationMS)
+		Scan(&r.StorageKey, &r.DurationMS, &r.Script, &words)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Ready{}, ErrNotFound
 	}
-	return r, err
+	if err != nil {
+		return Ready{}, err
+	}
+	var ws []wordJSON
+	if err := json.Unmarshal(words, &ws); err != nil {
+		return Ready{}, fmt.Errorf("voiceover words: %w", err)
+	}
+	for _, w := range ws {
+		r.Words = append(r.Words, ai.Word{StartMS: w.StartMS, EndMS: w.EndMS, Text: w.Text})
+	}
+	return r, nil
+}
+
+// TimeWords times the script's words against its speech. The audio is
+// transcribed (by timer, with the transcription model) for word start
+// times, which are mapped onto the script's own words, so captions show
+// exactly what was written. When the transcript doesn't line up with the
+// script, times are spread across the speech by word length instead.
+func TimeWords(ctx context.Context, timer ai.Transcriber, script string, s ai.Speech) ([]ai.Word, ai.Usage) {
+	words := strings.Fields(script)
+	dur := s.DurationMS()
+	var usage ai.Usage
+	var heard []ai.Word
+	if timer != nil {
+		tr, u, err := timer.Transcribe(ctx, ai.Default(ai.TaskTranscription), s.WAV(), "audio/wav", dur)
+		usage = u
+		if err == nil {
+			for _, seg := range tr.Segments {
+				heard = append(heard, seg.Words...)
+			}
+		}
+	}
+	out := make([]ai.Word, len(words))
+	n, m := len(words), len(heard)
+	if m > 0 && math.Abs(float64(m-n)) <= math.Max(2, float64(n)/5) {
+		for i, w := range words {
+			j := 0
+			if n > 1 {
+				j = int(math.Round(float64(i) * float64(m-1) / float64(n-1)))
+			}
+			out[i] = ai.Word{StartMS: heard[j].StartMS, Text: w}
+		}
+	} else {
+		total := 0
+		for _, w := range words {
+			total += len(w) + 1
+		}
+		at := 0
+		for i, w := range words {
+			out[i] = ai.Word{StartMS: int64(at) * dur / int64(total), Text: w}
+			at += len(w) + 1
+		}
+	}
+	for i := range out {
+		if i > 0 && out[i].StartMS < out[i-1].StartMS {
+			out[i].StartMS = out[i-1].StartMS
+		}
+		out[i].StartMS = min(out[i].StartMS, dur)
+	}
+	for i := range out {
+		out[i].EndMS = dur
+		if i+1 < len(out) {
+			out[i].EndMS = max(out[i].StartMS, out[i+1].StartMS)
+		}
+	}
+	return out, usage
 }
 
 // Narrator handles voiceover.speak jobs in the media worker.
@@ -251,12 +329,14 @@ type Narrator struct {
 	db     *bun.DB
 	store  storage.Store
 	ai     ai.Narrator
+	timer  ai.Transcriber
 	logger *slog.Logger
 }
 
-// NewNarrator returns a voiceover job handler.
-func NewNarrator(db *bun.DB, store storage.Store, provider ai.Narrator, logger *slog.Logger) *Narrator {
-	return &Narrator{db: db, store: store, ai: provider, logger: logger}
+// NewNarrator returns a voiceover job handler. timer times the spoken
+// words for captions; nil spreads them by length.
+func NewNarrator(db *bun.DB, store storage.Store, provider ai.Narrator, timer ai.Transcriber, logger *slog.Logger) *Narrator {
+	return &Narrator{db: db, store: store, ai: provider, timer: timer, logger: logger}
 }
 
 var _ jobs.Handler = (*Narrator)(nil)
@@ -296,16 +376,29 @@ func (n *Narrator) Process(ctx context.Context, job jobs.Job) error {
 		}
 		return err
 	}
+	words, timing := TimeWords(ctx, n.timer, script, speech)
+	if n.timer != nil {
+		tm := ai.Default(ai.TaskTranscription)
+		n.recordUsageFor(ctx, job, ai.TaskTranscription, tm, timing, true)
+	}
+	wj := make([]wordJSON, len(words))
+	for i, w := range words {
+		wj[i] = wordJSON{StartMS: w.StartMS, EndMS: w.EndMS, Text: w.Text}
+	}
+	wordsJSON, err := json.Marshal(wj)
+	if err != nil {
+		return err
+	}
 	wav := speech.WAV()
 	key := audioKey(job.OrganisationID, projectID, job.SubjectID)
 	if err := n.store.Put(ctx, key, "audio/wav", wav); err != nil {
 		return err
 	}
 	res, err := n.db.ExecContext(ctx, `
-		UPDATE voiceovers SET status = 'ready', storage_key = ?, duration_ms = ?, size_bytes = ?, error = NULL,
-			completed_at = now(), updated_at = now()
+		UPDATE voiceovers SET status = 'ready', storage_key = ?, duration_ms = ?, size_bytes = ?, words = ?::jsonb,
+			error = NULL, completed_at = now(), updated_at = now()
 		WHERE id = ? AND organisation_id = ? AND status IN ('queued', 'running')`,
-		key, speech.DurationMS(), len(wav), job.SubjectID, job.OrganisationID)
+		key, speech.DurationMS(), len(wav), string(wordsJSON), job.SubjectID, job.OrganisationID)
 	if err != nil {
 		return fmt.Errorf("save voiceover: %w", err)
 	}
@@ -317,10 +410,14 @@ func (n *Narrator) Process(ctx context.Context, job jobs.Job) error {
 }
 
 func (n *Narrator) recordUsage(ctx context.Context, job jobs.Job, model ai.Model, u ai.Usage, ok bool) {
+	n.recordUsageFor(ctx, job, ai.TaskVoiceover, model, u, ok)
+}
+
+func (n *Narrator) recordUsageFor(ctx context.Context, job jobs.Job, task string, model ai.Model, u ai.Usage, ok bool) {
 	if _, err := n.db.ExecContext(ctx, `
 		INSERT INTO ai_usage (organisation_id, job_id, task, provider, model, input_tokens, output_tokens, succeeded)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		job.OrganisationID, job.ID, ai.TaskVoiceover, model.Provider, model.ID, u.InputTokens, u.OutputTokens, ok); err != nil {
+		job.OrganisationID, job.ID, task, model.Provider, model.ID, u.InputTokens, u.OutputTokens, ok); err != nil {
 		n.logger.WarnContext(ctx, "record ai usage failed", slog.String("job_id", job.ID), slog.String("error", err.Error()))
 	}
 }
