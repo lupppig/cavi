@@ -31,6 +31,10 @@ type compositionBody struct {
 	EndMS         int64   `json:"end_ms"`
 	Aspect        string  `json:"aspect"`
 	Focus         float64 `json:"focus"`
+	// Montages (version 3). The composition's segment and hook shapes are
+	// the API's: they are plain, validated data.
+	Segments []render.Segment `json:"segments,omitempty"`
+	Hook     *render.Hook     `json:"hook,omitempty"`
 }
 
 // captionOptions are the caption choices, in requests and responses.
@@ -112,7 +116,7 @@ func toRenderResponse(r render.Render) renderResponse {
 	out := renderResponse{
 		ID: r.ID, ProjectID: r.ProjectID, SourceAssetID: ptr(r.SourceAssetID), Name: r.Name,
 		Composition: compositionResponse{compositionBody: compositionBody{Version: c.Version, SourceAssetID: c.SourceAssetID,
-			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus}},
+			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus, Segments: c.Segments, Hook: c.Hook}},
 		Status: r.Status, Error: ptr(r.Error), CreatedAt: ts(r.CreatedAt), CanDelete: r.CanDelete,
 		Flags: toFlags(r.Flags),
 	}
@@ -151,7 +155,7 @@ func (h renderHandler) create(c *gin.Context) {
 	}
 	r, err := h.svc.Create(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Name,
 		render.Composition{Version: b.Version, SourceAssetID: b.SourceAssetID, StartMS: b.StartMS, EndMS: b.EndMS,
-			Aspect: b.Aspect, Focus: b.Focus}, captions)
+			Aspect: b.Aspect, Focus: b.Focus, Segments: b.Segments, Hook: b.Hook}, captions)
 	if err != nil {
 		h.fail(c, err)
 		return

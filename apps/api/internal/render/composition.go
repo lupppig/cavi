@@ -64,6 +64,10 @@ type Composition struct {
 	Focus float64 `json:"focus"`
 	// Captions (version 2) are burned in when present.
 	Captions *Captions `json:"captions,omitempty"`
+	// Segments and Hook are used by montages (version 3); the fields
+	// above then mirror the first segment.
+	Segments []Segment `json:"segments,omitempty"`
+	Hook     *Hook     `json:"hook,omitempty"`
 }
 
 // Source is what rendering needs to know about the source file.
@@ -80,6 +84,9 @@ func invalid(field, msg string) error { return &account.ValidationError{Field: f
 func (c Composition) Validate(src Source) error {
 	if c.Version != 1 && c.Version != CompositionVersion {
 		return invalid("composition.version", fmt.Sprintf("Composition version must be 1 or %d.", CompositionVersion))
+	}
+	if len(c.Segments) > 0 || c.Hook != nil {
+		return invalid("composition.version", fmt.Sprintf("Segments and hooks need composition version %d.", MontageVersion))
 	}
 	if c.Version == 1 && c.Captions != nil {
 		return invalid("composition.version", "Captions need composition version 2.")

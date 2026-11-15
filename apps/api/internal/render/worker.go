@@ -22,6 +22,7 @@ import (
 // Clipper is what rendering needs from FFmpeg. *ffmpeg.Runner implements it.
 type Clipper interface {
 	Clip(ctx context.Context, input, output string, c ffmpeg.Clip, timeout time.Duration) error
+	Montage(ctx context.Context, output string, m ffmpeg.Montage, timeout time.Duration) error
 	ProbeFile(ctx context.Context, path string) (ffmpeg.Probe, error)
 }
 
@@ -95,6 +96,9 @@ func (r *Renderer) Process(ctx context.Context, job jobs.Job) error {
 	if sourceID == "" || sourceID != c.SourceAssetID {
 		return jobs.Permanent(errSourceGone)
 	}
+	if c.Version == MontageVersion {
+		return r.montage(ctx, job, projectID, name, c)
+	}
 	src, key, err := source(ctx, r.db, job.OrganisationID, projectID, sourceID)
 	if errors.Is(err, errBadSource) {
 		return jobs.Permanent(errSourceGone)
@@ -152,32 +156,7 @@ func (r *Renderer) Process(ctx context.Context, job jobs.Job) error {
 	if err := check(probe, plan); err != nil {
 		return jobs.Permanent(err)
 	}
-	info, err := os.Stat(out)
-	if err != nil {
-		return err
-	}
-
-	outKey := outputKey(job.OrganisationID, projectID, job.RenderID)
-	if err := r.store.PutFile(ctx, outKey, "video/mp4", Filename(name), out); err != nil {
-		return err
-	}
-	res, err := r.db.ExecContext(ctx, `
-		UPDATE renders SET status = 'ready', error = NULL, output_key = ?, output_size_bytes = ?,
-			output_duration_ms = ?, output_width = ?, output_height = ?, render_ms = ?,
-			completed_at = now(), updated_at = now()
-		WHERE id = ? AND organisation_id = ? AND status IN ('queued', 'running')`,
-		outKey, info.Size(), probe.Duration.Milliseconds(), probe.Width, probe.Height, took.Milliseconds(),
-		job.RenderID, job.OrganisationID)
-	if err != nil {
-		return fmt.Errorf("save render: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		// Deleted while we worked: don't leave the file behind.
-		_, _ = r.db.ExecContext(ctx, `INSERT INTO storage_deletions (storage_key) VALUES (?)`, outKey)
-	}
-	r.logger.InfoContext(ctx, "render finished", slog.String("render_id", job.RenderID),
-		slog.Duration("render_time", took), slog.Duration("clip_length", plan.Length), slog.Int64("bytes", info.Size()))
-	return nil
+	return r.finish(ctx, job, projectID, name, out, probe, took, plan.Length)
 }
 
 // check verifies the output is what was asked for: a zero exit from
@@ -215,4 +194,105 @@ func (r *Renderer) Failed(ctx context.Context, job jobs.Job, err error) error {
 		WHERE id = ? AND organisation_id = ? AND status IN ('queued', 'running')`,
 		msg, job.RenderID, job.OrganisationID)
 	return dbErr
+}
+
+// finish stores a checked output and records the render as ready.
+func (r *Renderer) finish(ctx context.Context, job jobs.Job, projectID, name, out string, probe ffmpeg.Probe, took, length time.Duration) error {
+	info, err := os.Stat(out)
+	if err != nil {
+		return err
+	}
+
+	outKey := outputKey(job.OrganisationID, projectID, job.RenderID)
+	if err := r.store.PutFile(ctx, outKey, "video/mp4", Filename(name), out); err != nil {
+		return err
+	}
+	res, err := r.db.ExecContext(ctx, `
+		UPDATE renders SET status = 'ready', error = NULL, output_key = ?, output_size_bytes = ?,
+			output_duration_ms = ?, output_width = ?, output_height = ?, render_ms = ?,
+			completed_at = now(), updated_at = now()
+		WHERE id = ? AND organisation_id = ? AND status IN ('queued', 'running')`,
+		outKey, info.Size(), probe.Duration.Milliseconds(), probe.Width, probe.Height, took.Milliseconds(),
+		job.RenderID, job.OrganisationID)
+	if err != nil {
+		return fmt.Errorf("save render: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Deleted while we worked: don't leave the file behind.
+		_, _ = r.db.ExecContext(ctx, `INSERT INTO storage_deletions (storage_key) VALUES (?)`, outKey)
+	}
+	r.logger.InfoContext(ctx, "render finished", slog.String("render_id", job.RenderID),
+		slog.Duration("render_time", took), slog.Duration("clip_length", length), slog.Int64("bytes", info.Size()))
+	return nil
+}
+
+// montage renders a version-3 composition: every source is checked again
+// (it may have been deleted or reprocessed), and so is its brief.
+func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name string, c Composition) error {
+	srcs := map[string]Source{}
+	keys := map[string]string{}
+	for _, id := range c.SourceIDs() {
+		src, key, err := source(ctx, r.db, job.OrganisationID, projectID, id)
+		if errors.Is(err, errBadSource) {
+			return jobs.Permanent(errSourceGone)
+		}
+		if err != nil {
+			return err
+		}
+		srcs[id], keys[id] = src, key
+	}
+	if err := c.ValidateMontage(srcs); err != nil {
+		return jobs.Permanent(fmt.Errorf("%w: %v", errSourceGone, err))
+	}
+	for _, s := range c.Segments {
+		rules, err := brief.Rules(ctx, r.db, job.OrganisationID, s.SourceAssetID)
+		if err != nil {
+			return err
+		}
+		if rule, ok := brief.Excluded(rules, s.StartMS, s.EndMS); ok {
+			return jobs.Permanent(fmt.Errorf("%w: %s", errExcluded, rule.Note))
+		}
+	}
+	if _, err := r.db.ExecContext(ctx, `UPDATE renders SET status = 'running', updated_at = now() WHERE id = ?`, job.RenderID); err != nil {
+		return err
+	}
+	length := time.Duration(c.LengthMS()) * time.Millisecond
+	inputs := map[string]string{}
+	for id, key := range keys {
+		url, _, err := r.store.PresignDownload(ctx, key, timeoutFor(length)+10*time.Minute)
+		if err != nil {
+			return err
+		}
+		inputs[id] = url
+	}
+	plan := PlanMontage(c, srcs, inputs)
+	dir, err := os.MkdirTemp(r.TempDir, "render-")
+	if err != nil {
+		return fmt.Errorf("render work dir: %w", err)
+	}
+	defer os.RemoveAll(dir)
+	if ass := OverlayASS(c.Captions, c.Hook, c.Aspect); ass != "" {
+		plan.Subtitles = filepath.Join(dir, "overlay.ass")
+		plan.FontsDir = r.FontsDir
+		if err := os.WriteFile(plan.Subtitles, []byte(ass), 0o600); err != nil {
+			return fmt.Errorf("write overlay: %w", err)
+		}
+	}
+	out := filepath.Join(dir, "clip.mp4")
+	started := time.Now()
+	if err := r.ff.Montage(ctx, out, plan, timeoutFor(length)); err != nil {
+		if errors.Is(err, ffmpeg.ErrUnreadable) {
+			return jobs.Permanent(err)
+		}
+		return err
+	}
+	took := time.Since(started)
+	probe, err := r.ff.ProbeFile(ctx, out)
+	if err != nil {
+		return jobs.Permanent(fmt.Errorf("%w: %v", errBadOutput, err))
+	}
+	if err := check(probe, ffmpeg.Clip{Length: length, Width: plan.Width, Height: plan.Height, Audio: true}); err != nil {
+		return jobs.Permanent(err)
+	}
+	return r.finish(ctx, job, projectID, name, out, probe, took, length)
 }

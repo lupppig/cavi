@@ -156,35 +156,8 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		if !authz.Can(acc.Role, authz.RenderExecute) {
 			return ErrForbidden
 		}
-		src, _, err := source(ctx, tx, orgID, projectID, c.SourceAssetID)
-		if err != nil {
+		if err := prepare(ctx, tx, orgID, projectID, &c, captions); err != nil {
 			return err
-		}
-		c.Captions = nil // cues only ever come from the transcript, below
-		if captions != nil {
-			opts, err := captions.Normalize()
-			if err != nil {
-				return err
-			}
-			segs, err := transcriptSegments(ctx, tx, orgID, c.SourceAssetID)
-			if err != nil {
-				return err
-			}
-			if segs == nil {
-				return invalid("captions", "Transcribe this file first to add captions.")
-			}
-			c.Version = CompositionVersion
-			c.Captions = &Captions{CaptionOptions: opts, Cues: BuildCues(segs, c.StartMS, c.EndMS, c.Aspect, opts.Mode)}
-		}
-		if err := c.Validate(src); err != nil {
-			return err
-		}
-		rules, err := brief.Rules(ctx, tx, orgID, c.SourceAssetID)
-		if err != nil {
-			return err
-		}
-		if r, ok := brief.Excluded(rules, c.StartMS, c.EndMS); ok {
-			return brief.ExcludedError("composition.start_ms", r)
 		}
 		spec, err := json.Marshal(c)
 		if err != nil {
@@ -201,7 +174,8 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 			return err
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
-			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.EndMS - c.StartMS, "captions": captions != nil})
+			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.LengthMS(), "segments": max(1, len(c.Segments)),
+				"hook": c.Hook != nil, "captions": captions != nil})
 	})
 	if err != nil {
 		return Render{}, err
@@ -338,19 +312,33 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID, renderID s
 // flag sets each render's Flags from its source's brief rules.
 func (s *Service) flag(ctx context.Context, orgID string, rs []*Render) error {
 	rules := map[string][]ai.BriefRule{}
+	load := func(id string) ([]ai.BriefRule, error) {
+		rr, ok := rules[id]
+		if !ok {
+			var err error
+			if rr, err = brief.Rules(ctx, s.db, orgID, id); err != nil {
+				return nil, err
+			}
+			rules[id] = rr
+		}
+		return rr, nil
+	}
 	for _, r := range rs {
 		if r.SourceAssetID == "" {
 			continue
 		}
-		rr, ok := rules[r.SourceAssetID]
-		if !ok {
-			var err error
-			if rr, err = brief.Rules(ctx, s.db, orgID, r.SourceAssetID); err != nil {
+		parts := r.Composition.Segments
+		if r.Composition.Version != MontageVersion {
+			parts = []Segment{{SourceAssetID: r.Composition.SourceAssetID, StartMS: r.Composition.StartMS, EndMS: r.Composition.EndMS}}
+		}
+		r.Flags = nil
+		for _, p := range parts {
+			rr, err := load(p.SourceAssetID)
+			if err != nil {
 				return err
 			}
-			rules[r.SourceAssetID] = rr
+			r.Flags = append(r.Flags, brief.Flags(rr, p.StartMS, p.EndMS)...)
 		}
-		r.Flags = brief.Flags(rr, r.Composition.StartMS, r.Composition.EndMS)
 	}
 	return nil
 }
@@ -468,4 +456,84 @@ func (s *Service) Delete(ctx context.Context, actorID, orgID, projectID, renderI
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.deleted", "render", renderID, map[string]any{"name": name})
 	})
+}
+
+// prepare loads a composition's sources, builds its captions from their
+// transcripts (copied in now so the render can be repeated exactly),
+// validates it, and refuses it if any part includes a moment its source's
+// brief excludes. captions is nil for none.
+func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composition, captions *CaptionOptions) error {
+	c.Captions = nil // cues only ever come from transcripts, below
+	if c.Version == MontageVersion {
+		srcs := map[string]Source{}
+		for _, id := range c.SourceIDs() {
+			src, _, err := source(ctx, tx, orgID, projectID, id)
+			if err != nil {
+				return err
+			}
+			srcs[id] = src
+		}
+		if captions != nil {
+			opts, err := captions.Normalize()
+			if err != nil {
+				return err
+			}
+			transcripts := map[string][]ai.Segment{}
+			for id := range srcs {
+				segs, err := transcriptSegments(ctx, tx, orgID, id)
+				if err != nil {
+					return err
+				}
+				if segs == nil {
+					return invalid("captions", "Transcribe every file in this clip first to add captions.")
+				}
+				transcripts[id] = segs
+			}
+			c.Captions = &Captions{CaptionOptions: opts, Cues: MontageCaptions(c.Segments, transcripts, c.Aspect, opts.Mode)}
+		}
+		if err := c.ValidateMontage(srcs); err != nil {
+			return err
+		}
+		for i, s := range c.Segments {
+			rules, err := brief.Rules(ctx, tx, orgID, s.SourceAssetID)
+			if err != nil {
+				return err
+			}
+			if r, ok := brief.Excluded(rules, s.StartMS, s.EndMS); ok {
+				return brief.ExcludedError(fmt.Sprintf("composition.segments[%d].start_ms", i), r)
+			}
+		}
+		return nil
+	}
+
+	src, _, err := source(ctx, tx, orgID, projectID, c.SourceAssetID)
+	if err != nil {
+		return err
+	}
+	if captions != nil {
+		opts, err := captions.Normalize()
+		if err != nil {
+			return err
+		}
+		segs, err := transcriptSegments(ctx, tx, orgID, c.SourceAssetID)
+		if err != nil {
+			return err
+		}
+		if segs == nil {
+			return invalid("captions", "Transcribe this file first to add captions.")
+		}
+		c.Version = CompositionVersion
+		c.Captions = &Captions{CaptionOptions: opts, Cues: BuildCues(segs, c.StartMS, c.EndMS, c.Aspect, opts.Mode)}
+	}
+	if err := c.Validate(src); err != nil {
+		return err
+	}
+	rules, err := brief.Rules(ctx, tx, orgID, c.SourceAssetID)
+	if err != nil {
+		return err
+	}
+	if r, ok := brief.Excluded(rules, c.StartMS, c.EndMS); ok {
+		return brief.ExcludedError("composition.start_ms", r)
+	}
+	return nil
 }

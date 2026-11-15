@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -67,12 +68,13 @@ func (m *memStore) Delete(_ context.Context, key string) error {
 // fakeFFmpeg writes a file for each clip and reports a probe matching the
 // request unless told otherwise.
 type fakeFFmpeg struct {
-	mu     sync.Mutex
-	ass    []string // the subtitle file's contents at render time
-	clips  []ffmpeg.Clip
-	inputs []string
-	err    error
-	probe  func(ffmpeg.Clip) ffmpeg.Probe
+	mu       sync.Mutex
+	ass      []string // the subtitle file's contents at render time
+	clips    []ffmpeg.Clip
+	montages []ffmpeg.Montage
+	inputs   []string
+	err      error
+	probe    func(ffmpeg.Clip) ffmpeg.Probe
 }
 
 func (f *fakeFFmpeg) Clip(_ context.Context, input, output string, c ffmpeg.Clip, _ time.Duration) error {
@@ -82,6 +84,23 @@ func (f *fakeFFmpeg) Clip(_ context.Context, input, output string, c ffmpeg.Clip
 	f.inputs = append(f.inputs, input)
 	if c.Subtitles != "" {
 		b, _ := os.ReadFile(c.Subtitles)
+		f.ass = append(f.ass, string(b))
+	}
+	if f.err != nil {
+		return f.err
+	}
+	return os.WriteFile(output, []byte("mp4 bytes"), 0o600)
+}
+
+// Montage records m and, so ProbeFile reports the montage, the clip it
+// should come out as.
+func (f *fakeFFmpeg) Montage(_ context.Context, output string, m ffmpeg.Montage, _ time.Duration) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.montages = append(f.montages, m)
+	f.clips = append(f.clips, ffmpeg.Clip{Length: m.Length(), Width: m.Width, Height: m.Height, Audio: true})
+	if m.Subtitles != "" {
+		b, _ := os.ReadFile(m.Subtitles)
 		f.ass = append(f.ass, string(b))
 	}
 	if f.err != nil {
@@ -264,7 +283,7 @@ func TestCreateRenderRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Status != StatusQueued || r.Name != "Release advice" || r.Composition != vertical(src) || r.SourceAssetID != src ||
+	if r.Status != StatusQueued || r.Name != "Release advice" || !reflect.DeepEqual(r.Composition, vertical(src)) || r.SourceAssetID != src ||
 		r.RequestedByID != ed.id || r.URL != "" || !r.CanDelete || woke != 1 {
 		t.Fatalf("created = %+v (woke %d)", r, woke)
 	}

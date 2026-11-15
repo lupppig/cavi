@@ -204,6 +204,10 @@ A project can hold the creator's brief for its campaign: paste it, choose the vi
 - Highlights follow the brief: when highlights are requested for the brief's video, its campaign message, guidance and rules are copied onto the run. Each clip must say how it connects to the campaign (`campaign_link`), clips over excluded moments are dropped, and clips featuring a priority moment are listed first.
 - Reading needs `project.update` (creators: only on their own projects). Anyone who can see the project can read the brief.
 
+## Montages
+
+A render's composition can be a montage (version 3): segments from one or more files in the project, played one after another and reframed to one shape. Each segment can mute stretches of its audio (e.g. uncleared music) and blur regions of its frame (e.g. licence plates; boxes are fractions of the source frame, so they hold for any output shape). A hook shows text at the top of the opening. Captions come from each file's transcript and are placed on the montage's timeline. Every segment is checked against its file's creator brief, when the render is requested and again before it runs. Montages render at 30 fps; `make api-test-ffmpeg` checks blur, mute and voiceover mixing with real FFmpeg.
+
 ## Background jobs
 
 Work that shouldn't run inside a request (media processing, transcription, highlight detection and rendering) runs as jobs.

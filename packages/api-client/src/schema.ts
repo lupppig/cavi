@@ -1239,13 +1239,21 @@ export interface components {
             }[];
         };
         /**
-         * @description A clip cut from one source file, as sent when creating a render.
-         *     Version 2 adds captions (requested separately; see
-         *     CreateRenderRequest). Version 1 is still accepted.
+         * @description A clip, as sent when creating a render. Versions 1 and 2 cut one
+         *     stretch of one source file (version 2 adds captions, requested
+         *     separately; see CreateRenderRequest). Version 3 is a montage:
+         *     `segments` play one after another, from one or more files in the
+         *     project, each with optional muted ranges and blur boxes, and `hook`
+         *     shows text at the top of the opening. For version 3 the top-level
+         *     source, times and focus are replaced by the first segment's. Every
+         *     segment is checked against its file's creator brief.
          */
         Composition: {
             /** @enum {integer} */
-            version: 1 | 2;
+            version: 1 | 2 | 3;
+            /** @description Version 3 only. At least half a second each; 1 s to 10 min in total. */
+            segments?: components["schemas"]["MontageSegment"][];
+            hook?: components["schemas"]["Hook"];
             /** Format: uuid */
             source_asset_id: string;
             /** Format: int64 */
@@ -1262,6 +1270,54 @@ export interface components {
              *     0 left or top, 0.5 centre, 1 right or bottom.
              */
             focus: number;
+        };
+        TimeRange: {
+            /**
+             * Format: int64
+             * @description Source time.
+             */
+            start_ms: number;
+            /**
+             * Format: int64
+             * @description Source time; after `start_ms`.
+             */
+            end_ms: number;
+        };
+        /** @description A region of the source frame, as fractions of its width and height, blurred for a stretch of the segment. */
+        BlurBox: {
+            /**
+             * Format: int64
+             * @description Source time
+             */
+            start_ms: number;
+            /**
+             * Format: int64
+             * @description Source time
+             */
+            end_ms: number;
+            x: number;
+            y: number;
+            w: number;
+            h: number;
+        };
+        MontageSegment: {
+            /** Format: uuid */
+            source_asset_id: string;
+            /** Format: int64 */
+            start_ms: number;
+            /** Format: int64 */
+            end_ms: number;
+            focus: number;
+            /** @description Stretches whose audio is silenced (e.g. uncleared music), inside the segment. */
+            mute?: components["schemas"]["TimeRange"][];
+            /** @description Regions hidden (e.g. licence plates). */
+            blur?: components["schemas"]["BlurBox"][];
+        };
+        /** @description Text shown at the top of the clip from its first frame until `end_ms` (clip time). */
+        Hook: {
+            text: string;
+            /** Format: int64 */
+            end_ms: number;
         };
         CaptionOptions: {
             /**
