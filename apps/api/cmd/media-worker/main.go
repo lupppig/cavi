@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lupppig/cavi/apps/api/internal/ai"
+	"github.com/lupppig/cavi/apps/api/internal/brief"
 	"github.com/lupppig/cavi/apps/api/internal/config"
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
@@ -89,9 +90,12 @@ func run() error {
 			}),
 			jobs.NewWorker(db, bus, jobs.KindMediaHighlights,
 				media.NewHighlighter(db, gemini, logger), logger,
-				jobs.WorkerOptions{Concurrency: max(1, cfg.Concurrency/2), Lease: 10 * time.Minute, RetryDelay: providerRetry}))
+				jobs.WorkerOptions{Concurrency: max(1, cfg.Concurrency/2), Lease: 10 * time.Minute, RetryDelay: providerRetry}),
+			jobs.NewWorker(db, bus, jobs.KindBriefRead,
+				brief.NewReader(db, gemini, logger), logger,
+				jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute, RetryDelay: providerRetry}))
 	} else {
-		logger.Warn("AI disabled: GEMINI_API_KEY is not set; transcription and highlight jobs will wait")
+		logger.Warn("AI disabled: GEMINI_API_KEY is not set; transcription, highlight and brief jobs will wait")
 	}
 
 	logger.Info("media worker started", slog.Int("concurrency", cfg.Concurrency), slog.Bool("ai", cfg.GeminiAPIKey != ""))

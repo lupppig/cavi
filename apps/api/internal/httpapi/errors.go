@@ -46,10 +46,12 @@ const (
 	CodeTranscriptionInProgress = "transcription_in_progress"
 	// CodeHighlightsInProgress: highlight detection is already queued or running.
 	CodeHighlightsInProgress = "highlights_in_progress"
-	CodeNotFound             = "not_found"
-	CodeMethodNotAllowed     = "method_not_allowed"
-	CodeInternal             = "internal_error"
-	CodeUnavailable          = "service_unavailable"
+	// CodeBriefInProgress: the project's brief is still being read.
+	CodeBriefInProgress  = "brief_in_progress"
+	CodeNotFound         = "not_found"
+	CodeMethodNotAllowed = "method_not_allowed"
+	CodeInternal         = "internal_error"
+	CodeUnavailable      = "service_unavailable"
 )
 
 func writeError(c *gin.Context, status int, code, message string) {

@@ -609,6 +609,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the project's creator brief
+         * @description Anyone who can see the project can read it. 404 when the project has
+         *     no brief. Rules are present once `status` is `ready`, in time order.
+         */
+        get: operations["getBrief"];
+        /**
+         * Submit a creator brief to be read into rules
+         * @description Requires `project.update`. `media_asset_id` is the processed video or
+         *     audio file in this project that the brief's timestamps refer to. The
+         *     brief's text, not the media, is sent to the organisation's chosen AI
+         *     provider and model for the `briefs` task, which reads it into a
+         *     campaign message, guidance and timed rules. Every rule time must be
+         *     written in the brief and lie within the file. Submitting replaces the
+         *     brief and its rules; `brief_in_progress` (409) while it is being read.
+         *     Recorded in the audit log.
+         */
+        put: operations["submitBrief"];
+        post?: never;
+        /**
+         * Delete the project's brief and its rules
+         * @description Requires `project.update`. Recorded in the audit log.
+         */
+        delete: operations["deleteBrief"];
+        options?: never;
+        head?: never;
+        /**
+         * Save a reviewed brief
+         * @description Requires `project.update` and a `ready` brief (`brief_in_progress`
+         *     otherwise). Replaces the campaign message, guidance and the whole list
+         *     of rules. Rules must be on the brief's file and within it. Recorded in
+         *     the audit log.
+         */
+        patch: operations["updateBrief"];
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/projects/{projectID}/renders": {
         parameters: {
             query?: never;
@@ -1068,6 +1111,75 @@ export interface components {
             /** @description Longest clip length; at least 5 seconds more than `min_seconds`. */
             max_seconds: number;
         };
+        /**
+         * @description `priority`: a moment the creator wants featured. `exclude`: must never
+         *     appear in a clip; clips that touch it can't be rendered. `blur`:
+         *     something visible must be blurred or cropped out. `mute`: audio that
+         *     must not be used. `caution`: a sensitive topic or third-party branding
+         *     not to feature. `review`: a person must check it before it is used.
+         * @enum {string}
+         */
+        BriefRuleKind: "priority" | "exclude" | "blur" | "mute" | "caution" | "review";
+        BriefRule: {
+            /**
+             * Format: uuid
+             * @description The file the rule's times are in.
+             */
+            media_asset_id: string;
+            kind: components["schemas"]["BriefRuleKind"];
+            /** Format: int64 */
+            start_ms: number;
+            /**
+             * Format: int64
+             * @description Equal to `start_ms` for a single timestamp.
+             */
+            end_ms: number;
+            note: string;
+        };
+        Brief: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            project_id: string;
+            /**
+             * Format: uuid
+             * @description The file the brief's timestamps refer to; null once it is deleted.
+             */
+            media_asset_id: string | null;
+            /** @description The brief as pasted. */
+            text: string;
+            /** @description What every clip should connect back to. */
+            campaign_message: string;
+            /** @description Creative direction without timestamps. */
+            guidance: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed";
+            provider: string;
+            model: string;
+            model_label: string;
+            prompt_version: string;
+            /** @description Why reading failed */
+            error: string | null;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            rules: components["schemas"]["BriefRule"][];
+            /** @description Whether the caller may change the brief (`project.update`). */
+            can_edit: boolean;
+        };
+        SubmitBriefRequest: {
+            text: string;
+            /** Format: uuid */
+            media_asset_id: string;
+        };
+        UpdateBriefRequest: {
+            campaign_message: string;
+            guidance: string;
+            rules: components["schemas"]["BriefRule"][];
+        };
         Highlights: {
             /** Format: uuid */
             id: string;
@@ -1251,7 +1363,7 @@ export interface components {
              * @description Stable, machine-readable error code.
              * @enum {string}
              */
-            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "processing_in_progress" | "transcription_in_progress" | "highlights_in_progress" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
+            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "processing_in_progress" | "transcription_in_progress" | "highlights_in_progress" | "brief_in_progress" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
             /** @description Human-readable message safe to show to end users. */
             message: string;
             request_id?: string;
@@ -1276,8 +1388,8 @@ export interface components {
         /**
          * @description The request conflicts with the resource's state. `error.code` is one of
          *     `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
-         *     `upload_incomplete`, `processing_in_progress`, `transcription_in_progress` or
-         *     `highlights_in_progress`.
+         *     `upload_incomplete`, `processing_in_progress`, `transcription_in_progress`,
+         *     `highlights_in_progress` or `brief_in_progress`.
          */
         Conflict: {
             headers: {
@@ -2350,6 +2462,129 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Highlights"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The brief. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brief"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    submitBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitBriefRequest"];
+            };
+        };
+        responses: {
+            /** @description Brief saved and queued to be read. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brief"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    deleteBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    updateBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBriefRequest"];
+            };
+        };
+        responses: {
+            /** @description The saved brief. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Brief"];
                 };
             };
             400: components["responses"]["InvalidRequest"];

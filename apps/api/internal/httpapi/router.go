@@ -21,6 +21,7 @@ type Options struct {
 	Projects       ProjectService
 	Media          MediaService
 	Renders        RenderService
+	Briefs         BriefService
 	AISettings     AISettingsService
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
@@ -134,6 +135,13 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	med.PATCH("/:assetID/transcript/speakers/:label", mediaH.setSpeakerVoice)
 	med.GET("/:assetID/highlights", mediaH.highlights)
 	med.POST("/:assetID/highlights", mediaH.requestHighlights)
+
+	briefs := briefHandler{svc: opts.Briefs, orgHandler: orgs}
+	br := proj.Group("/:projectID/brief", requireService(opts.Briefs != nil))
+	br.GET("", briefs.get)
+	br.PUT("", briefs.submit)
+	br.PATCH("", briefs.update)
+	br.DELETE("", briefs.delete)
 
 	renders := renderHandler{svc: opts.Renders, orgHandler: orgs}
 	rend := proj.Group("/:projectID/renders", requireService(opts.Renders != nil))

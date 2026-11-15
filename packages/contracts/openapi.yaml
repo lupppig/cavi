@@ -1105,6 +1105,148 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/brief:
+    get:
+      operationId: getBrief
+      summary: Get the project's creator brief
+      description: |
+        Anyone who can see the project can read it. 404 when the project has
+        no brief. Rules are present once `status` is `ready`, in time order.
+      tags: [briefs]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: The brief.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brief"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    put:
+      operationId: submitBrief
+      summary: Submit a creator brief to be read into rules
+      description: |
+        Requires `project.update`. `media_asset_id` is the processed video or
+        audio file in this project that the brief's timestamps refer to. The
+        brief's text, not the media, is sent to the organisation's chosen AI
+        provider and model for the `briefs` task, which reads it into a
+        campaign message, guidance and timed rules. Every rule time must be
+        written in the brief and lie within the file. Submitting replaces the
+        brief and its rules; `brief_in_progress` (409) while it is being read.
+        Recorded in the audit log.
+      tags: [briefs]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitBriefRequest"
+      responses:
+        "202":
+          description: Brief saved and queued to be read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brief"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    patch:
+      operationId: updateBrief
+      summary: Save a reviewed brief
+      description: |
+        Requires `project.update` and a `ready` brief (`brief_in_progress`
+        otherwise). Replaces the campaign message, guidance and the whole list
+        of rules. Rules must be on the brief's file and within it. Recorded in
+        the audit log.
+      tags: [briefs]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBriefRequest"
+      responses:
+        "200":
+          description: The saved brief.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brief"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      operationId: deleteBrief
+      summary: Delete the project's brief and its rules
+      description: Requires `project.update`. Recorded in the audit log.
+      tags: [briefs]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/projects/{projectID}/renders:
     get:
       operationId: listRenders
@@ -1838,6 +1980,75 @@ components:
           maximum: 600
           description: Longest clip length; at least 5 seconds more than `min_seconds`.
 
+    BriefRuleKind:
+      type: string
+      enum: [priority, exclude, blur, mute, caution, review]
+      description: |
+        `priority`: a moment the creator wants featured. `exclude`: must never
+        appear in a clip; clips that touch it can't be rendered. `blur`:
+        something visible must be blurred or cropped out. `mute`: audio that
+        must not be used. `caution`: a sensitive topic or third-party branding
+        not to feature. `review`: a person must check it before it is used.
+
+    BriefRule:
+      type: object
+      required: [media_asset_id, kind, start_ms, end_ms, note]
+      properties:
+        media_asset_id: { type: string, format: uuid, description: The file the rule's times are in. }
+        kind: { $ref: "#/components/schemas/BriefRuleKind" }
+        start_ms: { type: integer, format: int64, minimum: 0 }
+        end_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Equal to `start_ms` for a single timestamp.
+        note: { type: string, minLength: 1, maxLength: 300 }
+
+    Brief:
+      type: object
+      required: [id, project_id, media_asset_id, text, campaign_message, guidance, status, provider, model, model_label, prompt_version, error, requested_at, updated_at, completed_at, rules, can_edit]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        media_asset_id:
+          type: [string, "null"]
+          format: uuid
+          description: The file the brief's timestamps refer to; null once it is deleted.
+        text: { type: string, description: The brief as pasted. }
+        campaign_message: { type: string, description: What every clip should connect back to. }
+        guidance: { type: string, description: Creative direction without timestamps. }
+        status: { type: string, enum: [queued, running, ready, failed] }
+        provider: { type: string }
+        model: { type: string }
+        model_label: { type: string }
+        prompt_version: { type: string }
+        error: { type: [string, "null"], description: Why reading failed, for people. }
+        requested_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        rules:
+          type: array
+          items: { $ref: "#/components/schemas/BriefRule" }
+        can_edit: { type: boolean, description: Whether the caller may change the brief (`project.update`). }
+
+    SubmitBriefRequest:
+      type: object
+      required: [text, media_asset_id]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 20000 }
+        media_asset_id: { type: string, format: uuid }
+
+    UpdateBriefRequest:
+      type: object
+      required: [campaign_message, guidance, rules]
+      properties:
+        campaign_message: { type: string, maxLength: 2000 }
+        guidance: { type: string, maxLength: 2000 }
+        rules:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/BriefRule" }
+
     Highlights:
       type: object
       required: [id, media_asset_id, status, provider, model, model_label, prompt_version, objective, min_seconds, max_seconds, error, requested_at, completed_at, clips]
@@ -2065,6 +2276,7 @@ components:
             - processing_in_progress
             - transcription_in_progress
             - highlights_in_progress
+            - brief_in_progress
             - not_found
             - method_not_allowed
             - internal_error
@@ -2100,8 +2312,8 @@ components:
       description: |
         The request conflicts with the resource's state. `error.code` is one of
         `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
-        `upload_incomplete`, `processing_in_progress`, `transcription_in_progress` or
-        `highlights_in_progress`.
+        `upload_incomplete`, `processing_in_progress`, `transcription_in_progress`,
+        `highlights_in_progress` or `brief_in_progress`.
       content:
         application/json:
           schema:

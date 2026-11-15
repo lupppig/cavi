@@ -14,6 +14,7 @@ import (
 
 	"github.com/lupppig/cavi/apps/api/internal/account"
 	"github.com/lupppig/cavi/apps/api/internal/ai"
+	"github.com/lupppig/cavi/apps/api/internal/brief"
 	"github.com/lupppig/cavi/apps/api/internal/config"
 	"github.com/lupppig/cavi/apps/api/internal/database"
 	"github.com/lupppig/cavi/apps/api/internal/httpapi"
@@ -74,6 +75,7 @@ func run() error {
 	// endpoints answer 503.
 	var mediaService httpapi.MediaService
 	var renderService httpapi.RenderService
+	var briefService httpapi.BriefService
 	if cfg.StorageEnabled() {
 		st := cfg.Storage
 		store := storage.NewS3(storage.S3Config{
@@ -82,7 +84,8 @@ func run() error {
 		})
 		svc := media.NewService(db, store, logger)
 		renders := render.NewService(db, store, logger)
-		mediaService, renderService = svc, renders
+		briefs := brief.NewService(db)
+		mediaService, renderService, briefService = svc, renders, briefs
 		go sweepMedia(ctx, logger, svc)
 
 		// Jobs are always recorded; with NATS they are also delivered.
@@ -95,6 +98,7 @@ func run() error {
 			relay := jobs.NewRelay(db, bus, logger)
 			svc.OnJobQueued(relay.Wake)
 			renders.OnJobQueued(relay.Wake)
+			briefs.OnJobQueued(relay.Wake)
 			go relay.Run(ctx)
 		} else {
 			logger.Warn("job delivery disabled: CAVI_NATS_URL is not set; media and renders will wait in the queue")
@@ -112,6 +116,7 @@ func run() error {
 		Projects:       project.NewService(db),
 		Media:          mediaService,
 		Renders:        renderService,
+		Briefs:         briefService,
 		AISettings:     ai.NewSettingsService(db),
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,

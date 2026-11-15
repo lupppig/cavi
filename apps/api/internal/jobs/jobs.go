@@ -34,6 +34,7 @@ const (
 	KindMediaTranscribe = "media.transcribe"
 	KindMediaHighlights = "media.highlights"
 	KindRenderClip      = "render.clip"
+	KindBriefRead       = "brief.read"
 )
 
 // Message is what travels over NATS. It is versioned so workers can

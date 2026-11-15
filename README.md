@@ -37,6 +37,7 @@ apps/
     internal/ffmpeg/   FFprobe/FFmpeg runner (probe, frame grabs, audio extraction)
     internal/ai/       AI provider boundary (Gemini), model catalogue and per-organisation settings
     internal/render/   Clip compositions, renders and the render job
+    internal/brief/    Creator briefs: campaign direction and timed rules clips are checked against
     internal/session/  Server-side browser sessions
     internal/waitlist/ Waitlist service and Postgres store
   web/                 Next.js frontend
@@ -140,6 +141,7 @@ Migrations are SQL files in `migrations/` named `<timestamp>_<name>.tx.up.sql` a
 | `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/process` | Retry processing that failed. |
 | `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/transcript` | Read a transcript, or request one (sends audio to the organisation's AI provider). |
 | `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/media/{assetID}/highlights` | Read a file's candidate clips, or find them in its transcript (sends transcript text to the organisation's AI provider). |
+| `GET`, `PUT`, `PATCH`, `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}/brief` | Read the project's creator brief; submit one to be read into rules (sends the brief's text to the organisation's AI provider); save a reviewed version; delete it. |
 | `GET`, `POST` | `/api/v1/organisations/{orgID}/projects/{projectID}/renders` | List a project's rendered clips (optionally for one source file), or render one from a composition. |
 | `GET`, `DELETE` | `/api/v1/organisations/{orgID}/projects/{projectID}/renders/{renderID}` | Read or delete a rendered clip. |
 | `GET` | `/api/v1/organisations/{orgID}/ai-models` | The organisation's AI model for each task, with the supported options. |
@@ -191,6 +193,15 @@ WorkOS dashboard (Applications → your app → Redirects) needs the callback UR
 - Each project response lists the caller's project-level `permissions`, so the UI shows only actions that will succeed. The API enforces them regardless.
 - Project creation, updates, deletion and sharing changes are written to `audit_events`.
 - Deleting a project is permanent and removes its media, including the stored files (see below).
+
+## Creator briefs
+
+A project can hold the creator's brief for its campaign: paste it, choose the video its timestamps refer to, and AI reads it into a campaign message, guidance and timed rules that people then review and edit.
+
+- Rule kinds: `priority` (moments to feature), `exclude` (must never appear), `blur` (something on screen to blur or crop out), `mute` (audio not to use, such as uncleared music), `caution` (sensitive topics, third-party branding) and `review` (a person must check it). A single timestamp is a rule with the same start and end.
+- The model can't invent moments: every rule time must be written in the brief and lie within the video, or the output is rejected and the read retried. Models for the `briefs` task must pass `TestEvalBriefs` (`make ai-eval`).
+- Only the brief's text goes to the AI provider, never the media. The provider, model and prompt version are stored with the brief; usage is recorded per organisation.
+- Reading needs `project.update` (creators: only on their own projects). Anyone who can see the project can read the brief.
 
 ## Background jobs
 
