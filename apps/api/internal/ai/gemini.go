@@ -169,6 +169,8 @@ func (g *Gemini) generate(ctx context.Context, model Model, parts []*genai.Part,
 		return "", usage, fmt.Errorf("%w: no candidates", ErrInvalidOutput)
 	}
 	switch fr := resp.Candidates[0].FinishReason; fr {
+	case genai.FinishReasonMaxTokens:
+		return "", usage, ErrOutputTooLong
 	case genai.FinishReasonStop, "":
 	case genai.FinishReasonSafety, genai.FinishReasonRecitation, genai.FinishReasonProhibitedContent, genai.FinishReasonBlocklist:
 		return "", usage, fmt.Errorf("%w: output blocked (%s)", ErrPermanent, fr)

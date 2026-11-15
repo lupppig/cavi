@@ -27,6 +27,9 @@ const (
 	// transcriptionChunk is how much audio goes to the model per call, so
 	// output stays well within the model's limits on long media.
 	transcriptionChunk = 10 * time.Minute
+	// minTranscriptionChunk is the shortest stretch a section is split
+	// into when the model's transcript of it is too long for one reply.
+	minTranscriptionChunk = 150 * time.Second
 	// sectionTries is how many times one section is sent before invalid
 	// output fails the job attempt.
 	sectionTries = 3
@@ -344,35 +347,59 @@ func (t *Transcriber) Process(ctx context.Context, job jobs.Job) error {
 	voices := map[string]string{}
 	var order []string
 	language := ""
-	for offset := time.Duration(0); offset < total; offset += transcriptionChunk {
-		length := min(transcriptionChunk, total-offset)
+	// section transcribes one stretch of audio. Invalid output is often a
+	// one-off, so it retries the stretch alone a couple of times before
+	// failing the attempt (which would re-send every section). Speech too
+	// dense for one reply is split in half instead, down to
+	// minTranscriptionChunk.
+	type part struct {
+		offset time.Duration
+		ai.Transcript
+	}
+	var section func(offset, length time.Duration) ([]part, error)
+	section = func(offset, length time.Duration) ([]part, error) {
 		audio, err := t.audio.Audio(ctx, url, offset, length)
 		if err != nil {
 			if errors.Is(err, ffmpeg.ErrUnreadable) {
-				return jobs.Permanent(err)
+				return nil, jobs.Permanent(err)
 			}
-			return err
+			return nil, err
 		}
-		// Invalid output is often a one-off: retry this section alone a
-		// couple of times before failing the attempt (which would re-send
-		// every section).
-		var part ai.Transcript
 		for try := 1; ; try++ {
-			var usage ai.Usage
-			part, usage, err = t.ai.Transcribe(ctx, model, audio, "audio/mpeg", length.Milliseconds())
+			tr, usage, err := t.ai.Transcribe(ctx, model, audio, "audio/mpeg", length.Milliseconds())
 			t.recordUsage(ctx, job, model, usage, length, err == nil)
-			if err == nil || !errors.Is(err, ai.ErrInvalidOutput) || try == sectionTries {
-				break
+			switch {
+			case err == nil:
+				return []part{{offset, tr}}, nil
+			case errors.Is(err, ai.ErrOutputTooLong) && length/2 >= minTranscriptionChunk:
+				t.logger.InfoContext(ctx, "transcription section too dense for one reply; splitting it",
+					slog.String("job_id", job.ID), slog.Duration("offset", offset), slog.Duration("length", length))
+				first, err := section(offset, length/2)
+				if err != nil {
+					return nil, err
+				}
+				rest, err := section(offset+length/2, length-length/2)
+				return append(first, rest...), err
+			case !errors.Is(err, ai.ErrInvalidOutput) || try == sectionTries:
+				if errors.Is(err, ai.ErrPermanent) {
+					return nil, jobs.Permanent(err)
+				}
+				return nil, err // includes invalid output, which may pass on retry
 			}
 			t.logger.WarnContext(ctx, "transcription section output invalid; retrying the section",
 				slog.String("job_id", job.ID), slog.Duration("offset", offset), slog.Int("try", try), slog.String("error", err.Error()))
 		}
+	}
+	var parts []part
+	for offset := time.Duration(0); offset < total; offset += transcriptionChunk {
+		ps, err := section(offset, min(transcriptionChunk, total-offset))
 		if err != nil {
-			if errors.Is(err, ai.ErrPermanent) {
-				return jobs.Permanent(err)
-			}
-			return err // includes invalid output, which may pass on retry
+			return err
 		}
+		parts = append(parts, ps...)
+	}
+	for _, p := range parts {
+		offset, part := p.offset, p.Transcript
 		if language == "" {
 			language = part.Language
 		}

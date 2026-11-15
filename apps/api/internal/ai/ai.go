@@ -11,6 +11,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 // Tasks AI is used for.
@@ -105,6 +106,10 @@ var (
 	// ErrPermanent means the request can't succeed as made (rejected input,
 	// blocked content, unsupported model). Don't retry.
 	ErrPermanent = errors.New("ai: request cannot succeed")
+	// ErrOutputTooLong means the model hit its output limit before
+	// finishing. It is also ErrInvalidOutput; callers can send less input
+	// (a shorter stretch of audio) instead of retrying as is.
+	ErrOutputTooLong = fmt.Errorf("%w: output too long", ErrInvalidOutput)
 )
 
 // Usage is what a call consumed, for cost accounting.

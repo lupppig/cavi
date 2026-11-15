@@ -36,6 +36,9 @@ type fakeAI struct {
 	// that many times before succeeding.
 	failOn    int64
 	failTimes int
+	// maxMS, if set, is the longest audio whose transcript fits in one
+	// reply; longer audio hits the output limit.
+	maxMS int64
 }
 
 func (f *fakeAI) Transcribe(_ context.Context, m ai.Model, audio []byte, _ string, durationMS int64) (ai.Transcript, ai.Usage, error) {
@@ -44,6 +47,9 @@ func (f *fakeAI) Transcribe(_ context.Context, m ai.Model, audio []byte, _ strin
 	f.models = append(f.models, m.ID)
 	if f.err != nil {
 		return ai.Transcript{}, ai.Usage{InputTokens: 10}, f.err
+	}
+	if f.maxMS > 0 && durationMS > f.maxMS {
+		return ai.Transcript{}, ai.Usage{InputTokens: 10, OutputTokens: 65000}, ai.ErrOutputTooLong
 	}
 	if f.failTimes > 0 && string(audio) == fmt.Sprintf("audio@%d", f.failOn) {
 		f.failTimes--
@@ -350,4 +356,49 @@ func TestTranscriptWordsAndVoices(t *testing.T) {
 	eve := w.user("Eve")
 	_, err = w.svc.SetSpeakerVoice(w.ctx, eve.id, org, proj, a.ID, "Speaker 1", ai.VoiceMan)
 	wantErr(t, err, ErrNotFound)
+}
+
+func TestDenseSectionsAreSplit(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	a := w.processed(ana, org, proj, "vlog.mp4", 12*60_000, "aac") // 12 minutes
+	if _, err := w.svc.RequestTranscript(w.ctx, ana.id, org, proj, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Only 5 minutes of this speech fits in one reply.
+	audio, provider := &fakeAudio{}, &fakeAI{maxMS: 5 * 60_000}
+	if err := w.transcriber(audio, provider).Process(w.ctx, w.transcribeJob(a.ID)); err != nil {
+		t.Fatal(err)
+	}
+	want := [][2]time.Duration{{0, 10 * time.Minute}, {0, 5 * time.Minute}, {5 * time.Minute, 5 * time.Minute}, {10 * time.Minute, 2 * time.Minute}}
+	if fmt.Sprint(audio.calls) != fmt.Sprint(want) {
+		t.Fatalf("sections = %v, want %v", audio.calls, want)
+	}
+	tr, err := w.svc.Transcript(w.ctx, ana.id, org, proj, a.ID)
+	if err != nil || tr.Status != TranscriptReady || len(tr.Segments) != 3 {
+		t.Fatalf("transcript = %+v, %v", tr, err)
+	}
+	for i, offset := range []int64{0, 300_000, 600_000} {
+		if seg := tr.Segments[i]; seg.StartMS != offset+1000 || seg.Text != fmt.Sprintf("chunk audio@%d", offset) {
+			t.Errorf("segment %d = %+v", i, seg)
+		}
+	}
+
+	// Speech too dense even for the shortest section fails the attempt
+	// (to be retried) rather than splitting forever.
+	if _, err := w.svc.RequestTranscript(w.ctx, ana.id, org, proj, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	audio, provider = &fakeAudio{}, &fakeAI{maxMS: 60_000}
+	err = w.transcriber(audio, provider).Process(w.ctx, w.transcribeJob(a.ID))
+	if !errors.Is(err, ai.ErrOutputTooLong) || jobs.IsPermanent(err) {
+		t.Fatalf("too dense: %v", err)
+	}
+	for _, c := range audio.calls {
+		if c[1] < 150*time.Second {
+			t.Fatalf("split below the minimum: %v", audio.calls)
+		}
+	}
 }
