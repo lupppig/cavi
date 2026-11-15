@@ -20,6 +20,7 @@ const MontageVersion = 3
 // Montage limits.
 const (
 	MaxSegments       = 20
+	MaxTiles          = 2 // extra scenes in a split-screen segment
 	MinSegment        = 500 * time.Millisecond
 	MaxTreatments     = 20 // blur boxes or muted ranges per segment
 	MaxHookRunes      = 120
@@ -56,6 +57,28 @@ type Segment struct {
 	Mute []Range `json:"mute,omitempty"`
 	// Blur hides parts of the frame, e.g. licence plates.
 	Blur []BlurBox `json:"blur,omitempty"`
+	// Tiles turn the segment into a split screen: these scenes play at the
+	// same time as the segment's own, stacked top to bottom (the
+	// segment's own on top), each for the segment's length. Only the
+	// segment's own sound plays.
+	Tiles []Tile `json:"tiles,omitempty"`
+}
+
+// Tile is another scene in a split-screen segment.
+type Tile struct {
+	SourceAssetID string  `json:"source_asset_id"`
+	StartMS       int64   `json:"start_ms"`
+	Focus         float64 `json:"focus"`
+}
+
+// Ranges returns every stretch of source a segment shows: its own and its
+// tiles', for checking against briefs.
+func (s Segment) Ranges() []Segment {
+	out := []Segment{{SourceAssetID: s.SourceAssetID, StartMS: s.StartMS, EndMS: s.EndMS}}
+	for _, t := range s.Tiles {
+		out = append(out, Segment{SourceAssetID: t.SourceAssetID, StartMS: t.StartMS, EndMS: t.StartMS + s.EndMS - s.StartMS})
+	}
+	return out
 }
 
 // Hook is text shown at the top of the clip from its first frame until
@@ -96,9 +119,11 @@ func (c Composition) SourceIDs() []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, s := range c.Segments {
-		if !seen[s.SourceAssetID] {
-			seen[s.SourceAssetID] = true
-			out = append(out, s.SourceAssetID)
+		for _, r := range s.Ranges() {
+			if !seen[r.SourceAssetID] {
+				seen[r.SourceAssetID] = true
+				out = append(out, r.SourceAssetID)
+			}
 		}
 	}
 	return out
@@ -135,6 +160,22 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 		}
 		if math.IsNaN(s.Focus) || s.Focus < 0 || s.Focus > 1 {
 			return invalid(field+".focus", "Framing must be between 0 and 1.")
+		}
+		if len(s.Tiles) > MaxTiles {
+			return invalid(field+".tiles", fmt.Sprintf("A split screen can show at most %d scenes.", MaxTiles+1))
+		}
+		for j, t := range s.Tiles {
+			f := fmt.Sprintf("%s.tiles[%d]", field, j)
+			ts, ok := srcs[t.SourceAssetID]
+			if !ok || ts.Width < 2 || ts.Height < 2 {
+				return invalid(f+".source_asset_id", "Choose a processed video from this project.")
+			}
+			if t.StartMS < 0 || t.StartMS+(s.EndMS-s.StartMS) > ts.DurationMS {
+				return invalid(f+".start_ms", "Each scene must run for the whole segment, within its video.")
+			}
+			if math.IsNaN(t.Focus) || t.Focus < 0 || t.Focus > 1 {
+				return invalid(f+".focus", "Framing must be between 0 and 1.")
+			}
 		}
 		if len(s.Mute) > MaxTreatments || len(s.Blur) > MaxTreatments {
 			return invalid(field, fmt.Sprintf("A segment can have at most %d muted ranges and %d blur boxes.", MaxTreatments, MaxTreatments))
@@ -219,10 +260,18 @@ func PlanMontage(c Composition, srcs map[string]Source, inputs map[string]string
 	ms := func(v int64) time.Duration { return time.Duration(v) * time.Millisecond }
 	for _, s := range c.Segments {
 		src := srcs[s.SourceAssetID]
-		x, y, w, h := region(sh, src, s.Focus)
+		panel := sh
+		if len(s.Tiles) > 0 {
+			panel = Shape{Aspect: sh.Aspect, Width: sh.Width, Height: ffmpeg.PanelHeight(sh.Height, 1+len(s.Tiles))}
+		}
+		x, y, w, h := region(panel, src, s.Focus)
 		p := ffmpeg.MontagePart{
 			Input: inputs[s.SourceAssetID], Start: ms(s.StartMS), Length: ms(s.EndMS - s.StartMS),
 			CropX: x, CropY: y, CropW: w, CropH: h, Audio: src.HasAudio,
+		}
+		for _, t := range s.Tiles {
+			tx, ty, tw, th := region(panel, srcs[t.SourceAssetID], t.Focus)
+			p.Stack = append(p.Stack, ffmpeg.Tile{Input: inputs[t.SourceAssetID], Start: ms(t.StartMS), CropX: tx, CropY: ty, CropW: tw, CropH: th})
 		}
 		for _, r := range s.Mute {
 			p.Mute = append(p.Mute, ffmpeg.Span{From: ms(r.StartMS - s.StartMS), To: ms(r.EndMS - s.StartMS)})

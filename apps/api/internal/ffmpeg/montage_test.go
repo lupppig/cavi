@@ -140,3 +140,63 @@ func TestRealMontage(t *testing.T) {
 		t.Errorf("blurred region %d bytes vs sharp %d: blur not applied", blurred, sharp)
 	}
 }
+
+var yavg = regexp.MustCompile(`YAVG=([0-9.]+)`)
+
+// brightness is the mean luma (0-255) of a region of path's frame at at.
+func brightness(t *testing.T, path string, at float64, crop string) float64 {
+	t.Helper()
+	out, err := exec.Command("ffmpeg", "-v", "error", "-ss", strconv.FormatFloat(at, 'f', 2, 64), "-i", path, "-frames:v", "1",
+		"-vf", "crop="+crop+",signalstats,metadata=mode=print:key=lavfi.signalstats.YAVG:file=-", "-f", "null", "-").CombinedOutput()
+	m := yavg.FindSubmatch(out)
+	if err != nil || m == nil {
+		t.Fatalf("brightness: %v %s", err, out)
+	}
+	v, _ := strconv.ParseFloat(string(m[1]), 64)
+	return v
+}
+
+func TestRealSplitScreen(t *testing.T) {
+	r := New()
+	if err := r.Available(); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	for name, args := range map[string][]string{
+		"talk.mp4":  {"-f", "lavfi", "-i", "testsrc2=size=640x360:rate=25", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-t", "4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest"},
+		"broll.mp4": {"-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30", "-t", "6", "-c:v", "libx264", "-pix_fmt", "yuv420p"},
+	} {
+		if out, err := exec.Command("ffmpeg", append([]string{"-v", "error", "-y"}, append(args, filepath.Join(dir, name))...)...).CombinedOutput(); err != nil {
+			t.Fatalf("generate %s: %v %s", name, err, out)
+		}
+	}
+	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	defer srv.Close()
+	out := filepath.Join(dir, "split.mp4")
+	ph := PanelHeight(640, 3) // 212: three 360x212 panels
+	m := Montage{Width: 360, Height: 640, FPS: 30, Parts: []MontagePart{
+		{Input: srv.URL + "/talk.mp4", Length: 2 * time.Second, CropX: 0, CropY: 77, CropW: 640, CropH: 206, Audio: true,
+			Stack: []Tile{
+				{Input: srv.URL + "/broll.mp4", Start: time.Second, CropX: 0, CropY: 222, CropW: 1280, CropH: 754 - 478},
+				{Input: srv.URL + "/broll.mp4", Start: 3 * time.Second, CropX: 0, CropY: 222, CropW: 1280, CropH: 276},
+			}},
+		{Input: srv.URL + "/talk.mp4", Start: 2 * time.Second, Length: time.Second, CropX: 219, CropW: 202, CropH: 360, Audio: true},
+	}}
+	if err := r.Montage(context.Background(), out, m, 2*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.ProbeFile(context.Background(), out)
+	if err != nil || p.Width != 360 || p.Height != 640 || !p.HasAudio || p.Duration < 2900*time.Millisecond || p.Duration > 3200*time.Millisecond {
+		t.Fatalf("split screen = %+v, %v", p, err)
+	}
+	top := (640 - 3*ph) / 2
+	for k := 1; k < 3; k++ {
+		y := top + k*ph - 2
+		if b := brightness(t, out, 1, "360:4:0:"+strconv.Itoa(y)); b < 220 {
+			t.Errorf("divider %d at y=%d has brightness %.0f, want white", k, y, b)
+		}
+	}
+	if v := loudness(t, out, 0.2, 1.5); v < -40 {
+		t.Errorf("split screen is %.1f dB: the main scene's sound should play", v)
+	}
+}

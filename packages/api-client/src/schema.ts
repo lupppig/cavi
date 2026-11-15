@@ -1517,6 +1517,20 @@ export interface components {
             mute?: components["schemas"]["TimeRange"][];
             /** @description Regions hidden (e.g. licence plates). */
             blur?: components["schemas"]["BlurBox"][];
+            /**
+             * @description Makes the segment a split screen: these scenes play at the same
+             *     time as the segment's own, stacked top to bottom in equal panels
+             *     (the segment's own on top), each for the segment's length. Only
+             *     the segment's own sound plays. Each scene is checked against its
+             *     file's brief.
+             */
+            tiles?: {
+                /** Format: uuid */
+                source_asset_id: string;
+                /** Format: int64 */
+                start_ms: number;
+                focus: number;
+            }[];
         };
         /** @description Text shown at the top of the clip from its first frame until `end_ms` (clip time). */
         Hook: {

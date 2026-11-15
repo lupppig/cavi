@@ -32,7 +32,23 @@ type MontagePart struct {
 	// is cropped. Mute silences the source's audio.
 	Blur []Box
 	Mute []Span
+	// Stack shows more scenes at the same time: the part's own scene and
+	// these are stacked top to bottom in equal panels (a split screen).
+	// They are silent; the part's own audio plays.
+	Stack []Tile
 }
+
+// Tile is another scene played alongside a part, from Start for the
+// part's length, cropped like a part.
+type Tile struct {
+	Input                      string
+	Start                      time.Duration
+	CropX, CropY, CropW, CropH int
+}
+
+// PanelHeight is each panel's height when n scenes share an output of
+// height h: even, so encoders accept it.
+func PanelHeight(h, n int) int { return (h / n) &^ 1 }
 
 // Montage joins parts, one after another, into one clip.
 type Montage struct {
@@ -66,6 +82,7 @@ func secs(d time.Duration) string { return strconv.FormatFloat(d.Seconds(), 'f',
 func (m Montage) filterGraph() (string, error) {
 	var g strings.Builder
 	join := ""
+	next := len(m.Parts) // tiles are inputs after every part's own
 	for i, p := range m.Parts {
 		if p.Length <= 0 || p.CropW <= 0 || p.CropH <= 0 {
 			return "", fmt.Errorf("ffmpeg: invalid montage part %d", i)
@@ -81,8 +98,29 @@ func (m Montage) filterGraph() (string, error) {
 				base, blurred, b.X, b.Y, secs(b.From), secs(b.To), next)
 			cur = next
 		}
-		fmt.Fprintf(&g, "%scrop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1,fps=%d,format=yuv420p,trim=duration=%s,setpts=PTS-STARTPTS[v%d];",
-			cur, p.CropW, p.CropH, p.CropX, p.CropY, m.Width, m.Height, m.FPS, secs(p.Length), i)
+		if len(p.Stack) == 0 {
+			fmt.Fprintf(&g, "%scrop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1,fps=%d,format=yuv420p,trim=duration=%s,setpts=PTS-STARTPTS[v%d];",
+				cur, p.CropW, p.CropH, p.CropX, p.CropY, m.Width, m.Height, m.FPS, secs(p.Length), i)
+		} else {
+			n := 1 + len(p.Stack)
+			ph := PanelHeight(m.Height, n)
+			panels := fmt.Sprintf("[p%dt0]", i)
+			fmt.Fprintf(&g, "%scrop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1[p%dt0];", cur, p.CropW, p.CropH, p.CropX, p.CropY, m.Width, ph, i)
+			for k, t := range p.Stack {
+				if t.CropW <= 0 || t.CropH <= 0 {
+					return "", fmt.Errorf("ffmpeg: invalid tile %d in part %d", k, i)
+				}
+				fmt.Fprintf(&g, "[%d:v]crop=%d:%d:%d:%d,scale=%d:%d:flags=lanczos,setsar=1,setpts=PTS-STARTPTS[p%dt%d];",
+					next, t.CropW, t.CropH, t.CropX, t.CropY, m.Width, ph, i, k+1)
+				panels += fmt.Sprintf("[p%dt%d]", i, k+1)
+				next++
+			}
+			fmt.Fprintf(&g, "%svstack=inputs=%d,pad=%d:%d:0:%d:black", panels, n, m.Width, m.Height, (m.Height-n*ph)/2)
+			for k := 1; k < n; k++ {
+				fmt.Fprintf(&g, ",drawbox=x=0:y=%d:w=%d:h=6:color=white:t=fill", (m.Height-n*ph)/2+k*ph-3, m.Width)
+			}
+			fmt.Fprintf(&g, ",fps=%d,format=yuv420p,trim=duration=%s,setpts=PTS-STARTPTS[v%d];", m.FPS, secs(p.Length), i)
+		}
 		if p.Audio {
 			fmt.Fprintf(&g, "[%d:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo", i)
 			for _, s := range p.Mute {
@@ -114,7 +152,7 @@ func (m Montage) filterGraph() (string, error) {
 		at := m.VoiceoverAt.Milliseconds()
 		// Synthesised voices arrive at full scale: level them to spoken-word
 		// loudness with headroom, and limit the mix so nothing clips.
-		fmt.Fprintf(&g, "[%d:a]highpass=f=70,loudnorm=I=-16:TP=-2:LRA=7,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=%d|%d,apad[vo];", len(m.Parts), at, at)
+		fmt.Fprintf(&g, "[%d:a]highpass=f=70,loudnorm=I=-16:TP=-2:LRA=7,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=%d|%d,apad[vo];", next, at, at)
 		fmt.Fprintf(&g, "[ac]volume=%s:enable='between(t,%s,%s)'[ad];[ad][vo]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95:level=disabled[aout]",
 			strconv.FormatFloat(m.Duck, 'f', 2, 64), secs(m.VoiceoverAt), secs(m.VoiceoverAt+m.VoiceoverLength))
 	} else {
@@ -136,6 +174,11 @@ func (r *Runner) Montage(ctx context.Context, output string, m Montage, timeout 
 	args := []string{"-v", "error", "-nostdin", "-y", "-protocol_whitelist", protocols}
 	for _, p := range m.Parts {
 		args = append(args, "-ss", secs(p.Start), "-t", secs(p.Length), "-i", p.Input)
+	}
+	for _, p := range m.Parts {
+		for _, t := range p.Stack {
+			args = append(args, "-ss", secs(t.Start), "-t", secs(p.Length), "-i", t.Input)
+		}
 	}
 	if m.Voiceover != "" {
 		args = append(args, "-i", m.Voiceover)

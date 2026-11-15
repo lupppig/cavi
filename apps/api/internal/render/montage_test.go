@@ -279,3 +279,61 @@ func TestVoiceoverCaptions(t *testing.T) {
 		t.Fatalf("cues = %+v", r.Composition.Captions.Cues)
 	}
 }
+
+func TestSplitScreenSegments(t *testing.T) {
+	srcs := map[string]Source{"a": {Width: 1920, Height: 1080, DurationMS: 60_000, HasAudio: true}, "b": {Width: 1920, Height: 1080, DurationMS: 10_000}}
+	c := montageOf(Segment{SourceAssetID: "a", StartMS: 1000, EndMS: 5000, Focus: 0.5,
+		Tiles: []Tile{{SourceAssetID: "b", StartMS: 2000, Focus: 0.5}, {SourceAssetID: "a", StartMS: 30_000, Focus: 0.2}}})
+	if err := c.ValidateMontage(srcs); err != nil {
+		t.Fatal(err)
+	}
+	if ids := c.SourceIDs(); len(ids) != 2 {
+		t.Fatalf("SourceIDs = %v", ids)
+	}
+	m := PlanMontage(c, srcs, map[string]string{"a": "A", "b": "B"})
+	p := m.Parts[0]
+	// Three 1080x640 panels: each crop is the 1080:640 region of its source.
+	if len(p.Stack) != 2 || p.CropW != 1822 || p.CropH != 1080 || p.Stack[0].Input != "B" || p.Stack[0].Start != 2*time.Second || p.Stack[1].CropX != 20 {
+		t.Fatalf("plan = %+v", p)
+	}
+	for field, mutate := range map[string]func(*Composition){
+		"composition.segments[0].tiles":                    func(c *Composition) { c.Segments[0].Tiles = append(c.Segments[0].Tiles, Tile{SourceAssetID: "a"}) },
+		"composition.segments[0].tiles[0].start_ms":        func(c *Composition) { c.Segments[0].Tiles[0].StartMS = 8000 },
+		"composition.segments[0].tiles[1].source_asset_id": func(c *Composition) { c.Segments[0].Tiles[1].SourceAssetID = "z" },
+	} {
+		cc := montageOf(Segment{SourceAssetID: "a", StartMS: 1000, EndMS: 5000, Focus: 0.5,
+			Tiles: []Tile{{SourceAssetID: "b", StartMS: 2000, Focus: 0.5}, {SourceAssetID: "a", StartMS: 30_000, Focus: 0.2}}})
+		mutate(&cc)
+		wantField(t, cc.ValidateMontage(srcs), field)
+	}
+}
+
+func TestSplitScreenFollowsTheBrief(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 600_000, true)
+	w.briefRules(org, proj, src,
+		ai.BriefRule{Kind: ai.RuleExclude, StartMS: 47_000, EndMS: 53_000, Note: "Not to be used"},
+		ai.BriefRule{Kind: ai.RuleCaution, StartMS: 300_000, EndMS: 300_000, Note: "Logo"})
+	seg := Segment{SourceAssetID: src, StartMS: 100_000, EndMS: 104_000, Focus: 0.5,
+		Tiles: []Tile{{SourceAssetID: src, StartMS: 45_000, Focus: 0.5}}} // the tile shows 0:45-0:49
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Split", montageOf(seg), nil)
+	wantField(t, err, "composition.segments[0].start_ms")
+	seg.Tiles[0].StartMS = 298_000
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Split", montageOf(seg), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Flags) != 1 || r.Flags[0].Kind != ai.RuleCaution {
+		t.Fatalf("flags from the tile = %+v", r.Flags)
+	}
+	ff := &fakeFFmpeg{}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if len(ff.montages[0].Parts[0].Stack) != 1 {
+		t.Fatalf("rendered without the tile: %+v", ff.montages[0].Parts[0])
+	}
+}

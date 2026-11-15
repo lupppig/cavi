@@ -328,7 +328,10 @@ func (s *Service) flag(ctx context.Context, orgID string, rs []*Render) error {
 		if r.SourceAssetID == "" {
 			continue
 		}
-		parts := r.Composition.Segments
+		var parts []Segment
+		for _, s := range r.Composition.Segments {
+			parts = append(parts, s.Ranges()...)
+		}
 		if r.Composition.Version != MontageVersion {
 			parts = []Segment{{SourceAssetID: r.Composition.SourceAssetID, StartMS: r.Composition.StartMS, EndMS: r.Composition.EndMS}}
 		}
@@ -509,12 +512,14 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 			return err
 		}
 		for i, s := range c.Segments {
-			rules, err := brief.Rules(ctx, tx, orgID, s.SourceAssetID)
-			if err != nil {
-				return err
-			}
-			if r, ok := brief.Excluded(rules, s.StartMS, s.EndMS); ok {
-				return brief.ExcludedError(fmt.Sprintf("composition.segments[%d].start_ms", i), r)
+			for _, part := range s.Ranges() {
+				rules, err := brief.Rules(ctx, tx, orgID, part.SourceAssetID)
+				if err != nil {
+					return err
+				}
+				if r, ok := brief.Excluded(rules, part.StartMS, part.EndMS); ok {
+					return brief.ExcludedError(fmt.Sprintf("composition.segments[%d].start_ms", i), r)
+				}
 			}
 		}
 		return nil

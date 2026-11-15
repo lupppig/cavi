@@ -249,13 +249,15 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 	if err := c.ValidateMontage(srcs); err != nil {
 		return jobs.Permanent(fmt.Errorf("%w: %v", errSourceGone, err))
 	}
-	for _, s := range c.Segments {
-		rules, err := brief.Rules(ctx, r.db, job.OrganisationID, s.SourceAssetID)
-		if err != nil {
-			return err
-		}
-		if rule, ok := brief.Excluded(rules, s.StartMS, s.EndMS); ok {
-			return jobs.Permanent(fmt.Errorf("%w: %s", errExcluded, rule.Note))
+	for _, seg := range c.Segments {
+		for _, s := range seg.Ranges() {
+			rules, err := brief.Rules(ctx, r.db, job.OrganisationID, s.SourceAssetID)
+			if err != nil {
+				return err
+			}
+			if rule, ok := brief.Excluded(rules, s.StartMS, s.EndMS); ok {
+				return jobs.Permanent(fmt.Errorf("%w: %s", errExcluded, rule.Note))
+			}
 		}
 	}
 	if _, err := r.db.ExecContext(ctx, `UPDATE renders SET status = 'running', updated_at = now() WHERE id = ?`, job.RenderID); err != nil {

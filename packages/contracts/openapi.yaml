@@ -2520,6 +2520,23 @@ components:
           maxItems: 20
           description: Regions hidden (e.g. licence plates).
           items: { $ref: "#/components/schemas/BlurBox" }
+        tiles:
+          type: array
+          maxItems: 2
+          description: |
+            Makes the segment a split screen: these scenes play at the same
+            time as the segment's own, stacked top to bottom in equal panels
+            (the segment's own on top), each for the segment's length. Only
+            the segment's own sound plays. Each scene is checked against its
+            file's brief.
+          items:
+            type: object
+            required: [source_asset_id, start_ms, focus]
+            additionalProperties: false
+            properties:
+              source_asset_id: { type: string, format: uuid }
+              start_ms: { type: integer, format: int64, minimum: 0 }
+              focus: { type: number, minimum: 0, maximum: 1 }
 
     Hook:
       type: object
