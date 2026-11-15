@@ -21,6 +21,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/identity"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/media"
+	"github.com/lupppig/cavi/apps/api/internal/plan"
 	"github.com/lupppig/cavi/apps/api/internal/project"
 	"github.com/lupppig/cavi/apps/api/internal/render"
 	"github.com/lupppig/cavi/apps/api/internal/session"
@@ -78,6 +79,7 @@ func run() error {
 	var renderService httpapi.RenderService
 	var briefService httpapi.BriefService
 	var voiceoverService httpapi.VoiceoverService
+	var planService httpapi.PlanService
 	if cfg.StorageEnabled() {
 		st := cfg.Storage
 		store := storage.NewS3(storage.S3Config{
@@ -88,7 +90,8 @@ func run() error {
 		renders := render.NewService(db, store, logger)
 		briefs := brief.NewService(db)
 		voiceovers := voiceover.NewService(db, store)
-		mediaService, renderService, briefService, voiceoverService = svc, renders, briefs, voiceovers
+		plans := plan.NewService(db)
+		mediaService, renderService, briefService, voiceoverService, planService = svc, renders, briefs, voiceovers, plans
 		go sweepMedia(ctx, logger, svc)
 
 		// Jobs are always recorded; with NATS they are also delivered.
@@ -103,6 +106,7 @@ func run() error {
 			renders.OnJobQueued(relay.Wake)
 			briefs.OnJobQueued(relay.Wake)
 			voiceovers.OnJobQueued(relay.Wake)
+			plans.OnJobQueued(relay.Wake)
 			go relay.Run(ctx)
 		} else {
 			logger.Warn("job delivery disabled: CAVI_NATS_URL is not set; media and renders will wait in the queue")
@@ -122,6 +126,7 @@ func run() error {
 		Renders:        renderService,
 		Briefs:         briefService,
 		Voiceovers:     voiceoverService,
+		Plans:          planService,
 		AISettings:     ai.NewSettingsService(db),
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,

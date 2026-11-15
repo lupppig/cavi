@@ -22,6 +22,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/media"
+	"github.com/lupppig/cavi/apps/api/internal/plan"
 	"github.com/lupppig/cavi/apps/api/internal/render"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 	"github.com/lupppig/cavi/apps/api/internal/voiceover"
@@ -95,6 +96,9 @@ func run() error {
 			jobs.NewWorker(db, bus, jobs.KindBriefRead,
 				brief.NewReader(db, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute, RetryDelay: providerRetry}),
+			jobs.NewWorker(db, bus, jobs.KindPlansCreate,
+				plan.NewPlanner(db, gemini, logger), logger,
+				jobs.WorkerOptions{Concurrency: 1, Lease: 10 * time.Minute, RetryDelay: providerRetry}),
 			jobs.NewWorker(db, bus, jobs.KindVoiceoverSpeak,
 				voiceover.NewNarrator(db, store, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute, RetryDelay: providerRetry}))

@@ -168,8 +168,8 @@ func TestAIModelSettingsOverHTTP(t *testing.T) {
 	base := "/api/v1/organisations/" + org.ID + "/ai-models"
 
 	list := decode[listResponse[aiTaskSettingResponse]](t, w.call(ana, "GET", base, ""))
-	if len(list.Data) != 4 || list.Data[0].Task != "transcription" || list.Data[1].Task != "highlights" ||
-		list.Data[2].Task != "briefs" || list.Data[3].Task != "voiceover" || list.Data[0].Custom || !list.Data[0].Model.Default || len(list.Data[1].Options) < 2 {
+	if len(list.Data) != 5 || list.Data[0].Task != "transcription" || list.Data[1].Task != "highlights" ||
+		list.Data[2].Task != "briefs" || list.Data[3].Task != "plans" || list.Data[4].Task != "voiceover" || list.Data[0].Custom || !list.Data[0].Model.Default || len(list.Data[1].Options) < 2 {
 		t.Fatalf("settings = %+v", list)
 	}
 	expect(t, w.call(eve, "GET", base, ""), http.StatusNotFound, CodeNotFound)

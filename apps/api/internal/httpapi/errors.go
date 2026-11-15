@@ -47,7 +47,9 @@ const (
 	// CodeHighlightsInProgress: highlight detection is already queued or running.
 	CodeHighlightsInProgress = "highlights_in_progress"
 	// CodeBriefInProgress: the project's brief is still being read.
-	CodeBriefInProgress  = "brief_in_progress"
+	CodeBriefInProgress = "brief_in_progress"
+	// CodePlansInProgress: the project's edit plans are still being made.
+	CodePlansInProgress  = "plans_in_progress"
 	CodeNotFound         = "not_found"
 	CodeMethodNotAllowed = "method_not_allowed"
 	CodeInternal         = "internal_error"

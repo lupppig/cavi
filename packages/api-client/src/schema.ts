@@ -652,6 +652,40 @@ export interface paths {
         patch: operations["updateBrief"];
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The project's current edit plans
+         * @description Anyone who can see the project can read them. 404 when plans have
+         *     never been requested. Plans are present once `status` is `ready`,
+         *     best first.
+         */
+        get: operations["getPlans"];
+        put?: never;
+        /**
+         * Have the AI propose montages for this project
+         * @description Requires `editing.manage`. Plans are made from the transcripts of
+         *     `media_asset_ids` (default: the project's newest transcribed files,
+         *     up to 5) and the project's creator brief, if it has one. The
+         *     transcripts' text and the brief, not the media, are sent to the
+         *     organisation's chosen model for the `plans` task; the brief and
+         *     files are fixed on the run and the request is audited. Times come
+         *     from the transcripts; plans that include excluded moments are
+         *     dropped. Requesting again replaces the plans; `plans_in_progress`
+         *     (409) while they're being made.
+         */
+        post: operations["requestPlans"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/voices": {
         parameters: {
             query?: never;
@@ -1338,6 +1372,56 @@ export interface components {
              */
             focus: number;
         };
+        RequestPlansRequest: {
+            objective?: string;
+            min_seconds: number;
+            /** @description At least 5 more than `min_seconds`. */
+            max_seconds: number;
+            media_asset_ids?: string[];
+        };
+        EditPlan: {
+            title: string;
+            /** @description On-screen text for the opening. */
+            hook: string;
+            /** @description Optional narration; empty when the footage needs none. */
+            voiceover_script: string;
+            reason: string;
+            /** @description How the plan connects to the brief's campaign message; empty without a brief. */
+            campaign_link: string;
+            /** Format: int64 */
+            duration_ms: number;
+            /** @description Played in order. Use them as a montage's `segments`. */
+            segments: {
+                /** Format: uuid */
+                source_asset_id: string;
+                /** Format: int64 */
+                start_ms: number;
+                /** Format: int64 */
+                end_ms: number;
+                flags: components["schemas"]["BriefFlag"][];
+            }[];
+        };
+        PlanRun: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "ready" | "failed";
+            provider: string;
+            model: string;
+            model_label: string;
+            prompt_version: string;
+            objective: string;
+            min_seconds: number;
+            max_seconds: number;
+            media_asset_ids: string[];
+            used_brief: boolean;
+            error: string | null;
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            completed_at: string | null;
+            plans: components["schemas"]["EditPlan"][];
+        };
         Voice: {
             /** @description The voice's name; send it as `voice`. */
             id: string;
@@ -1542,7 +1626,7 @@ export interface components {
         AIModelSettingList: {
             data: {
                 /** @enum {string} */
-                task: "transcription" | "highlights" | "briefs" | "voiceover";
+                task: "transcription" | "highlights" | "briefs" | "plans" | "voiceover";
                 model: components["schemas"]["AIModel"];
                 custom: boolean;
                 options: components["schemas"]["AIModel"][];
@@ -1561,7 +1645,7 @@ export interface components {
              * @description Stable, machine-readable error code.
              * @enum {string}
              */
-            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "processing_in_progress" | "transcription_in_progress" | "highlights_in_progress" | "brief_in_progress" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
+            code: "invalid_request" | "validation_failed" | "payload_too_large" | "rate_limited" | "unauthenticated" | "forbidden" | "email_not_verified" | "last_owner" | "personal_organisation" | "already_member" | "invitation_exists" | "upload_incomplete" | "upload_rejected" | "processing_in_progress" | "transcription_in_progress" | "highlights_in_progress" | "brief_in_progress" | "plans_in_progress" | "not_found" | "method_not_allowed" | "internal_error" | "service_unavailable";
             /** @description Human-readable message safe to show to end users. */
             message: string;
             request_id?: string;
@@ -1587,7 +1671,7 @@ export interface components {
          * @description The request conflicts with the resource's state. `error.code` is one of
          *     `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
          *     `upload_incomplete`, `processing_in_progress`, `transcription_in_progress`,
-         *     `highlights_in_progress` or `brief_in_progress`.
+         *     `highlights_in_progress`, `brief_in_progress` or `plans_in_progress`.
          */
         Conflict: {
             headers: {
@@ -2795,6 +2879,68 @@ export interface operations {
             503: components["responses"]["ServiceUnavailable"];
         };
     };
+    getPlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current plan run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRun"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    requestPlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestPlansRequest"];
+            };
+        };
+        responses: {
+            /** @description Planning queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanRun"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
     listVoices: {
         parameters: {
             query?: never;
@@ -3089,7 +3235,7 @@ export interface operations {
             header?: never;
             path: {
                 orgID: components["parameters"]["OrgID"];
-                task: "transcription" | "highlights" | "briefs" | "voiceover";
+                task: "transcription" | "highlights" | "briefs" | "plans" | "voiceover";
             };
             cookie?: never;
         };

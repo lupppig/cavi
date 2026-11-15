@@ -1247,6 +1247,84 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/plans:
+    get:
+      operationId: getPlans
+      summary: The project's current edit plans
+      description: |
+        Anyone who can see the project can read them. 404 when plans have
+        never been requested. Plans are present once `status` is `ready`,
+        best first.
+      tags: [plans]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      responses:
+        "200":
+          description: The current plan run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanRun"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    post:
+      operationId: requestPlans
+      summary: Have the AI propose montages for this project
+      description: |
+        Requires `editing.manage`. Plans are made from the transcripts of
+        `media_asset_ids` (default: the project's newest transcribed files,
+        up to 5) and the project's creator brief, if it has one. The
+        transcripts' text and the brief, not the media, are sent to the
+        organisation's chosen model for the `plans` task; the brief and
+        files are fixed on the run and the request is audited. Times come
+        from the transcripts; plans that include excluded moments are
+        dropped. Requesting again replaces the plans; `plans_in_progress`
+        (409) while they're being made.
+      tags: [plans]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequestPlansRequest"
+      responses:
+        "202":
+          description: Planning queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanRun"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/voices:
     get:
       operationId: listVoices
@@ -1586,7 +1664,7 @@ paths:
         - name: task
           in: path
           required: true
-          schema: { type: string, enum: [transcription, highlights, briefs, voiceover] }
+          schema: { type: string, enum: [transcription, highlights, briefs, plans, voiceover] }
       requestBody:
         required: true
         content:
@@ -2297,6 +2375,66 @@ components:
             Where the frame sits along the axis the source is cropped on:
             0 left or top, 0.5 centre, 1 right or bottom.
 
+    RequestPlansRequest:
+      type: object
+      required: [min_seconds, max_seconds]
+      properties:
+        objective: { type: string, maxLength: 500 }
+        min_seconds: { type: integer, minimum: 10 }
+        max_seconds: { type: integer, maximum: 180, description: At least 5 more than `min_seconds`. }
+        media_asset_ids:
+          type: array
+          maxItems: 5
+          items: { type: string, format: uuid }
+
+    EditPlan:
+      type: object
+      required: [title, hook, voiceover_script, reason, campaign_link, duration_ms, segments]
+      properties:
+        title: { type: string }
+        hook: { type: string, description: On-screen text for the opening. }
+        voiceover_script: { type: string, description: Optional narration; empty when the footage needs none. }
+        reason: { type: string }
+        campaign_link: { type: string, description: How the plan connects to the brief's campaign message; empty without a brief. }
+        duration_ms: { type: integer, format: int64 }
+        segments:
+          type: array
+          description: Played in order. Use them as a montage's `segments`.
+          items:
+            type: object
+            required: [source_asset_id, start_ms, end_ms, flags]
+            properties:
+              source_asset_id: { type: string, format: uuid }
+              start_ms: { type: integer, format: int64 }
+              end_ms: { type: integer, format: int64 }
+              flags:
+                type: array
+                items: { $ref: "#/components/schemas/BriefFlag" }
+
+    PlanRun:
+      type: object
+      required: [id, status, provider, model, model_label, prompt_version, objective, min_seconds, max_seconds, media_asset_ids, used_brief, error, requested_at, completed_at, plans]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, running, ready, failed] }
+        provider: { type: string }
+        model: { type: string }
+        model_label: { type: string }
+        prompt_version: { type: string }
+        objective: { type: string }
+        min_seconds: { type: integer }
+        max_seconds: { type: integer }
+        media_asset_ids:
+          type: array
+          items: { type: string, format: uuid }
+        used_brief: { type: boolean }
+        error: { type: [string, "null"] }
+        requested_at: { type: string, format: date-time }
+        completed_at: { type: [string, "null"], format: date-time }
+        plans:
+          type: array
+          items: { $ref: "#/components/schemas/EditPlan" }
+
     Voice:
       type: object
       required: [id, label]
@@ -2521,7 +2659,7 @@ components:
             type: object
             required: [task, model, custom, options]
             properties:
-              task: { type: string, enum: [transcription, highlights, briefs, voiceover] }
+              task: { type: string, enum: [transcription, highlights, briefs, plans, voiceover] }
               model: { $ref: "#/components/schemas/AIModel" }
               custom: { type: boolean }
               options:
@@ -2568,6 +2706,7 @@ components:
             - transcription_in_progress
             - highlights_in_progress
             - brief_in_progress
+            - plans_in_progress
             - not_found
             - method_not_allowed
             - internal_error
@@ -2604,7 +2743,7 @@ components:
         The request conflicts with the resource's state. `error.code` is one of
         `last_owner`, `personal_organisation`, `already_member`, `invitation_exists`,
         `upload_incomplete`, `processing_in_progress`, `transcription_in_progress`,
-        `highlights_in_progress` or `brief_in_progress`.
+        `highlights_in_progress`, `brief_in_progress` or `plans_in_progress`.
       content:
         application/json:
           schema:

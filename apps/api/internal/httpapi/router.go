@@ -23,6 +23,7 @@ type Options struct {
 	Renders        RenderService
 	Briefs         BriefService
 	Voiceovers     VoiceoverService
+	Plans          PlanService
 	AISettings     AISettingsService
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
@@ -143,6 +144,11 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	br.PUT("", briefs.submit)
 	br.PATCH("", briefs.update)
 	br.DELETE("", briefs.delete)
+
+	plans := planHandler{svc: opts.Plans, orgHandler: orgs}
+	pl := proj.Group("/:projectID/plans", requireService(opts.Plans != nil))
+	pl.GET("", plans.get)
+	pl.POST("", plans.request)
 
 	vo := voiceoverHandler{svc: opts.Voiceovers, orgHandler: orgs}
 	vog := proj.Group("/:projectID/voiceovers", requireService(opts.Voiceovers != nil))

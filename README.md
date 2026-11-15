@@ -208,6 +208,10 @@ A project can hold the creator's brief for its campaign: paste it, choose the vi
 
 A render's composition can be a montage (version 3): segments from one or more files in the project, played one after another and reframed to one shape. Each segment can mute stretches of its audio (e.g. uncleared music) and blur regions of its frame (e.g. licence plates; boxes are fractions of the source frame, so they hold for any output shape). A hook shows text at the top of the opening. Captions come from each file's transcript and are placed on the montage's timeline. Every segment is checked against its file's creator brief, when the render is requested and again before it runs. Montages render at 30 fps; `make api-test-ffmpeg` checks blur, mute and voiceover mixing with real FFmpeg.
 
+## Edit plans
+
+`POST …/projects/{projectID}/plans` has the AI propose up to five montages from the transcripts of up to five files in the project and its creator brief. Each plan has segments (whole transcript lines from one or more files, in order), a hook for on-screen text, an optional voiceover script, a reason and its campaign link. Times come from the transcripts, never the model; plans over excluded moments, of the wrong length, or (with a brief) without a campaign link are dropped. The brief and the files are copied onto the run. Plans are suggestions: people open one in the montage composer, change it, and render it.
+
 ## Voiceovers
 
 A voiceover is a script spoken by an AI voice (`POST …/voiceovers`; voices from `GET /api/v1/voices`). The script goes to the organisation's model for the `voiceover` task; the audio is checked (not empty, silent, cut short or runaway for the script's length) and stored as WAV in object storage. A montage mixes a ready voiceover in with `voiceover: {voiceover_id, start_ms, duck}`, lowering the clip's own sound to `duck` while it plays; it must fit inside the clip. Deleting a voiceover removes its audio; clips already made keep their sound.

@@ -18,6 +18,10 @@ const taskNames: Record<string, { title: string; hint: string }> = {
     title: "Creator briefs",
     hint: "Reads a pasted brief into timed rules: moments to feature, avoid, blur, mute or review.",
   },
+  plans: {
+    title: "Edit plans",
+    hint: "Proposes montages from your transcripts and brief: segments, hooks and voiceover scripts.",
+  },
   voiceover: {
     title: "Voiceover",
     hint: "Speaks voiceover scripts in an AI voice for your clips.",
@@ -34,7 +38,7 @@ export function AIModels({ org }: { org: Organisation }) {
     mutationFn: async ({ task, value }: { task: string; value: string }) => {
       const [provider, model] = value ? value.split("/") : ["", ""];
       const { error, response } = await client().PUT("/api/v1/organisations/{orgID}/ai-models/{task}", {
-        params: { path: { orgID: org.id, task: task as "transcription" | "highlights" | "briefs" | "voiceover" } },
+        params: { path: { orgID: org.id, task: task as "transcription" | "highlights" | "briefs" | "plans" | "voiceover" } },
         body: { provider, model },
       });
       if (!response.ok) raise(error, response.status, "Could not save the model.");
