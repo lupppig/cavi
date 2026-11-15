@@ -9,7 +9,7 @@ import { CaptionOptionsPicker, CaptionPreview, captionLayout, defaultCaptionOpti
 import { useRequestTranscript, useTranscript } from "./transcript-panel";
 
 /** Output shapes, matching the API's composition aspects and render sizes. */
-const shapes: { aspect: Composition["aspect"]; w: number; h: number; outW: number; outH: number; hint: string }[] = [
+export const shapes: { aspect: Composition["aspect"]; w: number; h: number; outW: number; outH: number; hint: string }[] = [
   { aspect: "9:16", w: 9, h: 16, outW: 1080, outH: 1920, hint: "Reels, TikTok, Shorts" },
   { aspect: "1:1", w: 1, h: 1, outW: 1080, outH: 1080, hint: "Square feed" },
   { aspect: "4:5", w: 4, h: 5, outW: 1080, outH: 1350, hint: "Portrait feed" },
@@ -30,7 +30,7 @@ export function stampTenths(ms: number) {
   return `${h > 0 ? `${h}:${String(m).padStart(2, "0")}` : m}:${ss}.${tenths % 10}`;
 }
 
-function length(ms: number) {
+export function length(ms: number) {
   const s = Math.round(ms / 100) / 10;
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(Math.round(s % 60)).padStart(2, "0")}s`;
 }

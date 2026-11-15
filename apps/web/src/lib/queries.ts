@@ -21,6 +21,15 @@ export type Brief = components["schemas"]["Brief"];
 export type BriefRule = components["schemas"]["BriefRule"];
 export type BriefRuleKind = components["schemas"]["BriefRuleKind"];
 export type BriefFlag = components["schemas"]["BriefFlag"];
+export type PlanRun = components["schemas"]["PlanRun"];
+export type EditPlan = components["schemas"]["EditPlan"];
+export type Voiceover = components["schemas"]["Voiceover"];
+export type Voice = components["schemas"]["Voice"];
+export type MontageSegment = components["schemas"]["MontageSegment"];
+export type BlurBox = components["schemas"]["BlurBox"];
+export type TimeRange = components["schemas"]["TimeRange"];
+export type Hook = components["schemas"]["Hook"];
+export type VoiceoverMix = components["schemas"]["VoiceoverMix"];
 
 export class NotSignedIn extends Error {}
 export class NotFound extends Error {}

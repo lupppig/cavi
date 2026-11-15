@@ -29,7 +29,7 @@ export const ruleKinds: { kind: BriefRuleKind; label: string; hint: string; chip
 ];
 const kindInfo = (k: BriefRuleKind) => ruleKinds.find((r) => r.kind === k) ?? ruleKinds[0];
 
-function span(r: { start_ms: number; end_ms: number }) {
+export function span(r: { start_ms: number; end_ms: number }) {
   return r.end_ms > r.start_ms ? `${stamp(r.start_ms)}–${stamp(r.end_ms)}` : stamp(r.start_ms);
 }
 
@@ -518,9 +518,27 @@ function DeleteBrief({ project }: { project: Project }) {
   );
 }
 
+/**
+ * How near a clip must come to a single-moment rule to be flagged. Briefs
+ * name the moment something appears; plates and logos usually stay on
+ * screen around it.
+ */
+export const FLAG_WINDOW_MS = 10_000;
+
 /** Same rule as the API: a single moment counts if it's inside the clip; a range if they overlap. */
 function overlaps(r: { start_ms: number; end_ms: number }, startMS: number, endMS: number) {
   return r.start_ms === r.end_ms ? r.start_ms >= startMS && r.start_ms < endMS : r.start_ms < endMS && startMS < r.end_ms;
+}
+
+/**
+ * Same rule as the API for flags: single moments count within
+ * FLAG_WINDOW_MS either side; ranges when they overlap. Priorities are
+ * never flags. (Exclusions are refused on the exact test, overlaps.)
+ */
+export function flagged(r: { kind: BriefRuleKind; start_ms: number; end_ms: number }, startMS: number, endMS: number) {
+  if (r.kind === "priority") return false;
+  if (r.start_ms !== r.end_ms) return overlaps(r, startMS, endMS);
+  return Math.max(0, r.start_ms - FLAG_WINDOW_MS) < endMS && startMS < r.end_ms + FLAG_WINDOW_MS;
 }
 
 /**
@@ -532,9 +550,11 @@ export function BriefCheck({ project, asset, startMS, endMS }: { project: Projec
   const brief = useBrief(project);
   const b = brief.data;
   if (!b || b.status !== "ready") return null;
-  const touched = b.rules.filter((r) => r.media_asset_id === asset.id && r.kind !== "priority" && overlaps(r, startMS, endMS));
-  const excluded = touched.filter((r) => r.kind === "exclude");
-  if (touched.length === 0) return null;
+  const mine = b.rules.filter((r) => r.media_asset_id === asset.id);
+  const excluded = mine.filter((r) => r.kind === "exclude" && overlaps(r, startMS, endMS));
+  // An exclusion near the clip (not in it) still shows as a flag.
+  const flags = mine.filter((r) => flagged(r, startMS, endMS) && !excluded.includes(r));
+  if (excluded.length === 0 && flags.length === 0) return null;
   return (
     <div role="status" className={`rounded-xl border p-2.5 text-sm font-semibold ${excluded.length ? "border-danger/30 bg-danger-soft" : "border-line bg-surface-2"}`}>
       {excluded.length > 0 ? (
@@ -544,7 +564,7 @@ export function BriefCheck({ project, asset, startMS, endMS }: { project: Projec
       ) : (
         <p>This clip touches the brief:</p>
       )}
-      <FlagList flags={touched.filter((r) => r.kind !== "exclude")} />
+      <FlagList flags={flags} />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { PageHeader, StatePanel } from "@/components/account/page-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
 import { BriefSection } from "./brief-section";
 import { Studio } from "./media-section";
+import { PlansSection } from "./plans-section";
 import {
   can,
   client,
@@ -119,6 +120,7 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
         }
       />
       <BriefSection project={project} canEdit={can(project, "project.update")} />
+      <PlansSection project={project} canEdit={!!org && can(org, "editing.manage")} canRender={!!org && can(org, "render.execute")} />
       <Studio
         project={project}
         canUpload={!!org && can(org, "media.upload")}

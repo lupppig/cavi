@@ -363,7 +363,7 @@ function UploadRow({ job, onCancel }: { job: Job; onCancel: () => void }) {
 // Signed URLs change on every fetch. Keep using the first one until it's
 // close to expiring so refetches don't restart a playing video.
 const urlCache = new Map<string, { url: string; expires: number }>();
-function stable(cacheKey: string, url: string | null, expiresAt: string | null) {
+export function stable(cacheKey: string, url: string | null, expiresAt: string | null) {
   if (!url) return null;
   const cached = urlCache.get(cacheKey);
   if (cached && cached.expires - Date.now() > 5 * 60_000) return cached.url;
