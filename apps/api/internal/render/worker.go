@@ -273,28 +273,41 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 		inputs[id] = url
 	}
 	plan := PlanMontage(c, srcs, inputs)
-	if v := c.Voiceover; v != nil {
-		ready, err := voiceover.Load(ctx, r.db, job.OrganisationID, projectID, v.VoiceoverID)
+	// voice adds a ready voiceover to the plan, at clip time at, for at
+	// most length.
+	voice := func(id string, at, length int64, duck float64) error {
+		ready, err := voiceover.Load(ctx, r.db, job.OrganisationID, projectID, id)
 		if errors.Is(err, voiceover.ErrNotFound) {
 			return jobs.Permanent(errVoiceoverGone)
 		}
 		if err != nil {
 			return err
 		}
-		url, _, err := r.store.PresignDownload(ctx, ready.StorageKey, timeoutFor(length)+10*time.Minute)
+		url, _, err := r.store.PresignDownload(ctx, ready.StorageKey, timeoutFor(time.Duration(c.LengthMS())*time.Millisecond)+10*time.Minute)
 		if err != nil {
 			return err
 		}
-		plan.Voiceover, plan.Duck = url, v.Duck
-		plan.VoiceoverAt = time.Duration(v.StartMS) * time.Millisecond
-		plan.VoiceoverLength = time.Duration(min(ready.DurationMS, c.LengthMS()-v.StartMS)) * time.Millisecond
+		plan.Voices = append(plan.Voices, ffmpeg.Voice{Input: url, Duck: duck,
+			At: time.Duration(at) * time.Millisecond, Length: time.Duration(min(ready.DurationMS, length)) * time.Millisecond})
+		return nil
+	}
+	if v := c.Voiceover; v != nil {
+		if err := voice(v.VoiceoverID, v.StartMS, c.LengthMS()-v.StartMS, v.Duck); err != nil {
+			return err
+		}
+	}
+	if so := c.SignOff; so != nil && so.VoiceoverID != "" {
+		from := c.SignOffStartMS()
+		if err := voice(so.VoiceoverID, from, c.LengthMS()-from, signOffDuck); err != nil {
+			return err
+		}
 	}
 	dir, err := os.MkdirTemp(r.TempDir, "render-")
 	if err != nil {
 		return fmt.Errorf("render work dir: %w", err)
 	}
 	defer os.RemoveAll(dir)
-	if ass := OverlayASS(c.Captions, c.Hook, c.Aspect); ass != "" {
+	if ass := OverlayASS(c.Captions, c.Hook, c.SignOff, c.SignOffStartMS(), c.LengthMS(), c.Aspect); ass != "" {
 		plan.Subtitles = filepath.Join(dir, "overlay.ass")
 		plan.FontsDir = r.FontsDir
 		if err := os.WriteFile(plan.Subtitles, []byte(ass), 0o600); err != nil {

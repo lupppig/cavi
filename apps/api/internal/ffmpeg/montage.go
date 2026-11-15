@@ -59,16 +59,22 @@ type Montage struct {
 	// Subtitles, if set, is a local ASS file (captions, hook text) burned
 	// in after joining, with fonts from FontsDir.
 	Subtitles, FontsDir string
-	// Voiceover, if set, is mixed in from VoiceoverAt for VoiceoverLength,
-	// with the parts' own audio at Duck (0 to 1) while it plays.
-	Voiceover                    string
-	VoiceoverAt, VoiceoverLength time.Duration
-	Duck                         float64
+	// Voices are narration tracks (a voiceover, a spoken sign-off) mixed
+	// in over the parts' own audio.
+	Voices []Voice
 	// Music, if set, is a background track looped to fill the montage at
 	// MusicVolume (0 to 1), faded in and out, and lowered further while
 	// anyone speaks (dialogue or voiceover) so the words stay clear.
 	Music       string
 	MusicVolume float64
+}
+
+// Voice is a narration track played from At for Length, with the parts'
+// own audio at Duck (0 to 1) while it plays.
+type Voice struct {
+	Input      string
+	At, Length time.Duration
+	Duck       float64
 }
 
 // Length is the montage's total length.
@@ -150,19 +156,32 @@ func (m Montage) filterGraph() (string, error) {
 	} else {
 		g.WriteString("[vc]null[vout];")
 	}
-	if m.Voiceover != "" {
-		if m.Duck < 0 || m.Duck > 1 || m.VoiceoverLength <= 0 {
-			return "", fmt.Errorf("ffmpeg: invalid voiceover")
-		}
-		at := m.VoiceoverAt.Milliseconds()
-		// Synthesised voices arrive at full scale: level them to spoken-word
-		// loudness with headroom, and limit the mix so nothing clips.
-		fmt.Fprintf(&g, "[%d:a]highpass=f=70,loudnorm=I=-16:TP=-2:LRA=7,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=%d|%d,apad[vo];", next, at, at)
-		fmt.Fprintf(&g, "[ac]volume=%s:enable='between(t,%s,%s)'[ad];[ad][vo]amix=inputs=2:duration=first:normalize=0[speech];",
-			strconv.FormatFloat(m.Duck, 'f', 2, 64), secs(m.VoiceoverAt), secs(m.VoiceoverAt+m.VoiceoverLength))
-		next++
-	} else {
+	if len(m.Voices) == 0 {
 		g.WriteString("[ac]anull[speech];")
+	} else {
+		// Synthesised voices arrive at full scale: level them to spoken-word
+		// loudness with headroom, and limit the mix so nothing clips. The
+		// parts' audio is lowered under each.
+		mix := "[ad]"
+		g.WriteString("[ac]")
+		for k, v := range m.Voices {
+			if v.Duck < 0 || v.Duck > 1 || v.Length <= 0 || v.At < 0 {
+				return "", fmt.Errorf("ffmpeg: invalid voice %d", k)
+			}
+			if k > 0 {
+				g.WriteString(",")
+			}
+			fmt.Fprintf(&g, "volume=%s:enable='between(t,%s,%s)'", strconv.FormatFloat(v.Duck, 'f', 2, 64), secs(v.At), secs(v.At+v.Length))
+		}
+		g.WriteString("[ad];")
+		for k, v := range m.Voices {
+			at := v.At.Milliseconds()
+			fmt.Fprintf(&g, "[%d:a]highpass=f=70,loudnorm=I=-16:TP=-2:LRA=7,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"+
+				"atrim=duration=%s,adelay=%d|%d,apad[vo%d];", next, secs(v.Length), at, at, k)
+			mix += fmt.Sprintf("[vo%d]", k)
+			next++
+		}
+		fmt.Fprintf(&g, "%samix=inputs=%d:duration=first:normalize=0[speech];", mix, 1+len(m.Voices))
 	}
 	if m.Music == "" {
 		g.WriteString("[speech]alimiter=limit=0.95:level=disabled[aout]")
@@ -203,8 +222,8 @@ func (r *Runner) Montage(ctx context.Context, output string, m Montage, timeout 
 			args = append(args, "-ss", secs(t.Start), "-t", secs(p.Length), "-i", t.Input)
 		}
 	}
-	if m.Voiceover != "" {
-		args = append(args, "-i", m.Voiceover)
+	for _, v := range m.Voices {
+		args = append(args, "-i", v.Input)
 	}
 	if m.Music != "" {
 		args = append(args, "-stream_loop", "-1", "-i", m.Music)

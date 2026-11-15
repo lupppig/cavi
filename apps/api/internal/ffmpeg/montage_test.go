@@ -102,7 +102,12 @@ func TestRealMontage(t *testing.T) {
 
 	out := filepath.Join(dir, "montage.mp4")
 	m := Montage{Width: 360, Height: 640, FPS: 30, Subtitles: ass,
-		Voiceover: srv.URL + "/vo.wav", VoiceoverAt: 2500 * time.Millisecond, VoiceoverLength: time.Second, Duck: 0.2,
+		// Two voices: a short one over the muted opening and one over the
+		// b-roll.
+		Voices: []Voice{
+			{Input: srv.URL + "/vo.wav", At: 100 * time.Millisecond, Length: 500 * time.Millisecond, Duck: 0.2},
+			{Input: srv.URL + "/vo.wav", At: 2500 * time.Millisecond, Length: time.Second, Duck: 0.2},
+		},
 		Parts: []MontagePart{
 			// 2 s of the talk, 9:16 from the centre, its first second muted
 			// and its top-left blurred.
@@ -122,8 +127,11 @@ func TestRealMontage(t *testing.T) {
 	if p.Width != 360 || p.Height != 640 || p.AudioCodec != "aac" || p.Duration < 3400*time.Millisecond || p.Duration > 3700*time.Millisecond {
 		t.Fatalf("montage = %+v", p)
 	}
-	if v := loudness(t, out, 0.1, 0.8); v > -60 {
-		t.Errorf("muted range is %.1f dB, want silence", v)
+	if v := loudness(t, out, 0.15, 0.4); v < -40 {
+		t.Errorf("first voice is %.1f dB, want sound", v)
+	}
+	if v := loudness(t, out, 0.7, 0.25); v > -60 {
+		t.Errorf("muted range after the first voice is %.1f dB, want silence", v)
 	}
 	if v := loudness(t, out, 1.2, 0.6); v < -40 {
 		t.Errorf("unmuted talk is %.1f dB, want sound", v)

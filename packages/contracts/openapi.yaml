@@ -2363,6 +2363,7 @@ components:
           items: { $ref: "#/components/schemas/MontageSegment" }
         hook: { $ref: "#/components/schemas/Hook" }
         voiceover: { $ref: "#/components/schemas/VoiceoverMix" }
+        sign_off: { $ref: "#/components/schemas/SignOff" }
         source_asset_id: { type: string, format: uuid }
         start_ms: { type: integer, format: int64, minimum: 0 }
         end_ms: { type: integer, format: int64, description: Exclusive; 1 s to 10 min after `start_ms`. }
@@ -2493,6 +2494,20 @@ components:
         duck: { type: number, minimum: 0, maximum: 1, description: "The clip's own sound level while the voiceover plays (0.25 is a typical duck)." }
         duration_ms: { type: integer, format: int64, readOnly: true, description: Copied from the voiceover when the render is requested. }
 
+    SignOff:
+      type: object
+      description: |
+        The clip's ending (montages only): a card with `text` over the last
+        moments, optionally said by a ready voiceover. Silent, the card
+        shows for the last 2.5 s; spoken, for the voiceover's length plus
+        0.5 s, with the clip's own sound lowered. Captions stop where it
+        starts, and any `voiceover` must finish before it.
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 80, description: "e.g. \"Follow for more\"." }
+        voiceover_id: { type: string, format: uuid, description: A ready voiceover from this project that says the sign-off. }
+        voice_duration_ms: { type: integer, format: int64, readOnly: true, description: Copied from the voiceover when the render is requested. }
+
     TimeRange:
       type: object
       required: [start_ms, end_ms]
@@ -2566,8 +2581,8 @@ components:
       properties:
         style:
           type: string
-          enum: [bold, boxed]
-          description: "`bold`: text with an outline; `boxed`: text on a solid box."
+          enum: [bold, boxed, pop]
+          description: "`bold`: text with an outline; `boxed`: text on a solid box; `pop`: short-form style, word by word in capitals with a heavy outline and shadow, each word bouncing in as it's said (forces `mode: words` and `uppercase`)."
         mode:
           type: string
           enum: [lines, words]

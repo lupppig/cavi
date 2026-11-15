@@ -1355,6 +1355,7 @@ export interface components {
             segments?: components["schemas"]["MontageSegment"][];
             hook?: components["schemas"]["Hook"];
             voiceover?: components["schemas"]["VoiceoverMix"];
+            sign_off?: components["schemas"]["SignOff"];
             /** Format: uuid */
             source_asset_id: string;
             /** Format: int64 */
@@ -1485,6 +1486,27 @@ export interface components {
              */
             readonly duration_ms?: number;
         };
+        /**
+         * @description The clip's ending (montages only): a card with `text` over the last
+         *     moments, optionally said by a ready voiceover. Silent, the card
+         *     shows for the last 2.5 s; spoken, for the voiceover's length plus
+         *     0.5 s, with the clip's own sound lowered. Captions stop where it
+         *     starts, and any `voiceover` must finish before it.
+         */
+        SignOff: {
+            /** @description e.g. "Follow for more". */
+            text: string;
+            /**
+             * Format: uuid
+             * @description A ready voiceover from this project that says the sign-off.
+             */
+            voiceover_id?: string;
+            /**
+             * Format: int64
+             * @description Copied from the voiceover when the render is requested.
+             */
+            readonly voice_duration_ms?: number;
+        };
         TimeRange: {
             /**
              * Format: int64
@@ -1549,10 +1571,10 @@ export interface components {
         };
         CaptionOptions: {
             /**
-             * @description `bold`: text with an outline; `boxed`: text on a solid box.
+             * @description `bold`: text with an outline; `boxed`: text on a solid box; `pop`: short-form style, word by word in capitals with a heavy outline and shadow, each word bouncing in as it's said (forces `mode: words` and `uppercase`).
              * @enum {string}
              */
-            style: "bold" | "boxed";
+            style: "bold" | "boxed" | "pop";
             /**
              * @description `words` shows up to three words at a time and highlights the one being said.
              * @default lines

@@ -69,6 +69,7 @@ type Composition struct {
 	Segments  []Segment     `json:"segments,omitempty"`
 	Hook      *Hook         `json:"hook,omitempty"`
 	Voiceover *VoiceoverMix `json:"voiceover,omitempty"`
+	SignOff   *SignOff      `json:"sign_off,omitempty"`
 }
 
 // Source is what rendering needs to know about the source file.
@@ -86,7 +87,7 @@ func (c Composition) Validate(src Source) error {
 	if c.Version != 1 && c.Version != CompositionVersion {
 		return invalid("composition.version", fmt.Sprintf("Composition version must be 1 or %d.", CompositionVersion))
 	}
-	if len(c.Segments) > 0 || c.Hook != nil || c.Voiceover != nil {
+	if len(c.Segments) > 0 || c.Hook != nil || c.Voiceover != nil || c.SignOff != nil {
 		return invalid("composition.version", fmt.Sprintf("Segments and hooks need composition version %d.", MontageVersion))
 	}
 	if c.Version == 1 && c.Captions != nil {

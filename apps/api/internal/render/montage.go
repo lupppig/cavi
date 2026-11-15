@@ -24,6 +24,13 @@ const (
 	MinSegment        = 500 * time.Millisecond
 	MaxTreatments     = 20 // blur boxes or muted ranges per segment
 	MaxHookRunes      = 120
+	MaxSignOffRunes   = 80
+	// SignOffMS is how long a silent sign-off card shows; a spoken one
+	// shows while it's said, plus signOffTailMS.
+	SignOffMS     = 2500
+	signOffTailMS = 500
+	// signOffDuck is the clip's own sound under a spoken sign-off.
+	signOffDuck = 0.2
 	minBlurFraction   = 0.02
 	minHookMS         = 500
 	montageFPS        = 30
@@ -97,6 +104,34 @@ type VoiceoverMix struct {
 	Duck float64 `json:"duck"`
 	// DurationMS is copied from the voiceover when the render is requested.
 	DurationMS int64 `json:"duration_ms"`
+}
+
+// SignOff is the clip's ending: a card with Text over the last moments,
+// optionally said by the narrator (a ready voiceover), e.g. "Follow for
+// more". Captions give way to the card.
+type SignOff struct {
+	Text        string `json:"text"`
+	VoiceoverID string `json:"voiceover_id,omitempty"`
+	// VoiceDurationMS is copied from the voiceover when the render is
+	// requested.
+	VoiceDurationMS int64 `json:"voice_duration_ms,omitempty"`
+}
+
+// LengthMS is how long the card shows.
+func (s SignOff) LengthMS() int64 {
+	if s.VoiceoverID == "" {
+		return SignOffMS
+	}
+	return max(s.VoiceDurationMS+signOffTailMS, 1500)
+}
+
+// SignOffStartMS is where a montage's sign-off begins, in clip time; the
+// clip's length when it has none.
+func (c Composition) SignOffStartMS() int64 {
+	if c.SignOff == nil {
+		return c.LengthMS()
+	}
+	return max(c.LengthMS()-c.SignOff.LengthMS(), 0)
 }
 
 // LengthMS is the montage's total length.
@@ -231,6 +266,24 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 				float64(v.DurationMS)/1000, float64(total)/1000))
 		}
 	}
+	if so := c.SignOff; so != nil {
+		so.Text = strings.Join(strings.Fields(so.Text), " ")
+		if so.Text == "" || !utf8.ValidString(so.Text) || utf8.RuneCountInString(so.Text) > MaxSignOffRunes {
+			return invalid("composition.sign_off.text", fmt.Sprintf("Write a sign-off of up to %d characters.", MaxSignOffRunes))
+		}
+		if so.VoiceoverID != "" && so.VoiceDurationMS <= 0 {
+			return invalid("composition.sign_off.voiceover_id", "Choose a finished voiceover from this project.")
+		}
+		from := total - so.LengthMS()
+		if from < 0 {
+			return invalid("composition.sign_off", fmt.Sprintf(
+				"The sign-off (%.1f s) is longer than the clip (%.1f s).", float64(so.LengthMS())/1000, float64(total)/1000))
+		}
+		if v := c.Voiceover; v != nil && v.StartMS+v.DurationMS > from {
+			return invalid("composition.voiceover.start_ms", fmt.Sprintf(
+				"The voiceover runs into the sign-off, which starts at %.1f s. Start it earlier or make the clip longer.", float64(from)/1000))
+		}
+	}
 	first := c.Segments[0]
 	c.SourceAssetID, c.StartMS, c.EndMS, c.Focus = first.SourceAssetID, first.StartMS, first.EndMS, first.Focus
 	return nil
@@ -308,10 +361,11 @@ func MontageCaptions(segs []Segment, transcripts map[string][]ai.Segment, aspect
 	return out
 }
 
-// OverlayASS is the subtitle file for a montage: its captions (if any) and
-// its hook (if any). Empty when there is nothing to burn in.
-func OverlayASS(c *Captions, h *Hook, aspect string) string {
-	if c == nil && h == nil {
+// OverlayASS is the subtitle file for a montage: its captions, hook and
+// sign-off card (each if any; the card from signOffAt, clip time, to
+// lengthMS). Empty when there is nothing to burn in.
+func OverlayASS(c *Captions, h *Hook, so *SignOff, signOffAt, lengthMS int64, aspect string) string {
+	if c == nil && h == nil && so == nil {
 		return ""
 	}
 	sh, _ := shape(aspect)
@@ -323,17 +377,48 @@ func OverlayASS(c *Captions, h *Hook, aspect string) string {
 			"[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\n" +
 			"[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
 	}
-	if h == nil {
-		return s
+	if h != nil {
+		// White text on a black box, top centre, clear of platform UI.
+		size := sh.Width / 15
+		style := fmt.Sprintf("Style: Hook,Inter Black,%d,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,%d,0,8,%d,%d,%d,1\n",
+			size, size/4, sh.Width/10, sh.Width/10, sh.Height/9)
+		s = strings.Replace(s, "\n[Events]", style+"\n[Events]", 1)
+		// The script turns wrapping off for captions (they are split
+		// already); \q0 turns smart wrapping back on for the hook.
+		s += fmt.Sprintf("Dialogue: 1,%s,%s,Hook,,0,0,0,,{\\q0}%s\n", assTime(0), assTime(h.EndMS), assText(h.Text, false))
 	}
-	// White text on a black box, top centre, clear of platform UI.
-	size := sh.Width / 15
-	style := fmt.Sprintf("Style: Hook,Inter Black,%d,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,%d,0,8,%d,%d,%d,1\n",
-		size, size/4, sh.Width/10, sh.Width/10, sh.Height/9)
-	s = strings.Replace(s, "\n[Events]", style+"\n[Events]", 1)
-	// The script turns wrapping off for captions (they are split already);
-	// \q0 turns smart wrapping back on for the hook.
-	return s + fmt.Sprintf("Dialogue: 1,%s,%s,Hook,,0,0,0,,{\\q0}%s\n", assTime(0), assTime(h.EndMS), assText(h.Text, false))
+	if so != nil {
+		// Black text on a yellow box in the middle, popping in.
+		size := sh.Width / 12
+		style := fmt.Sprintf("Style: SignOff,Inter Black,%d,&H00000000,&H00000000,&H0000E6FF,&H0000E6FF,-1,0,0,0,100,100,0,0,3,%d,0,5,%d,%d,0,1\n",
+			size, size/3, sh.Width/10, sh.Width/10)
+		s = strings.Replace(s, "\n[Events]", style+"\n[Events]", 1)
+		s += fmt.Sprintf("Dialogue: 2,%s,%s,SignOff,,0,0,0,,{\\q0\\fscx40\\fscy40\\t(0,180,\\fscx110\\fscy110)\\t(180,280,\\fscx100\\fscy100)}%s\n",
+			assTime(signOffAt), assTime(lengthMS), assText(so.Text, false))
+	}
+	return s
+}
+
+// BeforeSignOff ends captions where the sign-off card starts: cues that
+// start later are dropped, and one running into it is cut short.
+func BeforeSignOff(cues []Cue, fromMS int64) []Cue {
+	out := make([]Cue, 0, len(cues))
+	for _, q := range cues {
+		if q.StartMS >= fromMS {
+			continue
+		}
+		if q.EndMS > fromMS {
+			q.EndMS = fromMS
+			ws := q.Words[:0:0]
+			for _, w := range q.Words {
+				w.StartMS, w.EndMS = min(w.StartMS, fromMS), min(w.EndMS, fromMS)
+				ws = append(ws, w)
+			}
+			q.Words = ws
+		}
+		out = append(out, q)
+	}
+	return out
 }
 
 // VoiceoverCues are caption cues for a voiceover's script, timed by its

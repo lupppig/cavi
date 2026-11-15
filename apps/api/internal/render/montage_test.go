@@ -97,16 +97,16 @@ func TestMontageCaptionsAndOverlay(t *testing.T) {
 	if len(cues) < 2 || cues[0].StartMS != 0 || cues[len(cues)-1].EndMS > 4000 || cues[len(cues)-1].StartMS < 2000 {
 		t.Fatalf("cues = %+v", cues)
 	}
-	ass := OverlayASS(nil, &Hook{Text: "How diamonds built Botswana", EndMS: 2000}, "9:16")
+	ass := OverlayASS(nil, &Hook{Text: "How diamonds built Botswana", EndMS: 2000}, nil, 0, 0, "9:16")
 	if !strings.Contains(ass, "Style: Hook,") || !strings.Contains(ass, "Dialogue: 1,0:00:00.00,0:00:02.00,Hook,,0,0,0,,{\\q0}How diamonds built Botswana") {
 		t.Fatalf("hook overlay:\n%s", ass)
 	}
 	caps := &Captions{CaptionOptions: CaptionOptions{Style: CaptionsBoxed}, Cues: cues}
-	both := OverlayASS(caps, &Hook{Text: "Hook", EndMS: 1000}, "9:16")
+	both := OverlayASS(caps, &Hook{Text: "Hook", EndMS: 1000}, nil, 0, 0, "9:16")
 	if strings.Index(both, "Style: Hook") > strings.Index(both, "[Events]") || !strings.Contains(both, ",Cap,") {
 		t.Fatalf("captions and hook:\n%s", both)
 	}
-	if OverlayASS(nil, nil, "9:16") != "" {
+	if OverlayASS(nil, nil, nil, 0, 0, "9:16") != "" {
 		t.Fatal("empty overlay should be empty")
 	}
 }
@@ -227,8 +227,8 @@ func TestRenderMontageWithVoiceover(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := ff.montages[0]
-	if m.Voiceover == "" || m.VoiceoverAt != 1500*time.Millisecond || m.VoiceoverLength != 4*time.Second || m.Duck != 0.25 {
-		t.Fatalf("plan voiceover = %q at %v for %v duck %v", m.Voiceover, m.VoiceoverAt, m.VoiceoverLength, m.Duck)
+	if len(m.Voices) != 1 || m.Voices[0].Input == "" || m.Voices[0].At != 1500*time.Millisecond || m.Voices[0].Length != 4*time.Second || m.Voices[0].Duck != 0.25 {
+		t.Fatalf("plan voices = %+v", m.Voices)
 	}
 
 	r2, err := w.svc.Create(w.ctx, ana.id, org, proj, "Again", c, nil)
@@ -277,6 +277,83 @@ func TestVoiceoverCaptions(t *testing.T) {
 	}
 	if !voText || !laterText {
 		t.Fatalf("cues = %+v", r.Composition.Captions.Cues)
+	}
+}
+
+func TestRenderMontageWithSignOff(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 60_000, true)
+	w.transcribe(org, src, [3]any{10_000, 20_000, "People talk right through to the very end of this clip"})
+	intro := w.readyVoiceover(org, proj, 3000)
+	outro := w.readyVoiceover(org, proj, 2000)
+	c := montageOf(Segment{SourceAssetID: src, StartMS: 10_000, EndMS: 20_000, Focus: 0.5})
+
+	c.SignOff = &SignOff{Text: "   "}
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Empty", c, nil)
+	wantField(t, err, "composition.sign_off.text")
+	c.SignOff = &SignOff{Text: "Follow for more", VoiceoverID: newID()}
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Missing voice", c, nil)
+	wantField(t, err, "composition.sign_off.voiceover_id")
+	// The intro would still be playing when the 2.5 s sign-off starts.
+	c.SignOff = &SignOff{Text: "Follow for more", VoiceoverID: outro}
+	c.Voiceover = &VoiceoverMix{VoiceoverID: intro, StartMS: 5000, Duck: 0.2}
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Overlap", c, nil)
+	wantField(t, err, "composition.voiceover.start_ms")
+
+	c.Voiceover.StartMS = 500
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Signed off", c, &CaptionOptions{Style: CaptionsBold})
+	if err != nil {
+		t.Fatal(err)
+	}
+	so := r.Composition.SignOff
+	if so.VoiceDurationMS != 2000 || r.Composition.SignOffStartMS() != 7500 {
+		t.Fatalf("sign-off = %+v starts %d", so, r.Composition.SignOffStartMS())
+	}
+	for _, q := range r.Composition.Captions.Cues {
+		if q.EndMS > 7500 {
+			t.Fatalf("caption runs under the sign-off card: %+v", q)
+		}
+	}
+	ff := &fakeFFmpeg{}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err != nil {
+		t.Fatal(err)
+	}
+	m := ff.montages[0]
+	if len(m.Voices) != 2 || m.Voices[1].At != 7500*time.Millisecond || m.Voices[1].Length != 2*time.Second || m.Voices[1].Duck != signOffDuck {
+		t.Fatalf("plan voices = %+v", m.Voices)
+	}
+
+	// Silent: a fixed-length card.
+	c.SignOff = &SignOff{Text: "Like and subscribe"}
+	c.Voiceover = nil
+	r, err = w.svc.Create(w.ctx, ana.id, org, proj, "Silent sign-off", c, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Composition.SignOffStartMS() != 10_000-SignOffMS {
+		t.Fatalf("silent sign-off starts %d", r.Composition.SignOffStartMS())
+	}
+	ass := OverlayASS(nil, nil, r.Composition.SignOff, 7500, 10_000, "9:16")
+	if !strings.Contains(ass, "Style: SignOff") || !strings.Contains(ass, "Dialogue: 2,0:00:07.50,0:00:10.00,SignOff") || !strings.Contains(ass, "Like and subscribe") {
+		t.Fatalf("overlay = %s", ass)
+	}
+}
+
+func TestBeforeSignOff(t *testing.T) {
+	cues := []Cue{
+		{StartMS: 0, EndMS: 1000, Text: "a", Words: []CueWord{{0, 1000, "a"}}},
+		{StartMS: 1500, EndMS: 3000, Text: "b c", Words: []CueWord{{1500, 2000, "b"}, {2600, 3000, "c"}}},
+		{StartMS: 3000, EndMS: 4000, Text: "d", Words: []CueWord{{3000, 4000, "d"}}},
+	}
+	got := BeforeSignOff(cues, 2500)
+	if len(got) != 2 || got[1].EndMS != 2500 || got[1].Words[1].StartMS != 2500 || got[1].Words[1].EndMS != 2500 {
+		t.Fatalf("got %+v", got)
+	}
+	if cues[1].EndMS != 3000 || cues[1].Words[1].StartMS != 2600 {
+		t.Fatal("input cues changed")
 	}
 }
 

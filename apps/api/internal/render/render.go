@@ -176,7 +176,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
 			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.LengthMS(), "segments": max(1, len(c.Segments)),
-				"hook": c.Hook != nil, "voiceover": c.Voiceover != nil, "captions": captions != nil})
+				"hook": c.Hook != nil, "voiceover": c.Voiceover != nil, "sign_off": c.SignOff != nil, "captions": captions != nil})
 	})
 	if err != nil {
 		return Render{}, err
@@ -486,6 +486,16 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 			}
 			c.Voiceover.DurationMS = vo.DurationMS
 		}
+		if so := c.SignOff; so != nil {
+			so.VoiceDurationMS = 0
+			if so.VoiceoverID != "" {
+				spoken, err := voiceover.Load(ctx, tx, orgID, projectID, so.VoiceoverID)
+				if err != nil {
+					return invalid("composition.sign_off.voiceover_id", "Choose a finished voiceover from this project.")
+				}
+				so.VoiceDurationMS = spoken.DurationMS
+			}
+		}
 		if captions != nil {
 			opts, err := captions.Normalize()
 			if err != nil {
@@ -505,6 +515,9 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 			cues := MontageCaptions(c.Segments, transcripts, c.Aspect, opts.Mode)
 			if c.Voiceover != nil {
 				cues = WithVoiceover(cues, VoiceoverCues(vo.Script, vo.Words, vo.DurationMS, c.Voiceover.StartMS, c.Aspect, opts.Mode))
+			}
+			if c.SignOff != nil {
+				cues = BeforeSignOff(cues, c.SignOffStartMS())
 			}
 			c.Captions = &Captions{CaptionOptions: opts, Cues: cues}
 		}
