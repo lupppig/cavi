@@ -112,8 +112,10 @@ func (m Montage) filterGraph() (string, error) {
 			return "", fmt.Errorf("ffmpeg: invalid voiceover")
 		}
 		at := m.VoiceoverAt.Milliseconds()
-		fmt.Fprintf(&g, "[%d:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=%d|%d,apad[vo];", len(m.Parts), at, at)
-		fmt.Fprintf(&g, "[ac]volume=%s:enable='between(t,%s,%s)'[ad];[ad][vo]amix=inputs=2:duration=first:normalize=0[aout]",
+		// Synthesised voices arrive at full scale: level them to spoken-word
+		// loudness with headroom, and limit the mix so nothing clips.
+		fmt.Fprintf(&g, "[%d:a]highpass=f=70,loudnorm=I=-16:TP=-2:LRA=7,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,adelay=%d|%d,apad[vo];", len(m.Parts), at, at)
+		fmt.Fprintf(&g, "[ac]volume=%s:enable='between(t,%s,%s)'[ad];[ad][vo]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95:level=disabled[aout]",
 			strconv.FormatFloat(m.Duck, 'f', 2, 64), secs(m.VoiceoverAt), secs(m.VoiceoverAt+m.VoiceoverLength))
 	} else {
 		g.WriteString("[ac]anull[aout]")
