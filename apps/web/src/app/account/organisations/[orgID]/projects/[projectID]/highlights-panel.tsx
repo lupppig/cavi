@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, NotFound, raise, useAIModelSettings, type Highlights, type MediaAsset, type Project } from "@/lib/queries";
+import { FlagList } from "./brief-section";
 import { ClipComposer } from "./clips";
 import { stamp, useTranscript } from "./transcript-panel";
 
@@ -180,6 +181,7 @@ export function HighlightsPanel({
                         {stamp(c.start_ms)}–{stamp(c.end_ms)} · {seconds(c.end_ms - c.start_ms)}
                       </p>
                       <p className="mt-1 text-sm font-medium break-words">{c.reason}</p>
+                      <FlagList flags={c.flags} />
                       <div className="mt-2 flex flex-wrap gap-2">
                         <button
                           type="button"

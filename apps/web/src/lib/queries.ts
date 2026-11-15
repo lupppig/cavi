@@ -17,6 +17,10 @@ export type Highlights = components["schemas"]["Highlights"];
 export type Render = components["schemas"]["Render"];
 export type Composition = components["schemas"]["Composition"];
 export type CaptionOptions = components["schemas"]["CaptionOptions"];
+export type Brief = components["schemas"]["Brief"];
+export type BriefRule = components["schemas"]["BriefRule"];
+export type BriefRuleKind = components["schemas"]["BriefRuleKind"];
+export type BriefFlag = components["schemas"]["BriefFlag"];
 
 export class NotSignedIn extends Error {}
 export class NotFound extends Error {}

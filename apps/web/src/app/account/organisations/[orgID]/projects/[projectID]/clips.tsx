@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import { Banner } from "@/components/account/account-header";
+import { BriefCheck, FlagList } from "./brief-section";
 import { client, raise, type CaptionOptions, type Composition, type MediaAsset, type Project, type Render } from "@/lib/queries";
 import { CaptionOptionsPicker, CaptionPreview, captionLayout, defaultCaptionOptions, firstCaption } from "./caption-options";
 import { useRequestTranscript, useTranscript } from "./transcript-panel";
@@ -200,6 +201,7 @@ export function ClipComposer({
   return (
     <form onSubmit={submit} aria-label="Make a clip" className="@container space-y-3 card p-2.5 sm:p-3">
       {create.isError && <Banner>{create.error.message}</Banner>}
+      <BriefCheck project={project} asset={asset} startMS={start} endMS={end} />
       {/* Two columns when there's room: what you're cutting on the left, how it looks on the right. */}
       <div className="grid gap-3 @[44rem]:grid-cols-2 @[44rem]:gap-6">
         <div className="min-w-0 space-y-3">
@@ -487,6 +489,7 @@ export function ClipsPanel({
                     {c.captions ? ` · ${c.captions.mode === "words" ? "word-by-word" : "line"} captions` : ""}
                   </p>
                 </div>
+                <FlagList flags={r.flags} />
                 {busy && (
                   <p className="mt-1 flex items-center gap-2 text-sm font-semibold" role="status">
                     <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-accent" />

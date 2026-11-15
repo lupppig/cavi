@@ -44,24 +44,7 @@ export function Studio({
   const orgID = project.organisation_id;
   const [jobs, setJobs] = useState<Job[]>([]);
 
-  const media = useInfiniteQuery({
-    queryKey: listKey,
-    initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam }) => {
-      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/projects/{projectID}/media", {
-        params: { path: { orgID, projectID: project.id }, query: { cursor: pageParam } },
-      });
-      if (!data) raise(error, response.status, "Could not load media.");
-      return data;
-    },
-    getNextPageParam: (last) => last.next_cursor ?? undefined,
-    // Poll while anything is still processing. (Live updates over a
-    // WebSocket can replace this later.)
-    refetchInterval: (q) =>
-      q.state.data?.pages.some((p) => p.data.some((a) => a.processing.status === "pending" || a.processing.status === "processing"))
-        ? 2000
-        : false,
-  });
+  const media = useProjectMedia(project);
 
   const busy = jobs.some((j) => j.state === "sending" || j.state === "checking");
   // Leaving mid-upload loses the upload; ask first.
@@ -633,4 +616,27 @@ function MediaViewer({
       )}
     </article>
   );
+}
+
+/** A project's media, newest first, in pages. Polls while anything is still processing. */
+export function useProjectMedia(project: Project) {
+  const orgID = project.organisation_id;
+  return useInfiniteQuery({
+    queryKey: ["project", project.id, "media"],
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ pageParam }) => {
+      const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/projects/{projectID}/media", {
+        params: { path: { orgID, projectID: project.id }, query: { cursor: pageParam } },
+      });
+      if (!data) raise(error, response.status, "Could not load media.");
+      return data;
+    },
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+    // Poll while anything is still processing. (Live updates over a
+    // WebSocket can replace this later.)
+    refetchInterval: (q) =>
+      q.state.data?.pages.some((p) => p.data.some((a) => a.processing.status === "pending" || a.processing.status === "processing"))
+        ? 2000
+        : false,
+  });
 }

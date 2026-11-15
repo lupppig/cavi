@@ -7,6 +7,7 @@ import { useId, useState, type FormEvent } from "react";
 import { Banner } from "@/components/account/account-header";
 import { PageHeader, StatePanel } from "@/components/account/page-header";
 import { GoogleSignIn } from "@/components/account/google-sign-in";
+import { BriefSection } from "./brief-section";
 import { Studio } from "./media-section";
 import {
   can,
@@ -117,6 +118,7 @@ function ProjectView({ project, org }: { project: Project; org?: Organisation })
           </Link>
         }
       />
+      <BriefSection project={project} canEdit={can(project, "project.update")} />
       <Studio
         project={project}
         canUpload={!!org && can(org, "media.upload")}
