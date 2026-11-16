@@ -12,11 +12,16 @@ import (
 // v2 centres plans on a person the brief says must be featured, and asks
 // for a voiceover in every plan: about that person by name, in a curious,
 // playful narrator's voice that sets up what the video is about.
-const PlansPromptVersion = "plans-v2"
+//
+// v3 plans for retention: a cold open on the most gripping line, setup
+// cut to the minimum, ending on the payoff; hooks that open a curiosity
+// gap; titles written to be clicked; a voiceover only when the footage
+// needs one; and up to 10 plans, for making a batch.
+const PlansPromptVersion = "plans-v3"
 
 // Edit plan limits.
 const (
-	MaxPlans          = 5
+	MaxPlans          = 10
 	MaxPlanSegments   = 8
 	MaxPlanFiles      = 5
 	MaxPlanHookRunes  = 80
