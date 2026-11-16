@@ -19,6 +19,12 @@ type fakeFF struct {
 	probe    ffmpeg.Probe
 	probeErr error
 	frames   int
+	// levels is the sound's loudness (pauseFPS a second).
+	levels []float64
+}
+
+func (f *fakeFF) Loudness(context.Context, string, int, time.Duration) ([]float64, error) {
+	return f.levels, nil
 }
 
 func (f *fakeFF) Probe(context.Context, string) (ffmpeg.Probe, error) { return f.probe, f.probeErr }
@@ -225,5 +231,43 @@ func TestProcessorRespectsTenantAndDeletion(t *testing.T) {
 	}
 	if err := w.processor(ff).Process(w.ctx, j); err != nil || ff.frames != 0 {
 		t.Fatalf("processed deleted media: %v", err)
+	}
+}
+
+func TestProcessFindsPauses(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	a := w.upload(ana, org, proj, "a.mp4", mp4)
+	// Speech with a second-long gap at 1-2 s.
+	levels := speech(3000, [2]int64{1000, 2000})
+	if err := w.processor(&fakeFF{probe: videoProbe, levels: levels}).Process(w.ctx, w.queuedJob(a.ID)); err != nil {
+		t.Fatal(err)
+	}
+	ps, ok, err := Pauses(w.ctx, w.db, org, a.ID)
+	if err != nil || !ok || len(ps) != 1 || ps[0] != (Pause{1000, 2000}) {
+		t.Fatalf("pauses = %+v, %v, %v", ps, ok, err)
+	}
+	// A file processed before pauses were found can be prepared again.
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE media_assets SET pauses = NULL WHERE id = ?`, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err := w.svc.Reprocess(w.ctx, ana.id, org, proj, a.ID)
+	if err != nil || got.ProcessingStatus != ProcessingPending {
+		t.Fatalf("reprocess for pauses = %q, %v", got.ProcessingStatus, err)
+	}
+	// Silent files have none to find, and aren't reprocessed for them.
+	silent := w.upload(ana, org, proj, "b.mp4", mp4)
+	quiet := videoProbe
+	quiet.HasAudio, quiet.AudioCodec = false, ""
+	if err := w.processor(&fakeFF{probe: quiet}).Process(w.ctx, w.queuedJob(silent.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := Pauses(w.ctx, w.db, org, silent.ID); ok {
+		t.Fatal("pauses for a silent file")
+	}
+	if got, err := w.svc.Reprocess(w.ctx, ana.id, org, proj, silent.ID); err != nil || got.ProcessingStatus != ProcessingReady {
+		t.Fatalf("silent reprocess = %q, %v", got.ProcessingStatus, err)
 	}
 }

@@ -491,8 +491,9 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID, assetID st
 // ErrProcessingInProgress means the file is already being processed.
 var ErrProcessingInProgress = errors.New("media: processing in progress")
 
-// Reprocess queues processing again for a file whose processing failed
-// (media.upload). Calling it on a ready file returns it unchanged.
+// Reprocess queues processing again for a file whose processing failed,
+// or that was processed before its pauses were found (media.upload).
+// Calling it on another ready file returns it unchanged.
 func (s *Service) Reprocess(ctx context.Context, actorID, orgID, projectID, assetID string) (Asset, error) {
 	queued := false
 	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -510,9 +511,16 @@ func (s *Service) Reprocess(ctx context.Context, actorID, orgID, projectID, asse
 		if !canUpload(acc) {
 			return ErrForbidden
 		}
+		var needsPauses bool
+		if err := tx.QueryRowContext(ctx, `SELECT pauses IS NULL AND audio_codec IS NOT NULL FROM media_assets WHERE id = ?`, assetID).
+			Scan(&needsPauses); err != nil {
+			return fmt.Errorf("check pauses: %w", err)
+		}
 		switch a.ProcessingStatus {
 		case ProcessingReady:
-			return nil
+			if !needsPauses {
+				return nil
+			}
 		case ProcessingPending, ProcessingProcessing:
 			return ErrProcessingInProgress
 		}

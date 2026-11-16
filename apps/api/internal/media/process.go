@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"encoding/json"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -38,10 +39,12 @@ const thumbnailWidth = 640
 type Inspector interface {
 	Probe(ctx context.Context, input string) (ffmpeg.Probe, error)
 	Frame(ctx context.Context, input string, offset time.Duration, maxWidth int) ([]byte, error)
+	Loudness(ctx context.Context, input string, fps int, timeout time.Duration) ([]float64, error)
 }
 
-// Processor handles media.process jobs: it probes a file and makes a
-// thumbnail. It runs in the media worker.
+// Processor handles media.process jobs: it probes a file, makes a
+// thumbnail and finds the pauses in its sound. It runs in the media
+// worker.
 type Processor struct {
 	db     *bun.DB
 	store  storage.Store
@@ -59,13 +62,13 @@ var _ jobs.Handler = (*Processor)(nil)
 // Process implements jobs.Handler. It is idempotent: running it again
 // re-derives the same results.
 func (p *Processor) Process(ctx context.Context, job jobs.Job) error {
-	var projectID, key, kind, status string
+	var projectID, key, kind, status, framingStatus string
 	// The asset must belong to the job's organisation; the job's own
 	// foreign key guarantees it, and this query re-checks rather than trusts.
 	err := p.db.QueryRowContext(ctx, `
-		SELECT project_id, storage_key, coalesce(kind, ''), status FROM media_assets
+		SELECT project_id, storage_key, coalesce(kind, ''), status, coalesce(framing_status, '') FROM media_assets
 		WHERE id = ? AND organisation_id = ?`, job.MediaAssetID, job.OrganisationID).
-		Scan(&projectID, &key, &kind, &status)
+		Scan(&projectID, &key, &kind, &status, &framingStatus)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // deleted since the job was queued; nothing to do
 	}
@@ -101,6 +104,21 @@ func (p *Processor) Process(ctx context.Context, job jobs.Job) error {
 		return classify(err)
 	}
 
+	// Pauses, for cutting them out of clips. Decoding the sound is quick
+	// next to the video.
+	var pauses any
+	if probe.HasAudio {
+		levels, err := p.ff.Loudness(ctx, url, pauseFPS, min(30*time.Minute, max(2*time.Minute, probe.Duration/5)))
+		if err != nil {
+			return classify(err)
+		}
+		raw, err := json.Marshal(FindPauses(levels, pauseFPS))
+		if err != nil {
+			return err
+		}
+		pauses = string(raw)
+	}
+
 	thumbKey := ""
 	if thumb != nil {
 		// One key per job, so reprocessing never overwrites a thumbnail
@@ -111,7 +129,8 @@ func (p *Processor) Process(ctx context.Context, job jobs.Job) error {
 		}
 	}
 
-	// Videos are then analysed for auto framing, queued with the results.
+	// Videos are then analysed for auto framing (unless they already are),
+	// queued with the results.
 	frame := kind == KindVideo && probe.HasVideo
 	err = p.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		res, err := tx.ExecContext(ctx, `
@@ -120,12 +139,12 @@ func (p *Processor) Process(ctx context.Context, job jobs.Job) error {
 				container = NULLIF(?, ''), duration_ms = ?, bit_rate = ?,
 				width = ?, height = ?, frame_rate = ?, video_codec = NULLIF(?, ''),
 				audio_codec = NULLIF(?, ''), audio_channels = ?, sample_rate = ?,
-				thumbnail_key = NULLIF(?, '')
+				thumbnail_key = NULLIF(?, ''), pauses = ?::jsonb
 			WHERE id = ? AND organisation_id = ?`,
 			probe.Container, nullInt(probe.Duration.Milliseconds()), nullInt(probe.BitRate),
 			nullInt(int64(probe.Width)), nullInt(int64(probe.Height)), nullFloat(probe.FrameRate), probe.VideoCodec,
 			probe.AudioCodec, nullInt(int64(probe.AudioChannels)), nullInt(int64(probe.SampleRate)),
-			thumbKey, job.MediaAssetID, job.OrganisationID)
+			thumbKey, pauses, job.MediaAssetID, job.OrganisationID)
 		if err != nil {
 			return fmt.Errorf("save processing results: %w", err)
 		}
@@ -136,7 +155,7 @@ func (p *Processor) Process(ctx context.Context, job jobs.Job) error {
 			}
 			return err
 		}
-		if frame {
+		if frame && framingStatus != FramingReady && framingStatus != FramingPending && framingStatus != FramingProcessing {
 			return queueFraming(ctx, tx, job.OrganisationID, job.MediaAssetID)
 		}
 		return nil

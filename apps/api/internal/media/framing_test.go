@@ -101,7 +101,8 @@ func TestFramingAnalysis(t *testing.T) {
 		t.Fatalf("request again = %+v, %v", again.FramingStatus, err)
 	}
 
-	// Reprocessing redoes the analysis; meanwhile the old track is unused.
+	// Reprocessing (to find pauses, say) keeps the analysis: the picture
+	// hasn't changed, and analysis is slow.
 	if _, err := w.db.ExecContext(w.ctx, `UPDATE media_assets SET processing_status = 'failed' WHERE id = ?`, a.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -111,8 +112,11 @@ func TestFramingAnalysis(t *testing.T) {
 	if err := w.processor(&fakeFF{probe: videoProbe}).Process(w.ctx, w.queuedJob(a.ID)); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, _ := FramingTrack(w.ctx, w.db, org, a.ID); ok {
-		t.Fatal("stale track used while reanalysing")
+	if _, ok, _ := FramingTrack(w.ctx, w.db, org, a.ID); !ok {
+		t.Fatal("reprocessing dropped the framing analysis")
+	}
+	if n := w.count(`SELECT count(*) FROM jobs WHERE media_asset_id = ? AND kind = 'media.framing'`, a.ID); n != 1 {
+		t.Fatalf("framing jobs = %d, want 1", n)
 	}
 }
 
