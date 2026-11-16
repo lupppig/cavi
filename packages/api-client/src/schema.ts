@@ -885,6 +885,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/clip-look": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's look
+         * @description The house style new montages and batches start from, so a
+         *     channel's clips look like they belong together. Anyone in the
+         *     organisation can read it; `custom` is false for the default.
+         */
+        get: operations["getClipLook"];
+        /**
+         * Save the organisation's look
+         * @description Requires `editing.manage`.
+         */
+        put: operations["setClipLook"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/ai-models": {
         parameters: {
             query?: never;
@@ -1731,6 +1757,22 @@ export interface components {
             text: string;
             /** Format: int64 */
             end_ms: number;
+        };
+        ClipLook: {
+            /** @description Caption choices (speaker colours aside); null for no captions. */
+            captions: components["schemas"]["CaptionOptions"] | null;
+            /** @description The sign-off card's text; empty for none. */
+            sign_off: string;
+            /** @description Start clips with auto framing. */
+            follow_people: boolean;
+            /** @description Start montages with pauses cut. */
+            cut_pauses: boolean;
+            /** @description Show PART n/N on the parts of a series. */
+            series_badge: boolean;
+        };
+        ClipLookResponse: components["schemas"]["ClipLook"] & {
+            /** @description The organisation chose it; false for the default. */
+            custom: boolean;
         };
         CaptionOptions: {
             /**
@@ -3508,6 +3550,65 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getClipLook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The look. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipLookResponse"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    setClipLook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClipLook"];
+            };
+        };
+        responses: {
+            /** @description The saved look. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClipLookResponse"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

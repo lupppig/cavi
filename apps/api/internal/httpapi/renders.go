@@ -20,6 +20,8 @@ type RenderService interface {
 	Get(ctx context.Context, actorID, orgID, projectID, renderID string) (render.Render, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, renderID string) error
 	FramingPreview(ctx context.Context, actorID, orgID, projectID, assetID, aspect string, startMS, endMS int64, focus float64) ([]framing.Key, error)
+	Look(ctx context.Context, actorID, orgID string) (render.Look, bool, error)
+	SetLook(ctx context.Context, actorID, orgID string, l render.Look) (render.Look, error)
 }
 
 type renderHandler struct {
@@ -252,4 +254,53 @@ func (h renderHandler) framingPath(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, framingPathResponse{Keys: keys})
+}
+
+// lookBody is an organisation's look, in requests and responses.
+type lookBody struct {
+	Captions     *captionOptions `json:"captions"`
+	SignOff      string          `json:"sign_off"`
+	FollowPeople bool            `json:"follow_people"`
+	CutPauses    bool            `json:"cut_pauses"`
+	SeriesBadge  bool            `json:"series_badge"`
+}
+
+type lookResponse struct {
+	lookBody
+	// Custom: the organisation chose it (rather than the default).
+	Custom bool `json:"custom"`
+}
+
+func toLookResponse(l render.Look, custom bool) lookResponse {
+	out := lookResponse{lookBody: lookBody{SignOff: l.SignOff, FollowPeople: l.FollowPeople, CutPauses: l.CutPauses, SeriesBadge: l.SeriesBadge}, Custom: custom}
+	if l.Captions != nil {
+		out.Captions = &summarise(&render.Captions{CaptionOptions: *l.Captions}).captionOptions
+	}
+	return out
+}
+
+func (h renderHandler) look(c *gin.Context) {
+	l, custom, err := h.svc.Look(c.Request.Context(), actor(c), c.Param("orgID"))
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toLookResponse(l, custom))
+}
+
+func (h renderHandler) setLook(c *gin.Context) {
+	var req lookBody
+	if !decodeJSON(c, &req) {
+		return
+	}
+	l := render.Look{SignOff: req.SignOff, FollowPeople: req.FollowPeople, CutPauses: req.CutPauses, SeriesBadge: req.SeriesBadge}
+	if req.Captions != nil {
+		l.Captions = req.Captions.toRender()
+	}
+	saved, err := h.svc.SetLook(c.Request.Context(), actor(c), c.Param("orgID"), l)
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, toLookResponse(saved, true))
 }

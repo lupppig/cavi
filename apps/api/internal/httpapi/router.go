@@ -169,6 +169,10 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	// The camera path is computed by the render service.
 	med.GET("/:assetID/framing/path", requireService(opts.Renders != nil), renders.framingPath)
 
+	lookGroup := signedIn.Group("/organisations/:orgID/clip-look", requireService(opts.Renders != nil))
+	lookGroup.GET("", renders.look)
+	lookGroup.PUT("", renders.setLook)
+
 	aiH := aiHandler{svc: opts.AISettings, orgHandler: orgs}
 	aiGroup := signedIn.Group("/organisations/:orgID/ai-models", requireService(opts.AISettings != nil))
 	aiGroup.GET("", aiH.settings)

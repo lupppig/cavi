@@ -773,3 +773,33 @@ func TestPanFollowsTheShape(t *testing.T) {
 		t.Fatal("version 1 accepted auto framing")
 	}
 }
+
+func TestLook(t *testing.T) {
+	w := newWorld(t)
+	ana, vic := w.user("Ana"), w.user("Vic")
+	org := w.team(ana, map[string]person{authz.RoleViewer: vic})
+	l, custom, err := w.svc.Look(w.ctx, vic.id, org)
+	if err != nil || custom || l.Captions == nil || l.Captions.Style != CaptionsPop || !l.CutPauses || l.SignOff == "" {
+		t.Fatalf("default look = %+v, %v, %v", l, custom, err)
+	}
+	if _, _, err := w.svc.Look(w.ctx, w.user("Eve").id, org); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("outsider: %v", err)
+	}
+	want := Look{Captions: &CaptionOptions{Style: CaptionsBoxed, SpeakerColors: map[string]string{"Speaker 1": "#FFFFFF"}}, SignOff: "  Follow   for Part 2 ", SeriesBadge: true}
+	if _, err := w.svc.SetLook(w.ctx, vic.id, org, want); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("viewer: %v", err)
+	}
+	if _, err := w.svc.SetLook(w.ctx, ana.id, org, Look{SignOff: strings.Repeat("x", 81)}); err == nil {
+		t.Fatal("long sign-off accepted")
+	}
+	if _, err := w.svc.SetLook(w.ctx, ana.id, org, Look{Captions: &CaptionOptions{Style: "comic sans"}}); err == nil {
+		t.Fatal("bad caption style accepted")
+	}
+	if _, err := w.svc.SetLook(w.ctx, ana.id, org, want); err != nil {
+		t.Fatal(err)
+	}
+	l, custom, err = w.svc.Look(w.ctx, vic.id, org)
+	if err != nil || !custom || l.Captions.Style != CaptionsBoxed || l.Captions.SpeakerColors != nil || l.SignOff != "Follow for Part 2" || l.CutPauses || !l.SeriesBadge {
+		t.Fatalf("saved look = %+v, %v, %v", l, custom, err)
+	}
+}

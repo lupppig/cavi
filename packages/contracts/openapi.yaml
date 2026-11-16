@@ -1748,6 +1748,71 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/clip-look:
+    get:
+      operationId: getClipLook
+      summary: The organisation's look
+      description: |
+        The house style new montages and batches start from, so a
+        channel's clips look like they belong together. Anyone in the
+        organisation can read it; `custom` is false for the default.
+      tags: [renders]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: The look.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipLookResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    put:
+      operationId: setClipLook
+      summary: Save the organisation's look
+      description: Requires `editing.manage`.
+      tags: [renders]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClipLook"
+      responses:
+        "200":
+          description: The saved look.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipLookResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/ai-models:
     get:
       operationId: listAIModelSettings
@@ -2807,6 +2872,29 @@ components:
       properties:
         text: { type: string, minLength: 1, maxLength: 120 }
         end_ms: { type: integer, format: int64, minimum: 500 }
+
+    ClipLook:
+      type: object
+      required: [captions, sign_off, follow_people, cut_pauses, series_badge]
+      additionalProperties: false
+      properties:
+        captions:
+          description: Caption choices (speaker colours aside); null for no captions.
+          oneOf:
+            - $ref: "#/components/schemas/CaptionOptions"
+            - type: "null"
+        sign_off: { type: string, maxLength: 80, description: The sign-off card's text; empty for none. }
+        follow_people: { type: boolean, description: Start clips with auto framing. }
+        cut_pauses: { type: boolean, description: Start montages with pauses cut. }
+        series_badge: { type: boolean, description: Show PART n/N on the parts of a series. }
+
+    ClipLookResponse:
+      allOf:
+        - $ref: "#/components/schemas/ClipLook"
+        - type: object
+          required: [custom]
+          properties:
+            custom: { type: boolean, description: The organisation chose it; false for the default. }
 
     CaptionOptions:
       type: object
