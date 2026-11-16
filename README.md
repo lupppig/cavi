@@ -22,7 +22,7 @@ CAVI does one thing for now: **clipping**. Live clipping is next.
 6. **Edit.** Join moments from one or more videos, frame each for 9:16, 1:1, 4:5 or 16:9 by hand or let the camera follow the people in shot, open on a split screen of several scenes, blur licence plates or faces, mute uncleared music, cut the pauses, add a hook, word-by-word or bouncing "pop" captions, an AI voiceover (captioned too), and a sign-off card ("Like and subscribe for more!") the narrator can say.
 7. **Render and download.** CAVI renders an MP4 and checks its size, length and sound before keeping it. Download it and post it.
 
-Every plan comes with commentary in your own words, voiced and placed through the clip, so clips of other people's footage are your own work for YouTube's reused-content review; an originality check shows how much of each clip is your narration.
+Every plan comes with commentary in your own words, voiced (record it in your own voice in the browser, or have an AI voice read it) and placed through the clip, so clips of other people's footage are your own work for YouTube's reused-content review; an originality check shows how much of each clip is your narration.
 
 Connect your YouTube channel (read-only) and CAVI shows how each upload did, matched to the clip it came from, and plans more like the ones viewers watched to the end.
 
