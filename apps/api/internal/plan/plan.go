@@ -82,6 +82,8 @@ type Plan struct {
 	// Part (from 1) and SeriesTitle are set for the parts of a series.
 	Part        int
 	SeriesTitle string
+	// Commentary is narration through the plan, anchored to its segments.
+	Commentary []ai.CommentaryLine
 }
 
 // Run is a project's current plans as seen by a caller.
@@ -309,7 +311,7 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID string) (Ru
 		return r, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT title, hook, voiceover_script, reason, campaign_link, segments, coalesce(part, 0), series_title FROM edit_plans
+		SELECT title, hook, voiceover_script, reason, campaign_link, segments, coalesce(part, 0), series_title, commentary FROM edit_plans
 		WHERE plan_run_id = ? ORDER BY position`, r.ID)
 	if err != nil {
 		return Run{}, fmt.Errorf("load plans: %w", err)
@@ -318,8 +320,12 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID string) (Ru
 	for rows.Next() {
 		var p Plan
 		var segs []byte
-		if err := rows.Scan(&p.Title, &p.Hook, &p.VoiceoverScript, &p.Reason, &p.CampaignLink, &segs, &p.Part, &p.SeriesTitle); err != nil {
+		var commentary []byte
+		if err := rows.Scan(&p.Title, &p.Hook, &p.VoiceoverScript, &p.Reason, &p.CampaignLink, &segs, &p.Part, &p.SeriesTitle, &commentary); err != nil {
 			return Run{}, err
+		}
+		if err := json.Unmarshal(commentary, &p.Commentary); err != nil {
+			return Run{}, fmt.Errorf("plan commentary: %w", err)
 		}
 		if err := json.Unmarshal(segs, &p.Segments); err != nil {
 			return Run{}, fmt.Errorf("plan segments: %w", err)
@@ -443,10 +449,17 @@ func (p *Planner) Process(ctx context.Context, job jobs.Job) error {
 			if err != nil {
 				return err
 			}
+			if pl.Commentary == nil {
+				pl.Commentary = []ai.CommentaryLine{}
+			}
+			commentary, err := json.Marshal(pl.Commentary)
+			if err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO edit_plans (plan_run_id, position, title, hook, voiceover_script, reason, campaign_link, segments, part, series_title)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, NULLIF(?, 0), ?)`,
-				job.SubjectID, i, pl.Title, pl.Hook, pl.VoiceoverScript, pl.Reason, pl.CampaignLink, string(b), pl.Part, pl.SeriesTitle); err != nil {
+				INSERT INTO edit_plans (plan_run_id, position, title, hook, voiceover_script, reason, campaign_link, segments, part, series_title, commentary)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, NULLIF(?, 0), ?, ?::jsonb)`,
+				job.SubjectID, i, pl.Title, pl.Hook, pl.VoiceoverScript, pl.Reason, pl.CampaignLink, string(b), pl.Part, pl.SeriesTitle, string(commentary)); err != nil {
 				return fmt.Errorf("save plan: %w", err)
 			}
 		}

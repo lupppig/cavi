@@ -273,7 +273,8 @@ func TestSeriesPlans(t *testing.T) {
 	seg := func(a, b int) []ai.PlanSegment { return []ai.PlanSegment{{File: 0, FirstSegment: a, LastSegment: b}} }
 	fp := &fakePlanner{plans: []ai.Plan{
 		{Title: "The reveal (Part 2)", Hook: "Part 2: so who paid?", Reason: "r", Part: 2, SeriesTitle: "x", Segments: seg(4, 5)},
-		{Title: "The reveal (Part 1)", Hook: "Nobody expected this", Reason: "r", Part: 1, SeriesTitle: "The reveal", Segments: seg(0, 1)},
+		{Title: "The reveal (Part 1)", Hook: "Nobody expected this", Reason: "r", Part: 1, SeriesTitle: "The reveal", Segments: seg(0, 1),
+			Commentary: []ai.CommentaryLine{{Segment: 1, Text: "Watch what happens when he asks the question."}, {Segment: 2, Text: "So who do you think paid for it?"}}},
 	}}
 	if err := w.planner(fp).Process(w.ctx, w.job(run.ID)); err != nil {
 		t.Fatal(err)
@@ -286,7 +287,8 @@ func TestSeriesPlans(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !got.Series || len(got.Plans) != 2 || got.Plans[0].Part != 1 || got.Plans[1].Part != 2 ||
-		got.Plans[0].SeriesTitle != "The reveal" || got.Plans[1].SeriesTitle != "The reveal" {
+		got.Plans[0].SeriesTitle != "The reveal" || got.Plans[1].SeriesTitle != "The reveal" ||
+		len(got.Plans[0].Commentary) != 2 || got.Plans[0].Commentary[1].Segment != 2 || len(got.Plans[1].Commentary) != 0 {
 		t.Fatalf("series = %+v", got)
 	}
 }

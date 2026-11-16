@@ -503,7 +503,8 @@ Viewers decide to swipe away in the first two seconds, and most short videos los
 For each plan write:
 - title: a title for YouTube Shorts and TikTok that makes people tap, under 70 characters: specific and intriguing, accurate to the video (no claims it doesn't deliver);
 - hook: on-screen text for the first seconds, under 60 characters, that opens a question the video answers (for example "He didn't expect this answer"), accurate to what the video shows and says;
-- voiceover_script: only if the opening needs context the footage doesn't give, a short narration (8 to 20 words), like a real narrator: curious and warm, talking to the viewer about the people on screen in the third person. Otherwise an empty string: most strong moments don't need one. Never put words in a speaker's mouth or claim facts the footage doesn't support;
+- commentary: 3 to 6 lines of original commentary, the channel's own narration over the footage, which is what makes a clip of someone else's video the channel's own work. Each line has a segment (the number of the segment it plays at the start of, from 1; one more than the number of segments for a closing line at the end) and text (6 to 20 words, said in about 2 to 6 seconds). The first line, at segment 1, sets up what the viewer is about to see; the others add context, explain, give a take or point out what's surprising; end with a closing line: a takeaway or a question to the viewer. Speak to the viewer as a knowledgeable, curious narrator, in your own words: never repeat or paraphrase what the speakers are about to say, never put words in their mouths, and never claim facts the footage doesn't support. The footage's sound is lowered while a line plays, so keep them short and place them where the speakers are setting up, not mid-punchline;
+- voiceover_script: an empty string;
 - reason: one or two sentences telling the editor why this plan will hold attention;
 - campaign_link: as described below.
 Write in the transcripts' language. Do not invent anything that isn't in the transcripts.
@@ -537,8 +538,20 @@ var plansSchema = &genai.Schema{
 					"voiceover_script": {Type: genai.TypeString},
 					"reason":           {Type: genai.TypeString},
 					"campaign_link":    {Type: genai.TypeString},
-					"part":             {Type: genai.TypeInteger, Description: "series only: this part's number, from 1"},
-					"series_title":     {Type: genai.TypeString, Description: "series only: the whole series' title, the same in every part"},
+					"commentary": {
+						Type: genai.TypeArray,
+						Items: &genai.Schema{
+							Type: genai.TypeObject,
+							Properties: map[string]*genai.Schema{
+								"segment": {Type: genai.TypeInteger, Description: "the segment it plays at the start of, from 1; one more than the number of segments for the end"},
+								"text":    {Type: genai.TypeString},
+							},
+							Required:         []string{"segment", "text"},
+							PropertyOrdering: []string{"segment", "text"},
+						},
+					},
+					"part":         {Type: genai.TypeInteger, Description: "series only: this part's number, from 1"},
+					"series_title": {Type: genai.TypeString, Description: "series only: the whole series' title, the same in every part"},
 					"segments": {
 						Type: genai.TypeArray,
 						Items: &genai.Schema{
@@ -553,8 +566,8 @@ var plansSchema = &genai.Schema{
 						},
 					},
 				},
-				Required:         []string{"title", "hook", "voiceover_script", "reason", "campaign_link", "segments"},
-				PropertyOrdering: []string{"title", "segments", "hook", "voiceover_script", "reason", "campaign_link"},
+				Required:         []string{"title", "hook", "commentary", "reason", "campaign_link", "segments"},
+				PropertyOrdering: []string{"title", "segments", "hook", "commentary", "voiceover_script", "reason", "campaign_link"},
 			},
 		},
 	},
@@ -563,13 +576,14 @@ var plansSchema = &genai.Schema{
 
 type plansJSON struct {
 	Plans []struct {
-		Title           string `json:"title"`
-		Hook            string `json:"hook"`
-		VoiceoverScript string `json:"voiceover_script"`
-		Reason          string `json:"reason"`
-		CampaignLink    string `json:"campaign_link"`
-		Part            int    `json:"part"`
-		SeriesTitle     string `json:"series_title"`
+		Title           string           `json:"title"`
+		Hook            string           `json:"hook"`
+		VoiceoverScript string           `json:"voiceover_script"`
+		Commentary      []CommentaryLine `json:"commentary"`
+		Reason          string           `json:"reason"`
+		CampaignLink    string           `json:"campaign_link"`
+		Part            int              `json:"part"`
+		SeriesTitle     string           `json:"series_title"`
 		Segments        []struct {
 			File      int `json:"file"`
 			FirstLine int `json:"first_line"`
@@ -623,7 +637,7 @@ func (g *Gemini) Plans(ctx context.Context, model Model, files []PlanFile, brief
 	}
 	ps := make([]Plan, len(out.Plans))
 	for i, p := range out.Plans {
-		ps[i] = Plan{Title: p.Title, Hook: p.Hook, VoiceoverScript: p.VoiceoverScript, Reason: p.Reason, CampaignLink: p.CampaignLink, Part: p.Part, SeriesTitle: p.SeriesTitle}
+		ps[i] = Plan{Title: p.Title, Hook: p.Hook, VoiceoverScript: p.VoiceoverScript, Reason: p.Reason, CampaignLink: p.CampaignLink, Part: p.Part, SeriesTitle: p.SeriesTitle, Commentary: p.Commentary}
 		for _, s := range p.Segments {
 			ps[i].Segments = append(ps[i].Segments, PlanSegment{File: s.File - 1, FirstSegment: s.FirstLine, LastSegment: s.LastLine})
 		}

@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -21,7 +22,12 @@ import (
 // v4 adds the channel's results, when a YouTube channel is connected: how
 // much of each recent Short viewers watched and the subscribers it won,
 // to plan more like what holds this audience.
-const PlansPromptVersion = "plans-v4"
+//
+// v5 replaces the opening narration with commentary through the whole
+// plan: 3 to 6 short lines in the channel's own words (context, an
+// explanation, a take, a takeaway), each anchored to a segment or the end,
+// which is what makes clips of other people's footage original work.
+const PlansPromptVersion = "plans-v5"
 
 // Edit plan limits.
 const (
@@ -31,6 +37,9 @@ const (
 	MaxPlanHookRunes  = 80
 	MaxPlanVoiceRunes = 400
 	planLengthSlackMS = 10_000
+	// Commentary lines per plan, and each line's length.
+	MaxCommentaryLines = 6
+	maxCommentaryRunes = 200
 	// MaxSeriesParts is the most parts a series is planned in.
 	MaxSeriesParts = 5
 )
@@ -106,10 +115,42 @@ type Plan struct {
 	Reason          string
 	CampaignLink    string
 	Segments        []PlanSegment
+	// Commentary is narration through the plan, in order.
+	Commentary []CommentaryLine
 	// Part and SeriesTitle are set when the plans are a series: this
 	// plan's part number (from 1) and the whole series' title.
 	Part        int
 	SeriesTitle string
+}
+
+// CommentaryLine is one line of narration: Text, said at the start of
+// segment Segment (from 1), or at the end when Segment is one past the
+// last.
+type CommentaryLine struct {
+	Segment int    `json:"segment"`
+	Text    string `json:"text"`
+}
+
+// cleanCommentary keeps the lines that are anchored to the plan, the
+// right length and one per anchor, in order.
+func cleanCommentary(lines []CommentaryLine, segments int) []CommentaryLine {
+	out := []CommentaryLine{}
+	seen := map[int]bool{}
+	for _, l := range lines {
+		l.Text = strings.Join(strings.Fields(l.Text), " ")
+		words := len(strings.Fields(l.Text))
+		if l.Segment < 1 || l.Segment > segments+1 || seen[l.Segment] || words < 3 || words > 35 ||
+			utf8.RuneCountInString(l.Text) > maxCommentaryRunes {
+			continue
+		}
+		seen[l.Segment] = true
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Segment < out[j].Segment })
+	if len(out) > MaxCommentaryLines {
+		out = out[:MaxCommentaryLines]
+	}
+	return out
 }
 
 // LengthMS is the plan's total length.
@@ -177,6 +218,7 @@ plans:
 		if utf8.RuneCountInString(p.VoiceoverScript) > MaxPlanVoiceRunes {
 			p.VoiceoverScript = ""
 		}
+		p.Commentary = cleanCommentary(p.Commentary, len(p.Segments))
 		for j := range p.Segments {
 			s := &p.Segments[j]
 			if s.File < 0 || s.File >= len(files) {

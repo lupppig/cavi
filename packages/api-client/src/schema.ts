@@ -1684,13 +1684,23 @@ export interface components {
         };
         EditPlan: {
             title: string;
+            /**
+             * @description Up to 6 lines of narration in the channel's own words, in order:
+             *     each said at the start of `segment` (from 1), or at the end when
+             *     `segment` is one past the last. Voice them as voiceovers and use
+             *     them as the montage's `commentary`, anchored by `segment`.
+             */
+            commentary: {
+                segment: number;
+                text: string;
+            }[];
             /** @description The part's number in a series; null for separate plans. */
             part: number | null;
             /** @description The series' title (the same in every part); null for separate plans. */
             series_title: string | null;
             /** @description On-screen text for the opening. */
             hook: string;
-            /** @description Optional narration; empty when the footage needs none. */
+            /** @description Opening narration from plans before plans-v5; empty since (use commentary). */
             voiceover_script: string;
             reason: string;
             /** @description How the plan connects to the brief's campaign message; empty without a brief. */

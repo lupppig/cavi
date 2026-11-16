@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,8 @@ type planResponse struct {
 	CampaignLink    string                `json:"campaign_link"`
 	DurationMS      int64                 `json:"duration_ms"`
 	Segments        []planSegmentResponse `json:"segments"`
+	// Commentary is narration through the plan, anchored to its segments.
+	Commentary []ai.CommentaryLine `json:"commentary"`
 	// Part (from 1) and SeriesTitle: the plan is a part of a series.
 	Part        *int    `json:"part"`
 	SeriesTitle *string `json:"series_title"`
@@ -73,7 +76,10 @@ func toPlanRunResponse(r plan.Run) planRunResponse {
 	for i, p := range r.Plans {
 		pr := planResponse{Title: p.Title, Hook: p.Hook, VoiceoverScript: p.VoiceoverScript, Reason: p.Reason,
 			CampaignLink: p.CampaignLink, Segments: make([]planSegmentResponse, len(p.Segments)),
-			Part: ptr(p.Part), SeriesTitle: ptr(p.SeriesTitle)}
+			Part: ptr(p.Part), SeriesTitle: ptr(p.SeriesTitle), Commentary: p.Commentary}
+		if pr.Commentary == nil {
+			pr.Commentary = []ai.CommentaryLine{}
+		}
 		for j, s := range p.Segments {
 			pr.Segments[j] = planSegmentResponse{SourceAssetID: s.SourceAssetID, StartMS: s.StartMS, EndMS: s.EndMS, Flags: toFlags(s.Flags)}
 			pr.DurationMS += s.EndMS - s.StartMS

@@ -188,3 +188,27 @@ func TestChannelSection(t *testing.T) {
 		t.Fatalf("markers not stripped:\n%s", got)
 	}
 }
+
+func TestCleanCommentary(t *testing.T) {
+	got := cleanCommentary([]CommentaryLine{
+		{Segment: 3, Text: "And   this is the bit nobody saw coming."},
+		{Segment: 1, Text: "Marlon has just landed in Botswana for the first time."},
+		{Segment: 1, Text: "A second line at the same place is dropped."},
+		{Segment: 5, Text: "Out of range: the plan has three segments."},
+		{Segment: 2, Text: "Too short"},
+		{Segment: 4, Text: "So would you study somewhere this good for free?"},
+	}, 3)
+	want := []CommentaryLine{
+		{1, "Marlon has just landed in Botswana for the first time."},
+		{3, "And this is the bit nobody saw coming."},
+		{4, "So would you study somewhere this good for free?"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("commentary = %+v", got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("commentary = %+v, want %+v", got, want)
+		}
+	}
+}

@@ -2865,13 +2865,26 @@ components:
 
     EditPlan:
       type: object
-      required: [title, hook, voiceover_script, reason, campaign_link, duration_ms, segments, part, series_title]
+      required: [title, hook, voiceover_script, reason, campaign_link, duration_ms, segments, part, series_title, commentary]
       properties:
         title: { type: string }
+        commentary:
+          type: array
+          description: |
+            Up to 6 lines of narration in the channel's own words, in order:
+            each said at the start of `segment` (from 1), or at the end when
+            `segment` is one past the last. Voice them as voiceovers and use
+            them as the montage's `commentary`, anchored by `segment`.
+          items:
+            type: object
+            required: [segment, text]
+            properties:
+              segment: { type: integer, minimum: 1 }
+              text: { type: string }
         part: { type: [integer, "null"], minimum: 1, description: "The part's number in a series; null for separate plans." }
         series_title: { type: [string, "null"], description: The series' title (the same in every part); null for separate plans. }
         hook: { type: string, description: On-screen text for the opening. }
-        voiceover_script: { type: string, description: Optional narration; empty when the footage needs none. }
+        voiceover_script: { type: string, description: "Opening narration from plans before plans-v5; empty since (use commentary)." }
         reason: { type: string }
         campaign_link: { type: string, description: How the plan connects to the brief's campaign message; empty without a brief. }
         duration_ms: { type: integer, format: int64 }
