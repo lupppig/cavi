@@ -53,6 +53,8 @@ type Request struct {
 	// MediaAssetIDs are the files to plan from; empty means the project's
 	// transcribed files (up to ai.MaxPlanFiles, newest first).
 	MediaAssetIDs []string
+	// Series asks for one story in consecutive parts.
+	Series bool
 }
 
 // Segment is a stretch of a file in a plan.
@@ -75,6 +77,9 @@ type Plan struct {
 	Reason          string
 	CampaignLink    string
 	Segments        []Segment
+	// Part (from 1) and SeriesTitle are set for the parts of a series.
+	Part        int
+	SeriesTitle string
 }
 
 // Run is a project's current plans as seen by a caller.
@@ -88,6 +93,8 @@ type Run struct {
 	PromptVersion string
 	Objective     string
 	MinMS, MaxMS  int64
+	// Series: the plans are the parts of one series.
+	Series bool
 	MediaAssetIDs []string
 	UsedBrief     bool
 	Error         string
@@ -169,17 +176,17 @@ func (s *Service) Request(ctx context.Context, actorID, orgID, projectID string,
 		}
 		if err := tx.QueryRowContext(ctx, `
 			INSERT INTO plan_runs (organisation_id, project_id, status, provider, model, prompt_version, objective,
-				min_ms, max_ms, media_asset_ids, campaign, requested_by_user_id)
-			VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?::uuid[], ?::jsonb, ?)
+				min_ms, max_ms, media_asset_ids, campaign, requested_by_user_id, series)
+			VALUES (?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?::uuid[], ?::jsonb, ?, ?)
 			ON CONFLICT (project_id) DO UPDATE SET
 				status = 'queued', provider = EXCLUDED.provider, model = EXCLUDED.model,
 				prompt_version = EXCLUDED.prompt_version, objective = EXCLUDED.objective, min_ms = EXCLUDED.min_ms,
 				max_ms = EXCLUDED.max_ms, media_asset_ids = EXCLUDED.media_asset_ids, campaign = EXCLUDED.campaign,
-				requested_by_user_id = EXCLUDED.requested_by_user_id, error = NULL,
+				requested_by_user_id = EXCLUDED.requested_by_user_id, series = EXCLUDED.series, error = NULL,
 				created_at = now(), updated_at = now(), completed_at = NULL
 			RETURNING id`,
 			orgID, projectID, model.Provider, model.ID, ai.PlansPromptVersion, req.Objective,
-			int64(req.MinSeconds)*1000, int64(req.MaxSeconds)*1000, "{"+strings.Join(ids, ",")+"}", campaign, actorID).Scan(&runID); err != nil {
+			int64(req.MinSeconds)*1000, int64(req.MaxSeconds)*1000, "{"+strings.Join(ids, ",")+"}", campaign, actorID, req.Series).Scan(&runID); err != nil {
 			return fmt.Errorf("queue plans: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM edit_plans WHERE plan_run_id = ?`, runID); err != nil {
@@ -190,7 +197,7 @@ func (s *Service) Request(ctx context.Context, actorID, orgID, projectID string,
 			return err
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "plans.requested", "project", projectID,
-			map[string]any{"files": len(ids), "brief": snap != nil, "provider": model.Provider, "model": model.ID})
+			map[string]any{"files": len(ids), "brief": snap != nil, "series": req.Series, "provider": model.Provider, "model": model.ID})
 	})
 	if err != nil {
 		return Run{}, err
@@ -279,10 +286,10 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID string) (Ru
 	var completed sql.NullTime
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, project_id, status, provider, model, prompt_version, objective, min_ms, max_ms, media_asset_ids::text,
-			campaign IS NOT NULL, coalesce(error, ''), created_at, completed_at
+			campaign IS NOT NULL, coalesce(error, ''), created_at, completed_at, series
 		FROM plan_runs WHERE project_id = ? AND organisation_id = ?`, projectID, orgID).
 		Scan(&r.ID, &r.ProjectID, &r.Status, &r.Provider, &r.Model, &r.PromptVersion, &r.Objective, &r.MinMS, &r.MaxMS,
-			&ids, &r.UsedBrief, &r.Error, &r.CreatedAt, &completed)
+			&ids, &r.UsedBrief, &r.Error, &r.CreatedAt, &completed, &r.Series)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Run{}, ErrNotFound
 	}
@@ -300,7 +307,7 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID string) (Ru
 		return r, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT title, hook, voiceover_script, reason, campaign_link, segments FROM edit_plans
+		SELECT title, hook, voiceover_script, reason, campaign_link, segments, coalesce(part, 0), series_title FROM edit_plans
 		WHERE plan_run_id = ? ORDER BY position`, r.ID)
 	if err != nil {
 		return Run{}, fmt.Errorf("load plans: %w", err)
@@ -309,7 +316,7 @@ func (s *Service) Get(ctx context.Context, actorID, orgID, projectID string) (Ru
 	for rows.Next() {
 		var p Plan
 		var segs []byte
-		if err := rows.Scan(&p.Title, &p.Hook, &p.VoiceoverScript, &p.Reason, &p.CampaignLink, &segs); err != nil {
+		if err := rows.Scan(&p.Title, &p.Hook, &p.VoiceoverScript, &p.Reason, &p.CampaignLink, &segs, &p.Part, &p.SeriesTitle); err != nil {
 			return Run{}, err
 		}
 		if err := json.Unmarshal(segs, &p.Segments); err != nil {
@@ -364,12 +371,13 @@ var errGone = errors.New("plan: a file or transcript is gone")
 // plans in one transaction.
 func (p *Planner) Process(ctx context.Context, job jobs.Job) error {
 	var projectID, provider, modelID, objective, ids string
+	var series bool
 	var minMS, maxMS int64
 	var campaign []byte
 	err := p.db.QueryRowContext(ctx, `
-		SELECT project_id, provider, model, objective, min_ms, max_ms, media_asset_ids::text, campaign FROM plan_runs
+		SELECT project_id, provider, model, objective, min_ms, max_ms, media_asset_ids::text, campaign, series FROM plan_runs
 		WHERE id = ? AND organisation_id = ? AND status IN ('queued', 'running')`, job.SubjectID, job.OrganisationID).
-		Scan(&projectID, &provider, &modelID, &objective, &minMS, &maxMS, &ids, &campaign)
+		Scan(&projectID, &provider, &modelID, &objective, &minMS, &maxMS, &ids, &campaign, &series)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil // deleted or replaced; nothing to do
 	}
@@ -380,7 +388,7 @@ func (p *Planner) Process(ctx context.Context, job jobs.Job) error {
 	if !ok {
 		return jobs.Permanent(fmt.Errorf("%w: model %s/%s is no longer supported", ai.ErrPermanent, provider, modelID))
 	}
-	brf := ai.PlanBrief{Objective: objective, MinMS: minMS, MaxMS: maxMS}
+	brf := ai.PlanBrief{Objective: objective, MinMS: minMS, MaxMS: maxMS, Series: series}
 	if len(campaign) > 0 {
 		var snap snapshot
 		if err := json.Unmarshal(campaign, &snap); err != nil {
@@ -431,9 +439,9 @@ func (p *Planner) Process(ctx context.Context, job jobs.Job) error {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO edit_plans (plan_run_id, position, title, hook, voiceover_script, reason, campaign_link, segments)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb)`,
-				job.SubjectID, i, pl.Title, pl.Hook, pl.VoiceoverScript, pl.Reason, pl.CampaignLink, string(b)); err != nil {
+				INSERT INTO edit_plans (plan_run_id, position, title, hook, voiceover_script, reason, campaign_link, segments, part, series_title)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, NULLIF(?, 0), ?)`,
+				job.SubjectID, i, pl.Title, pl.Hook, pl.VoiceoverScript, pl.Reason, pl.CampaignLink, string(b), pl.Part, pl.SeriesTitle); err != nil {
 				return fmt.Errorf("save plan: %w", err)
 			}
 		}

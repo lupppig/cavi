@@ -1478,6 +1478,8 @@ export interface components {
             hook?: components["schemas"]["Hook"];
             voiceover?: components["schemas"]["VoiceoverMix"];
             sign_off?: components["schemas"]["SignOff"];
+            /** @description Version 3. A small label at the top left until the sign-off, for a series ("PART 2/3"). */
+            badge?: string;
             /**
              * @description Version 3: cut the pauses out of every segment (except split
              *     screens), keeping a little either side of speech. Pauses are
@@ -1521,9 +1523,20 @@ export interface components {
             /** @description At least 5 more than `min_seconds`. */
             max_seconds: number;
             media_asset_ids?: string[];
+            /**
+             * @description Plan one story told in 2 to 5 consecutive parts (Part 1, Part 2,
+             *     ...) instead of separate plans: each part ends on a cliffhanger
+             *     answered in the next, and later parts restate the question in
+             *     their hook. Each part keeps the length limits.
+             */
+            series?: boolean;
         };
         EditPlan: {
             title: string;
+            /** @description The part's number in a series; null for separate plans. */
+            part: number | null;
+            /** @description The series' title (the same in every part); null for separate plans. */
+            series_title: string | null;
             /** @description On-screen text for the opening. */
             hook: string;
             /** @description Optional narration; empty when the footage needs none. */
@@ -1558,6 +1571,8 @@ export interface components {
             max_seconds: number;
             media_asset_ids: string[];
             used_brief: boolean;
+            /** @description The plans are the parts of one series, in order. */
+            series: boolean;
             error: string | null;
             /** Format: date-time */
             requested_at: string;

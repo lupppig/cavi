@@ -519,6 +519,11 @@ OBJECTIVE>>>
 Transcripts:
 %s`
 
+// seriesSection turns plans into the parts of one series.
+const seriesSection = `
+SERIES: instead of separate plans, plan ONE series: the single strongest story or topic in the footage told in 2 to %d consecutive parts, each one a plan as described above (with its own length limits). Number them with part (1, 2, 3...) and give every part the same series_title (under 70 characters). The parts follow the story in order and don't reuse each other's moments, except a short cold-open teaser. Part 1 opens cold on the most gripping line of the whole story. Every part except the last ends on a cliffhanger: a question, reveal or setup whose answer is in the next part, cut before the answer. Parts after the first open by restating the question in their hook (for example "Part 2: so who paid for it?"). The last part delivers the payoff. Titles say the part: "... (Part 2)".
+`
+
 var plansSchema = &genai.Schema{
 	Type: genai.TypeObject,
 	Properties: map[string]*genai.Schema{
@@ -532,6 +537,8 @@ var plansSchema = &genai.Schema{
 					"voiceover_script": {Type: genai.TypeString},
 					"reason":           {Type: genai.TypeString},
 					"campaign_link":    {Type: genai.TypeString},
+					"part":             {Type: genai.TypeInteger, Description: "series only: this part's number, from 1"},
+					"series_title":     {Type: genai.TypeString, Description: "series only: the whole series' title, the same in every part"},
 					"segments": {
 						Type: genai.TypeArray,
 						Items: &genai.Schema{
@@ -561,6 +568,8 @@ type plansJSON struct {
 		VoiceoverScript string `json:"voiceover_script"`
 		Reason          string `json:"reason"`
 		CampaignLink    string `json:"campaign_link"`
+		Part            int    `json:"part"`
+		SeriesTitle     string `json:"series_title"`
 		Segments        []struct {
 			File      int `json:"file"`
 			FirstLine int `json:"first_line"`
@@ -598,6 +607,9 @@ func (g *Gemini) Plans(ctx context.Context, model Model, files []PlanFile, brief
 	section := strings.Replace(campaignSection(camp), "For each clip, write campaign_link", "For each plan, write campaign_link", 1)
 	section = strings.Replace(section, "write an empty campaign_link for every clip", "write an empty campaign_link for every plan", 1)
 	prompt := fmt.Sprintf(plansPrompt, MaxPlans, MaxPlanSegments, brief.MinMS/1000, brief.MaxMS/1000, section, objective, input)
+	if brief.Series {
+		prompt = strings.Replace(prompt, "\nTranscripts:\n", fmt.Sprintf(seriesSection, MaxSeriesParts)+"\nTranscripts:\n", 1)
+	}
 	text, usage, err := g.generate(ctx, model, []*genai.Part{genai.NewPartFromText(prompt)}, plansSchema, 0.4)
 	if err != nil {
 		return nil, usage, err
@@ -608,7 +620,7 @@ func (g *Gemini) Plans(ctx context.Context, model Model, files []PlanFile, brief
 	}
 	ps := make([]Plan, len(out.Plans))
 	for i, p := range out.Plans {
-		ps[i] = Plan{Title: p.Title, Hook: p.Hook, VoiceoverScript: p.VoiceoverScript, Reason: p.Reason, CampaignLink: p.CampaignLink}
+		ps[i] = Plan{Title: p.Title, Hook: p.Hook, VoiceoverScript: p.VoiceoverScript, Reason: p.Reason, CampaignLink: p.CampaignLink, Part: p.Part, SeriesTitle: p.SeriesTitle}
 		for _, s := range p.Segments {
 			ps[i].Segments = append(ps[i].Segments, PlanSegment{File: s.File - 1, FirstSegment: s.FirstLine, LastSegment: s.LastLine})
 		}

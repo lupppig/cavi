@@ -20,14 +20,16 @@ const MontageVersion = 3
 
 // Montage limits.
 const (
-	MaxSegments     = 20
-	MaxTiles        = 2 // extra scenes in a split-screen segment
-	MinSegment      = 500 * time.Millisecond
-	MaxTreatments   = 20 // blur boxes or muted ranges per segment
-	MaxHookRunes    = 120
+	MaxSegments   = 20
+	MaxTiles      = 2 // extra scenes in a split-screen segment
+	MinSegment    = 500 * time.Millisecond
+	MaxTreatments = 20 // blur boxes or muted ranges per segment
+	MaxHookRunes  = 120
 	// MaxGaps is how many pauses can be cut from one segment.
-	MaxGaps = 60
+	MaxGaps         = 60
 	MaxSignOffRunes = 80
+	// MaxBadgeRunes is the longest badge ("PART 2/3").
+	MaxBadgeRunes = 24
 	// SignOffMS is how long a silent sign-off card shows; a spoken one
 	// shows while it's said, plus signOffTailMS.
 	SignOffMS     = 2500
@@ -307,6 +309,10 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 			return err
 		}
 	}
+	c.Badge = strings.Join(strings.Fields(c.Badge), " ")
+	if !utf8.ValidString(c.Badge) || utf8.RuneCountInString(c.Badge) > MaxBadgeRunes {
+		return invalid("composition.badge", fmt.Sprintf("Keep the badge to %d characters, like PART 2/3.", MaxBadgeRunes))
+	}
 	if v := c.Voiceover; v != nil {
 		if math.IsNaN(v.Duck) || v.Duck < 0 || v.Duck > 1 {
 			return invalid("composition.voiceover.duck", "The clip’s own sound under the voiceover must be between 0 and 1.")
@@ -427,8 +433,8 @@ func MontageCaptions(segs []Segment, transcripts map[string][]ai.Segment, aspect
 // OverlayASS is the subtitle file for a montage: its captions, hook and
 // sign-off card (each if any; the card from signOffAt, clip time, to
 // lengthMS). Empty when there is nothing to burn in.
-func OverlayASS(c *Captions, h *Hook, so *SignOff, signOffAt, lengthMS int64, aspect string) string {
-	if c == nil && h == nil && so == nil {
+func OverlayASS(c *Captions, h *Hook, so *SignOff, signOffAt, lengthMS int64, aspect, badge string) string {
+	if c == nil && h == nil && so == nil && badge == "" {
 		return ""
 	}
 	sh, _ := shape(aspect)
@@ -449,6 +455,15 @@ func OverlayASS(c *Captions, h *Hook, so *SignOff, signOffAt, lengthMS int64, as
 		// The script turns wrapping off for captions (they are split
 		// already); \q0 turns smart wrapping back on for the hook.
 		s += fmt.Sprintf("Dialogue: 1,%s,%s,Hook,,0,0,0,,{\\q0}%s\n", assTime(0), assTime(h.EndMS), assText(h.Text, false))
+	}
+	if badge != "" {
+		// A small yellow label at the top left, above the hook, until the
+		// sign-off card.
+		size := sh.Width / 24
+		style := fmt.Sprintf("Style: Badge,Inter Black,%d,&H00000000,&H00000000,&H0000E6FF,&H0000E6FF,-1,0,0,0,100,100,0,0,3,%d,0,7,%d,%d,%d,1\n",
+			size, size/3, sh.Width/14, sh.Width/14, sh.Height/24)
+		s = strings.Replace(s, "\n[Events]", style+"\n[Events]", 1)
+		s += fmt.Sprintf("Dialogue: 3,%s,%s,Badge,,0,0,0,,%s\n", assTime(0), assTime(signOffAt), assText(badge, false))
 	}
 	if so != nil {
 		// Black text on a yellow box in the middle, popping in.

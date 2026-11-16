@@ -357,7 +357,7 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 			return err
 		}
 	}
-	if ass := OverlayASS(c.Captions, c.Hook, c.SignOff, c.SignOffStartMS(), c.LengthMS(), c.Aspect); ass != "" {
+	if ass := OverlayASS(c.Captions, c.Hook, c.SignOff, c.SignOffStartMS(), c.LengthMS(), c.Aspect, c.Badge); ass != "" {
 		plan.Subtitles = filepath.Join(dir, "overlay.ass")
 		plan.FontsDir = r.FontsDir
 		if err := os.WriteFile(plan.Subtitles, []byte(ass), 0o600); err != nil {

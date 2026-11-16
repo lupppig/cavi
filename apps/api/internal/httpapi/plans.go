@@ -37,6 +37,9 @@ type planResponse struct {
 	CampaignLink    string                `json:"campaign_link"`
 	DurationMS      int64                 `json:"duration_ms"`
 	Segments        []planSegmentResponse `json:"segments"`
+	// Part (from 1) and SeriesTitle: the plan is a part of a series.
+	Part        *int    `json:"part"`
+	SeriesTitle *string `json:"series_title"`
 }
 
 type planRunResponse struct {
@@ -51,6 +54,7 @@ type planRunResponse struct {
 	MaxSeconds    int64          `json:"max_seconds"`
 	MediaAssetIDs []string       `json:"media_asset_ids"`
 	UsedBrief     bool           `json:"used_brief"`
+	Series        bool           `json:"series"`
 	Error         *string        `json:"error"`
 	RequestedAt   string         `json:"requested_at"`
 	CompletedAt   *string        `json:"completed_at"`
@@ -60,7 +64,7 @@ type planRunResponse struct {
 func toPlanRunResponse(r plan.Run) planRunResponse {
 	out := planRunResponse{ID: r.ID, Status: r.Status, Provider: r.Provider, Model: r.Model, ModelLabel: r.ModelLabel,
 		PromptVersion: r.PromptVersion, Objective: r.Objective, MinSeconds: r.MinMS / 1000, MaxSeconds: r.MaxMS / 1000,
-		MediaAssetIDs: r.MediaAssetIDs, UsedBrief: r.UsedBrief, Error: ptr(r.Error), RequestedAt: ts(r.CreatedAt),
+		MediaAssetIDs: r.MediaAssetIDs, UsedBrief: r.UsedBrief, Series: r.Series, Error: ptr(r.Error), RequestedAt: ts(r.CreatedAt),
 		Plans: make([]planResponse, len(r.Plans))}
 	if r.Status == plan.StatusReady && !r.CompletedAt.IsZero() {
 		c := ts(r.CompletedAt)
@@ -68,7 +72,8 @@ func toPlanRunResponse(r plan.Run) planRunResponse {
 	}
 	for i, p := range r.Plans {
 		pr := planResponse{Title: p.Title, Hook: p.Hook, VoiceoverScript: p.VoiceoverScript, Reason: p.Reason,
-			CampaignLink: p.CampaignLink, Segments: make([]planSegmentResponse, len(p.Segments))}
+			CampaignLink: p.CampaignLink, Segments: make([]planSegmentResponse, len(p.Segments)),
+			Part: ptr(p.Part), SeriesTitle: ptr(p.SeriesTitle)}
 		for j, s := range p.Segments {
 			pr.Segments[j] = planSegmentResponse{SourceAssetID: s.SourceAssetID, StartMS: s.StartMS, EndMS: s.EndMS, Flags: toFlags(s.Flags)}
 			pr.DurationMS += s.EndMS - s.StartMS
@@ -91,6 +96,7 @@ type requestPlansRequest struct {
 	MinSeconds    int      `json:"min_seconds"`
 	MaxSeconds    int      `json:"max_seconds"`
 	MediaAssetIDs []string `json:"media_asset_ids"`
+	Series        bool     `json:"series"`
 }
 
 func (h planHandler) request(c *gin.Context) {
@@ -99,7 +105,7 @@ func (h planHandler) request(c *gin.Context) {
 		return
 	}
 	r, err := h.svc.Request(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"),
-		plan.Request{Objective: req.Objective, MinSeconds: req.MinSeconds, MaxSeconds: req.MaxSeconds, MediaAssetIDs: req.MediaAssetIDs})
+		plan.Request{Objective: req.Objective, MinSeconds: req.MinSeconds, MaxSeconds: req.MaxSeconds, MediaAssetIDs: req.MediaAssetIDs, Series: req.Series})
 	if err != nil {
 		h.fail(c, err)
 		return

@@ -77,6 +77,9 @@ type Composition struct {
 	// Tighten (montages) cuts the pauses out of every segment; the server
 	// works out each segment's Gaps from its file's pauses.
 	Tighten bool `json:"tighten,omitempty"`
+	// Badge (montages) is a small label shown at the top left until the
+	// sign-off, for a series: "PART 2/3".
+	Badge string `json:"badge,omitempty"`
 }
 
 // Source is what rendering needs to know about the source file.
@@ -94,7 +97,7 @@ func (c Composition) Validate(src Source) error {
 	if c.Version != 1 && c.Version != CompositionVersion {
 		return invalid("composition.version", fmt.Sprintf("Composition version must be 1 or %d.", CompositionVersion))
 	}
-	if len(c.Segments) > 0 || c.Hook != nil || c.Voiceover != nil || c.SignOff != nil || c.Tighten {
+	if len(c.Segments) > 0 || c.Hook != nil || c.Voiceover != nil || c.SignOff != nil || c.Tighten || c.Badge != "" {
 		return invalid("composition.version", fmt.Sprintf("Segments and hooks need composition version %d.", MontageVersion))
 	}
 	if c.Version == 1 && c.Captions != nil {

@@ -259,3 +259,34 @@ func TestPlans(t *testing.T) {
 		t.Fatalf("after deletion = %s %q", got.Status, got.Error)
 	}
 }
+
+func TestSeriesPlans(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	w.transcribed(org, proj, "talk.mp4", 20)
+	run, err := w.svc.Request(w.ctx, ana.id, org, proj, Request{MinSeconds: 15, MaxSeconds: 45, Series: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seg := func(a, b int) []ai.PlanSegment { return []ai.PlanSegment{{File: 0, FirstSegment: a, LastSegment: b}} }
+	fp := &fakePlanner{plans: []ai.Plan{
+		{Title: "The reveal (Part 2)", Hook: "Part 2: so who paid?", Reason: "r", Part: 2, SeriesTitle: "x", Segments: seg(4, 5)},
+		{Title: "The reveal (Part 1)", Hook: "Nobody expected this", Reason: "r", Part: 1, SeriesTitle: "The reveal", Segments: seg(0, 1)},
+	}}
+	if err := w.planner(fp).Process(w.ctx, w.job(run.ID)); err != nil {
+		t.Fatal(err)
+	}
+	if !fp.calls[0].Series {
+		t.Fatal("series not asked of the planner")
+	}
+	got, err := w.svc.Get(w.ctx, ana.id, org, proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Series || len(got.Plans) != 2 || got.Plans[0].Part != 1 || got.Plans[1].Part != 2 ||
+		got.Plans[0].SeriesTitle != "The reveal" || got.Plans[1].SeriesTitle != "The reveal" {
+		t.Fatalf("series = %+v", got)
+	}
+}

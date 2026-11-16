@@ -27,6 +27,8 @@ const (
 	MaxPlanHookRunes  = 80
 	MaxPlanVoiceRunes = 400
 	planLengthSlackMS = 10_000
+	// MaxSeriesParts is the most parts a series is planned in.
+	MaxSeriesParts = 5
 )
 
 // PlanFile is one transcribed file offered to the planner.
@@ -43,6 +45,9 @@ type PlanBrief struct {
 	Campaign     *Campaign
 	// Rules on each file (by ID), to keep plans off excluded moments.
 	Rules map[string][]BriefRule
+	// Series asks for one story told in consecutive parts instead of
+	// separate plans.
+	Series bool
 }
 
 // PlanSegment is one stretch of one file: whole transcript lines.
@@ -62,6 +67,10 @@ type Plan struct {
 	Reason          string
 	CampaignLink    string
 	Segments        []PlanSegment
+	// Part and SeriesTitle are set when the plans are a series: this
+	// plan's part number (from 1) and the whole series' title.
+	Part        int
+	SeriesTitle string
 }
 
 // LengthMS is the plan's total length.
@@ -159,6 +168,43 @@ plans:
 		if len(out) == MaxPlans {
 			break
 		}
+	}
+	if brief.Series {
+		return seriesOf(out)
+	}
+	for i := range out {
+		out[i].Part, out[i].SeriesTitle = 0, ""
+	}
+	return out, nil
+}
+
+// seriesOf keeps the parts of a series that run 1, 2, 3... without
+// gaps, in order, under the first part's series title; fewer than two
+// isn't a series.
+func seriesOf(ps []Plan) ([]Plan, error) {
+	byPart := map[int]Plan{}
+	for _, p := range ps {
+		if _, dup := byPart[p.Part]; p.Part >= 1 && p.Part <= MaxSeriesParts && !dup {
+			byPart[p.Part] = p
+		}
+	}
+	var out []Plan
+	for n := 1; ; n++ {
+		p, ok := byPart[n]
+		if !ok {
+			break
+		}
+		out = append(out, p)
+	}
+	if len(out) < 2 {
+		return nil, fmt.Errorf("%w: series has %d usable parts", ErrInvalidOutput, len(out))
+	}
+	title := strings.Join(strings.Fields(out[0].SeriesTitle), " ")
+	if title == "" || utf8.RuneCountInString(title) > maxTitleRunes {
+		title = out[0].Title
+	}
+	for i := range out {
+		out[i].SeriesTitle = title
 	}
 	return out, nil
 }

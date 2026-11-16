@@ -2554,6 +2554,10 @@ components:
         hook: { $ref: "#/components/schemas/Hook" }
         voiceover: { $ref: "#/components/schemas/VoiceoverMix" }
         sign_off: { $ref: "#/components/schemas/SignOff" }
+        badge:
+          type: string
+          maxLength: 24
+          description: Version 3. A small label at the top left until the sign-off, for a series ("PART 2/3").
         tighten:
           type: boolean
           description: |
@@ -2597,12 +2601,21 @@ components:
           type: array
           maxItems: 5
           items: { type: string, format: uuid }
+        series:
+          type: boolean
+          description: |
+            Plan one story told in 2 to 5 consecutive parts (Part 1, Part 2,
+            ...) instead of separate plans: each part ends on a cliffhanger
+            answered in the next, and later parts restate the question in
+            their hook. Each part keeps the length limits.
 
     EditPlan:
       type: object
-      required: [title, hook, voiceover_script, reason, campaign_link, duration_ms, segments]
+      required: [title, hook, voiceover_script, reason, campaign_link, duration_ms, segments, part, series_title]
       properties:
         title: { type: string }
+        part: { type: [integer, "null"], minimum: 1, description: "The part's number in a series; null for separate plans." }
+        series_title: { type: [string, "null"], description: The series' title (the same in every part); null for separate plans. }
         hook: { type: string, description: On-screen text for the opening. }
         voiceover_script: { type: string, description: Optional narration; empty when the footage needs none. }
         reason: { type: string }
@@ -2624,7 +2637,7 @@ components:
 
     PlanRun:
       type: object
-      required: [id, status, provider, model, model_label, prompt_version, objective, min_seconds, max_seconds, media_asset_ids, used_brief, error, requested_at, completed_at, plans]
+      required: [id, status, provider, model, model_label, prompt_version, objective, min_seconds, max_seconds, media_asset_ids, used_brief, series, error, requested_at, completed_at, plans]
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [queued, running, ready, failed] }
@@ -2639,6 +2652,7 @@ components:
           type: array
           items: { type: string, format: uuid }
         used_brief: { type: boolean }
+        series: { type: boolean, description: "The plans are the parts of one series, in order." }
         error: { type: [string, "null"] }
         requested_at: { type: string, format: date-time }
         completed_at: { type: [string, "null"], format: date-time }

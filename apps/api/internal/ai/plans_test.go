@@ -142,3 +142,29 @@ func TestEvalPlansFeaturedPerson(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateSeries(t *testing.T) {
+	files := []PlanFile{{ID: "f", Segments: []Segment{
+		{StartMS: 0, EndMS: 10_000}, {StartMS: 10_000, EndMS: 30_000}, {StartMS: 30_000, EndMS: 55_000}, {StartMS: 55_000, EndMS: 80_000},
+	}}}
+	brief := PlanBrief{MinMS: 20_000, MaxMS: 40_000, Series: true}
+	part := func(n, first, last int, title string) Plan {
+		return Plan{Title: "Part", Reason: "r", Part: n, SeriesTitle: title, Segments: []PlanSegment{{File: 0, FirstSegment: first, LastSegment: last}}}
+	}
+	// Out of order, with a duplicate and a part 4 after a missing part 3:
+	// parts 1 and 2 are kept, in order, under the first part's title.
+	got, err := ValidatePlans([]Plan{part(2, 2, 2, "ignored"), part(1, 0, 1, "  The   big reveal "), part(1, 2, 2, "dup"), part(4, 3, 3, "")}, files, brief)
+	if err != nil || len(got) != 2 || got[0].Part != 1 || got[1].Part != 2 || got[1].SeriesTitle != "The big reveal" {
+		t.Fatalf("series = %+v, %v", got, err)
+	}
+	// One usable part isn't a series: invalid output, retried.
+	if _, err := ValidatePlans([]Plan{part(1, 0, 1, "Solo")}, files, brief); !errors.Is(err, ErrInvalidOutput) {
+		t.Fatalf("one part: %v", err)
+	}
+	// Separate plans drop stray part numbers.
+	brief.Series = false
+	got, err = ValidatePlans([]Plan{part(3, 0, 1, "x")}, files, brief)
+	if err != nil || len(got) != 1 || got[0].Part != 0 || got[0].SeriesTitle != "" {
+		t.Fatalf("not a series = %+v, %v", got, err)
+	}
+}

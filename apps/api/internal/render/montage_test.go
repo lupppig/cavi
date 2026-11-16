@@ -100,16 +100,23 @@ func TestMontageCaptionsAndOverlay(t *testing.T) {
 	if len(cues) < 2 || cues[0].StartMS != 0 || cues[len(cues)-1].EndMS > 4000 || cues[len(cues)-1].StartMS < 2000 {
 		t.Fatalf("cues = %+v", cues)
 	}
-	ass := OverlayASS(nil, &Hook{Text: "How diamonds built Botswana", EndMS: 2000}, nil, 0, 0, "9:16")
+	ass := OverlayASS(nil, &Hook{Text: "How diamonds built Botswana", EndMS: 2000}, nil, 0, 0, "9:16", "")
 	if !strings.Contains(ass, "Style: Hook,") || !strings.Contains(ass, "Dialogue: 1,0:00:00.00,0:00:02.00,Hook,,0,0,0,,{\\q0}How diamonds built Botswana") {
 		t.Fatalf("hook overlay:\n%s", ass)
 	}
 	caps := &Captions{CaptionOptions: CaptionOptions{Style: CaptionsBoxed}, Cues: cues}
-	both := OverlayASS(caps, &Hook{Text: "Hook", EndMS: 1000}, nil, 0, 0, "9:16")
+	both := OverlayASS(caps, &Hook{Text: "Hook", EndMS: 1000}, nil, 0, 0, "9:16", "")
 	if strings.Index(both, "Style: Hook") > strings.Index(both, "[Events]") || !strings.Contains(both, ",Cap,") {
 		t.Fatalf("captions and hook:\n%s", both)
 	}
-	if OverlayASS(nil, nil, nil, 0, 0, "9:16") != "" {
+	if OverlayASS(nil, nil, nil, 0, 0, "9:16", "") != "" {
+		t.Fatal("empty overlay")
+	}
+	badge := OverlayASS(nil, nil, &SignOff{Text: "Follow for Part 2"}, 20_000, 22_500, "9:16", "PART 1/3")
+	if !strings.Contains(badge, "Style: Badge,Inter Black,45,") || !strings.Contains(badge, "Dialogue: 3,0:00:00.00,0:00:20.00,Badge,,0,0,0,,PART 1/3") {
+		t.Fatalf("badge overlay:\n%s", badge)
+	}
+	if OverlayASS(nil, nil, nil, 0, 0, "9:16", "") != "" {
 		t.Fatal("empty overlay should be empty")
 	}
 }
@@ -352,7 +359,7 @@ func TestRenderMontageWithSignOff(t *testing.T) {
 	if r.Composition.SignOffStartMS() != 10_000-SignOffMS {
 		t.Fatalf("silent sign-off starts %d", r.Composition.SignOffStartMS())
 	}
-	ass := OverlayASS(nil, nil, r.Composition.SignOff, 7500, 10_000, "9:16")
+	ass := OverlayASS(nil, nil, r.Composition.SignOff, 7500, 10_000, "9:16", "")
 	if !strings.Contains(ass, "Style: SignOff") || !strings.Contains(ass, "Dialogue: 2,0:00:07.50,0:00:10.00,SignOff") || !strings.Contains(ass, "Like and subscribe") {
 		t.Fatalf("overlay = %s", ass)
 	}
