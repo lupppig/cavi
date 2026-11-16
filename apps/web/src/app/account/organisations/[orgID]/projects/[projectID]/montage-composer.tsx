@@ -7,6 +7,7 @@ import { client, raise, type CaptionOptions, type Composition, type MontageSegme
 import { CaptionOptionsPicker, defaultCaptionOptions } from "./caption-options";
 import { shapes, stampTenths } from "./clips";
 import { FramingChoice } from "./framing";
+import { needsPauses, PrepareForPauses } from "./tighten";
 import { useProjectMedia } from "./media-section";
 import {
   checkSegment,
@@ -96,6 +97,7 @@ export function MontageComposer({
   );
   const [captions, setCaptions] = useState<CaptionOptions | null>(null);
   const [auto, setAuto] = useState(false);
+  const [tighten, setTighten] = useState(true);
   const [voiceover, setVoiceover] = useState<VoiceoverChoice>({ id: null, start: "0.5", duck: 0.25 });
   const chosenVoiceover = useChosenVoiceover(project, voiceover.id);
   const [signOff, setSignOff] = useState<SignOffChoice>(defaultSignOff);
@@ -156,6 +158,7 @@ export function MontageComposer({
     if (bad >= 0) return `Segment ${bad + 1}: ${checked[bad].problem}`;
     if (total < MIN_TOTAL_MS) return "Montages must be at least a second long.";
     if (total > MAX_TOTAL_MS) return "Montages can be at most 10 minutes long.";
+    if (tighten && needsPauses(used).length > 0) return "Prepare the videos for cutting pauses, or untick Cut pauses.";
     if (hook.trim()) {
       const ms = Math.round(Number(hookSeconds) * 1000);
       if (!Number.isFinite(ms) || ms < 500 || ms > total) return `Show the hook for between 0.5 and ${(total / 1000).toFixed(1)} seconds.`;
@@ -183,6 +186,7 @@ export function MontageComposer({
         aspect,
         focus: first.focus,
         ...(auto ? { framing: "auto" as const } : {}),
+        ...(tighten ? { tighten: true } : {}),
         segments: segs,
         ...(hook.trim() ? { hook: { text: hook.trim(), end_ms: Math.round(Number(hookSeconds) * 1000) } } : {}),
         ...(voiceover.id
@@ -323,6 +327,22 @@ export function MontageComposer({
         >
           + Add segment
         </button>
+      </fieldset>
+
+      <fieldset className="space-y-1.5">
+        <legend className="text-sm font-semibold">Pacing</legend>
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={tighten} onChange={(e) => setTighten(e.target.checked)} className="size-5 accent-[var(--ink)]" />
+          <span>
+            Cut pauses <span className="font-semibold text-muted">· silences between sentences go, so the clip moves faster</span>
+          </span>
+        </label>
+        {tighten && needsPauses(used).length > 0 && <PrepareForPauses project={project} files={needsPauses(used)} />}
+        {tighten && (
+          <p className="text-xs font-semibold text-muted">
+            The finished montage is shorter than {stampTenths(total)}: times above are before cutting.
+          </p>
+        )}
       </fieldset>
 
       <fieldset>

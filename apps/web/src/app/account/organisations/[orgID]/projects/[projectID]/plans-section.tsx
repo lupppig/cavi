@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, NotFound, raise, useAIModelSettings, type EditPlan, type PlanRun, type Project } from "@/lib/queries";
+import { BatchPanel } from "./batch";
 import { FlagList, useBrief } from "./brief-section";
 import { stampTenths } from "./clips";
 import { useProjectMedia } from "./media-section";
@@ -13,11 +14,12 @@ import { stamp } from "./transcript-panel";
 
 /** Montage length choices; the API takes 10–180 s with at least 5 s between. */
 const lengths = [
+  { min: 20, max: 40, label: "20–40s", hint: "Best for Shorts" },
   { min: 15, max: 30, label: "15–30s", hint: "Punchy" },
-  { min: 30, max: 60, label: "30–60s", hint: "Most short-form" },
+  { min: 30, max: 60, label: "30–60s", hint: "A fuller moment" },
   { min: 60, max: 90, label: "60–90s", hint: "Room for a story" },
 ];
-const defaultLength = 1;
+const defaultLength = 0;
 
 const busy = (p: PlanRun) => p.status === "queued" || p.status === "running";
 
@@ -83,8 +85,8 @@ export function PlansSection({ project, canEdit, canRender }: { project: Project
       </div>
       {!run && canEdit && !composing && (
         <p className="mt-1 text-sm font-medium text-muted">
-          Have CAVI propose montages across your transcribed videos: segments in order, an opening hook and, where it helps, a voiceover
-          script. Check each plan, then make it.
+          Have CAVI propose up to ten clips across your transcribed videos, each opening on its strongest line with a hook on screen.
+          Check the plans, then make one, or all of them at once.
         </p>
       )}
       {plans.isError && <div className="mt-3"><Banner>{plans.error.message}</Banner></div>}
@@ -149,9 +151,16 @@ function PlanList({
   const media = useProjectMedia(project);
   const files = media.data?.pages.flatMap((p) => p.data) ?? [];
   const fileName = (assetID: string) => files.find((f) => f.id === assetID)?.filename ?? "A file no longer in this project";
+  const [batch, setBatch] = useState(false);
 
   return (
     <>
+      {canRender && run.plans.length > 1 && !batch && (
+        <button type="button" onClick={() => setBatch(true)} className="btn btn-primary mt-3 min-h-11 px-3 text-sm">
+          Make all {run.plans.length} as clips
+        </button>
+      )}
+      {batch && <BatchPanel project={project} plans={run.plans} onClose={() => setBatch(false)} />}
       {run.plans.length === 0 ? (
         <p className="mt-3 text-sm font-semibold text-muted">No montages fit. Try a different objective or length.</p>
       ) : (
@@ -300,7 +309,7 @@ function RequestForm({
       </div>
       <fieldset>
         <legend className="text-sm font-semibold">Montage length</legend>
-        <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {lengths.map((l, i) => (
             <label
               key={l.label}
