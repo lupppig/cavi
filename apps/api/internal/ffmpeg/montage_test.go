@@ -376,3 +376,49 @@ func TestRealPan(t *testing.T) {
 		t.Fatalf("read %d frames, %v", n, err)
 	}
 }
+
+// TestRealKeep cuts a pause out of a part: a tone, two seconds of
+// silence, a tone. Only the tones are kept, so the clip is 2.2 s, picture
+// and sound, and loud from start to end.
+func TestRealKeep(t *testing.T) {
+	r := New()
+	if err := r.Available(); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "pause.mp4")
+	gen := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25",
+		"-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+		"-filter_complex", "[1:a]volume=enable='between(t,1,3)':volume=0[a]", "-map", "0:v", "-map", "[a]",
+		"-t", "4", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("generate: %v %s", err, out)
+	}
+	out := filepath.Join(dir, "tight.mp4")
+	m := Montage{Width: 320, Height: 240, FPS: 25, Parts: []MontagePart{{
+		Input: src, Length: 4 * time.Second, CropW: 320, CropH: 240, Audio: true,
+		Keep: []Span{{0, 1100 * time.Millisecond}, {2900 * time.Millisecond, 4 * time.Second}},
+	}}}
+	if m.Length() != 2200*time.Millisecond {
+		t.Fatalf("length = %v", m.Length())
+	}
+	if err := r.Montage(context.Background(), out, m, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.ProbeFile(context.Background(), out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := p.Duration - 2200*time.Millisecond; d < -100*time.Millisecond || d > 100*time.Millisecond {
+		t.Fatalf("duration %v, want 2.2 s", p.Duration)
+	}
+	if d := p.VideoDuration - 2200*time.Millisecond; p.VideoDuration > 0 && (d < -100*time.Millisecond || d > 100*time.Millisecond) {
+		t.Fatalf("video %v, want 2.2 s", p.VideoDuration)
+	}
+	// The tone plays on both sides of the join; the silence is gone.
+	for _, at := range []float64{0.3, 1.5} {
+		if l := loudness(t, out, at, 0.4); l < -30 {
+			t.Fatalf("at %.1f s loudness %.0f dB, want the tone", at, l)
+		}
+	}
+}

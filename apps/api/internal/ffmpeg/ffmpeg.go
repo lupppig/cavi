@@ -462,3 +462,30 @@ func (r *Runner) Frames(ctx context.Context, in string, g Sampling, timeout time
 	}
 	return nil
 }
+// Loudness is input's sound level fps times a second: the RMS of its
+// mono mix (0 to 1) over each 1/fps of a second, from the start. Nil, no
+// error, when it has no audio.
+func (r *Runner) Loudness(ctx context.Context, in string, fps int, timeout time.Duration) ([]float64, error) {
+	if fps <= 0 || fps > 100 {
+		return nil, fmt.Errorf("ffmpeg: invalid loudness rate %d", fps)
+	}
+	// 8 kHz is plenty for loudness and keeps a long video's audio small.
+	const rate = 8000
+	args := append([]string{"-v", "error", "-nostdin"}, input(in)...)
+	args = append(args, "-map", "0:a:0?", "-vn", "-ac", "1", "-ar", strconv.Itoa(rate), "-f", "s16le", "pipe:1")
+	out, err := r.runFor(ctx, timeout, in, r.FFmpeg, args...)
+	if err != nil {
+		return nil, err
+	}
+	per := rate / fps
+	var levels []float64
+	for off := 0; off+2*per <= len(out); off += 2 * per {
+		sum := 0.0
+		for k := 0; k < per; k++ {
+			v := float64(int16(uint16(out[off+2*k])|uint16(out[off+2*k+1])<<8)) / 32768
+			sum += v * v
+		}
+		levels = append(levels, math.Sqrt(sum/float64(per)))
+	}
+	return levels, nil
+}

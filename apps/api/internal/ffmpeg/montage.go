@@ -36,6 +36,9 @@ type MontagePart struct {
 	// is cropped. Mute silences the source's audio.
 	Blur []Box
 	Mute []Span
+	// Keep, if set, plays only these stretches of the part, joined (pauses
+	// cut out); Stack must then be empty.
+	Keep []Span
 	// Stack shows more scenes at the same time: the part's own scene and
 	// these are stacked top to bottom in equal panels (a split screen).
 	// They are silent; the part's own audio plays.
@@ -81,13 +84,55 @@ type Voice struct {
 	Duck       float64
 }
 
+// Plays is how long the part plays: its Length, or what Keep keeps.
+func (p MontagePart) Plays() time.Duration {
+	if len(p.Keep) == 0 {
+		return p.Length
+	}
+	var d time.Duration
+	for _, k := range p.Keep {
+		d += k.To - k.From
+	}
+	return d
+}
+
 // Length is the montage's total length.
 func (m Montage) Length() time.Duration {
 	var d time.Duration
 	for _, p := range m.Parts {
-		d += p.Length
+		d += p.Plays()
 	}
 	return d
+}
+
+// keep writes the filters that join a part's kept stretches into label
+// out, from the part's video (or audio) in. Each audio stretch fades in
+// and out over a few milliseconds so the joins don't click.
+func keep(g *strings.Builder, in, out string, i int, spans []Span, audio bool) {
+	split, trim, setpts, kind := "split", "trim", "setpts", "v"
+	if audio {
+		split, trim, setpts, kind = "asplit", "atrim", "asetpts", "a"
+	}
+	fmt.Fprintf(g, "%s%s=%d", in, split, len(spans))
+	for k := range spans {
+		fmt.Fprintf(g, "[k%s%d_%d]", kind, i, k)
+	}
+	g.WriteString(";")
+	join := ""
+	for k, sp := range spans {
+		fmt.Fprintf(g, "[k%s%d_%d]%s=start=%s:end=%s,%s=PTS-STARTPTS", kind, i, k, trim, secs(sp.From), secs(sp.To), setpts)
+		if audio {
+			fade := min(10*time.Millisecond, (sp.To-sp.From)/4)
+			fmt.Fprintf(g, ",afade=t=in:d=%s,afade=t=out:st=%s:d=%s", secs(fade), secs(sp.To-sp.From-fade), secs(fade))
+		}
+		fmt.Fprintf(g, "[j%s%d_%d];", kind, i, k)
+		join += fmt.Sprintf("[j%s%d_%d]", kind, i, k)
+	}
+	if audio {
+		fmt.Fprintf(g, "%sconcat=n=%d:v=0:a=1%s;", join, len(spans), out)
+	} else {
+		fmt.Fprintf(g, "%sconcat=n=%d:v=1:a=0%s;", join, len(spans), out)
+	}
 }
 
 func secs(d time.Duration) string { return strconv.FormatFloat(d.Seconds(), 'f', 3, 64) }
@@ -113,9 +158,24 @@ func (m Montage) filterGraph() (string, error) {
 				base, blurred, b.X, b.Y, secs(b.From), secs(b.To), next)
 			cur = next
 		}
+		for _, k := range p.Keep {
+			if k.To <= k.From || k.From < 0 || k.To > p.Length {
+				return "", fmt.Errorf("ffmpeg: invalid kept stretch in part %d", i)
+			}
+		}
+		if len(p.Keep) > 0 && len(p.Stack) > 0 {
+			return "", fmt.Errorf("ffmpeg: part %d keeps stretches of a split screen", i)
+		}
 		if len(p.Stack) == 0 {
-			fmt.Fprintf(&g, "%s%s,scale=%d:%d:flags=lanczos,setsar=1,fps=%d,format=yuv420p,trim=duration=%s,setpts=PTS-STARTPTS[v%d];",
-				cur, cropFilter(p.CropW, p.CropH, p.CropX, p.CropY, p.Pan, p.PanVertical), m.Width, m.Height, m.FPS, secs(p.Length), i)
+			vout := fmt.Sprintf("[v%d]", i)
+			if len(p.Keep) > 0 {
+				vout = fmt.Sprintf("[vk%d]", i)
+			}
+			fmt.Fprintf(&g, "%s%s,scale=%d:%d:flags=lanczos,setsar=1,fps=%d,format=yuv420p,trim=duration=%s,setpts=PTS-STARTPTS%s;",
+				cur, cropFilter(p.CropW, p.CropH, p.CropX, p.CropY, p.Pan, p.PanVertical), m.Width, m.Height, m.FPS, secs(p.Length), vout)
+			if len(p.Keep) > 0 {
+				keep(&g, vout, fmt.Sprintf("[v%d]", i), i, p.Keep, false)
+			}
 		} else {
 			n := 1 + len(p.Stack)
 			ph := PanelHeight(m.Height, n)
@@ -141,9 +201,14 @@ func (m Montage) filterGraph() (string, error) {
 			for _, s := range p.Mute {
 				fmt.Fprintf(&g, ",volume=0:enable='between(t,%s,%s)'", secs(s.From), secs(s.To))
 			}
-			fmt.Fprintf(&g, ",apad,atrim=duration=%s,asetpts=PTS-STARTPTS[a%d];", secs(p.Length), i)
+			if len(p.Keep) > 0 {
+				fmt.Fprintf(&g, ",apad,atrim=duration=%s,asetpts=PTS-STARTPTS[ak%d];", secs(p.Length), i)
+				keep(&g, fmt.Sprintf("[ak%d]", i), fmt.Sprintf("[a%d]", i), i, p.Keep, true)
+			} else {
+				fmt.Fprintf(&g, ",apad,atrim=duration=%s,asetpts=PTS-STARTPTS[a%d];", secs(p.Length), i)
+			}
 		} else {
-			fmt.Fprintf(&g, "anullsrc=r=48000:cl=stereo,atrim=duration=%s[a%d];", secs(p.Length), i)
+			fmt.Fprintf(&g, "anullsrc=r=48000:cl=stereo,atrim=duration=%s[a%d];", secs(p.Plays()), i)
 		}
 		join += fmt.Sprintf("[v%d][a%d]", i, i)
 	}
