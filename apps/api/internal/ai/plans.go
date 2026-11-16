@@ -27,7 +27,11 @@ import (
 // plan: 3 to 6 short lines in the channel's own words (context, an
 // explanation, a take, a takeaway), each anchored to a segment or the end,
 // which is what makes clips of other people's footage original work.
-const PlansPromptVersion = "plans-v5"
+//
+// v6 asks for variety across the plans (hook styles, how titles and
+// commentary open, structure), so a channel's uploads don't read as
+// mass-produced from one template.
+const PlansPromptVersion = "plans-v6"
 
 // Edit plan limits.
 const (

@@ -507,6 +507,7 @@ For each plan write:
 - voiceover_script: an empty string;
 - reason: one or two sentences telling the editor why this plan will hold attention;
 - campaign_link: as described below.
+Make the plans different from each other, as a human editor would: they will be posted on the same channel, and videos that all follow one template look mass-produced. Vary the hook style across plans (a question, a bold claim, a number, a short quote, a challenge to the viewer), how titles and the first commentary line open (never start them all the same way), and the structure (some open on a teaser, some go straight in; some end on a question, some on a statement).
 Write in the transcripts' language. Do not invent anything that isn't in the transcripts.
 
 If the brief says a person must be featured or be the main focus (for example the creator), centre every plan on them: choose moments where they speak or react, and name them in the hook or title.
