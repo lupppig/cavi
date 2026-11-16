@@ -137,3 +137,71 @@ func (s *Service) FramingPreview(ctx context.Context, actorID, orgID, projectID,
 }
 
 func validAspect(a string) bool { _, ok := shape(a); return ok }
+
+// How pauses are cut. A pause is cut only if it lasts minCutPause; the
+// cut leaves keepAfter of it after the speech before (so words aren't
+// clipped) and keepBefore before the speech after.
+const (
+	minCutPause = 400
+	keepAfter   = 150
+	keepBefore  = 120
+	minGap      = 150
+)
+
+// tighten sets each segment's Gaps from its file's pauses (split screens
+// excepted), or clears them when c doesn't ask to tighten. A file whose
+// pauses haven't been found is a validation error naming it.
+func tighten(ctx context.Context, db bun.IDB, orgID string, c *Composition) error {
+	pauses := map[string][]media.Pause{}
+	for i := range c.Segments {
+		s := &c.Segments[i]
+		s.Gaps = nil
+		if !c.Tighten || len(s.Tiles) > 0 {
+			continue
+		}
+		ps, ok := pauses[s.SourceAssetID]
+		if !ok {
+			found, has, err := media.Pauses(ctx, db, orgID, s.SourceAssetID)
+			if err != nil {
+				return err
+			}
+			if !has {
+				var name string
+				_ = db.QueryRowContext(ctx, `SELECT filename FROM media_assets WHERE id = ? AND organisation_id = ?`, s.SourceAssetID, orgID).Scan(&name)
+				return invalid("composition.tighten", fmt.Sprintf("Pauses haven’t been found in “%s” yet (it was processed before pause cutting). Prepare it from its page, or turn off cutting pauses.", name))
+			}
+			ps = found
+			pauses[s.SourceAssetID] = ps
+		}
+		s.Gaps = gaps(ps, s.StartMS, s.EndMS)
+	}
+	return nil
+}
+
+// gaps are the stretches to cut from startMS to endMS: each long enough
+// pause, less a little either side (none at the segment's ends, where
+// there is no speech to protect).
+func gaps(ps []media.Pause, startMS, endMS int64) []Range {
+	var out []Range
+	for _, p := range ps {
+		if p.EndMS <= startMS || p.StartMS >= endMS || p.EndMS-p.StartMS < minCutPause {
+			continue
+		}
+		a, b := p.StartMS+keepAfter, p.EndMS-keepBefore
+		if p.StartMS <= startMS {
+			a = startMS
+		}
+		if p.EndMS >= endMS {
+			b = endMS
+		}
+		a, b = max(a, startMS), min(b, endMS)
+		if b-a < minGap || (len(out) > 0 && a < out[len(out)-1].EndMS) {
+			continue
+		}
+		out = append(out, Range{a, b})
+		if len(out) == MaxGaps {
+			break
+		}
+	}
+	return out
+}

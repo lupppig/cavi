@@ -74,6 +74,9 @@ type Composition struct {
 	Hook      *Hook         `json:"hook,omitempty"`
 	Voiceover *VoiceoverMix `json:"voiceover,omitempty"`
 	SignOff   *SignOff      `json:"sign_off,omitempty"`
+	// Tighten (montages) cuts the pauses out of every segment; the server
+	// works out each segment's Gaps from its file's pauses.
+	Tighten bool `json:"tighten,omitempty"`
 }
 
 // Source is what rendering needs to know about the source file.
@@ -91,7 +94,7 @@ func (c Composition) Validate(src Source) error {
 	if c.Version != 1 && c.Version != CompositionVersion {
 		return invalid("composition.version", fmt.Sprintf("Composition version must be 1 or %d.", CompositionVersion))
 	}
-	if len(c.Segments) > 0 || c.Hook != nil || c.Voiceover != nil || c.SignOff != nil {
+	if len(c.Segments) > 0 || c.Hook != nil || c.Voiceover != nil || c.SignOff != nil || c.Tighten {
 		return invalid("composition.version", fmt.Sprintf("Segments and hooks need composition version %d.", MontageVersion))
 	}
 	if c.Version == 1 && c.Captions != nil {

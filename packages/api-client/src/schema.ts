@@ -540,7 +540,8 @@ export interface paths {
         /**
          * Retry processing
          * @description Requires `media.upload`. Queues processing again for a file whose
-         *     processing failed. A file that is already processed is returned
+         *     processing failed, or that was processed before pauses were found
+         *     (for cutting pauses). A file that is already processed is returned
          *     unchanged; one that is queued or processing is
          *     `processing_in_progress` (409).
          */
@@ -1471,6 +1472,15 @@ export interface components {
             hook?: components["schemas"]["Hook"];
             voiceover?: components["schemas"]["VoiceoverMix"];
             sign_off?: components["schemas"]["SignOff"];
+            /**
+             * @description Version 3: cut the pauses out of every segment (except split
+             *     screens), keeping a little either side of speech. Pauses are
+             *     found when a file is processed; a file processed before that is
+             *     `validation_failed` on `tighten` until it is reprocessed
+             *     (`POST .../process`). The montage gets shorter, and captions,
+             *     hook, voiceover and sign-off follow the cut timeline.
+             */
+            tighten?: boolean;
             /** Format: uuid */
             source_asset_id: string;
             /** Format: int64 */
@@ -1688,6 +1698,12 @@ export interface components {
                 start_ms: number;
                 focus: number;
             }[];
+            /**
+             * @description Pauses cut out of the segment (source time, in order), worked out
+             *     by the server when the composition has `tighten`; anything sent
+             *     is replaced. The segment plays its range less these.
+             */
+            readonly gaps?: components["schemas"]["TimeRange"][];
         };
         /** @description Text shown at the top of the clip from its first frame until `end_ms` (clip time). */
         Hook: {

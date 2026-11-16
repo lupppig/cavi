@@ -176,7 +176,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
 			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.LengthMS(), "segments": max(1, len(c.Segments)),
-				"hook": c.Hook != nil, "framing": c.Framing, "voiceover": c.Voiceover != nil, "sign_off": c.SignOff != nil, "captions": captions != nil})
+				"hook": c.Hook != nil, "framing": c.Framing, "tighten": c.Tighten, "voiceover": c.Voiceover != nil, "sign_off": c.SignOff != nil, "captions": captions != nil})
 	})
 	if err != nil {
 		return Render{}, err
@@ -495,6 +495,10 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 				}
 				so.VoiceDurationMS = spoken.DurationMS
 			}
+		}
+		// Gaps first: captions follow the tightened timeline.
+		if err := tighten(ctx, tx, orgID, c); err != nil {
+			return err
 		}
 		if captions != nil {
 			opts, err := captions.Normalize()

@@ -41,6 +41,7 @@ type compositionBody struct {
 	Hook      *render.Hook         `json:"hook,omitempty"`
 	Voiceover *render.VoiceoverMix `json:"voiceover,omitempty"`
 	SignOff   *render.SignOff      `json:"sign_off,omitempty"`
+	Tighten   bool                 `json:"tighten,omitempty"`
 }
 
 // captionOptions are the caption choices, in requests and responses.
@@ -122,7 +123,7 @@ func toRenderResponse(r render.Render) renderResponse {
 	out := renderResponse{
 		ID: r.ID, ProjectID: r.ProjectID, SourceAssetID: ptr(r.SourceAssetID), Name: r.Name,
 		Composition: compositionResponse{compositionBody: compositionBody{Version: c.Version, SourceAssetID: c.SourceAssetID,
-			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus, Framing: c.Framing, Segments: c.Segments, Hook: c.Hook, Voiceover: c.Voiceover, SignOff: c.SignOff}},
+			StartMS: c.StartMS, EndMS: c.EndMS, Aspect: c.Aspect, Focus: c.Focus, Framing: c.Framing, Segments: c.Segments, Hook: c.Hook, Voiceover: c.Voiceover, SignOff: c.SignOff, Tighten: c.Tighten}},
 		Status: r.Status, Error: ptr(r.Error), CreatedAt: ts(r.CreatedAt), CanDelete: r.CanDelete,
 		Flags: toFlags(r.Flags),
 	}
@@ -161,7 +162,7 @@ func (h renderHandler) create(c *gin.Context) {
 	}
 	r, err := h.svc.Create(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Name,
 		render.Composition{Version: b.Version, SourceAssetID: b.SourceAssetID, StartMS: b.StartMS, EndMS: b.EndMS,
-			Aspect: b.Aspect, Focus: b.Focus, Framing: b.Framing, Segments: b.Segments, Hook: b.Hook, Voiceover: b.Voiceover, SignOff: b.SignOff}, captions)
+			Aspect: b.Aspect, Focus: b.Focus, Framing: b.Framing, Segments: b.Segments, Hook: b.Hook, Voiceover: b.Voiceover, SignOff: b.SignOff, Tighten: b.Tighten}, captions)
 	if err != nil {
 		h.fail(c, err)
 		return

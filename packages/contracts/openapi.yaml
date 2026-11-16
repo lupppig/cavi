@@ -924,7 +924,8 @@ paths:
       summary: Retry processing
       description: |
         Requires `media.upload`. Queues processing again for a file whose
-        processing failed. A file that is already processed is returned
+        processing failed, or that was processed before pauses were found
+        (for cutting pauses). A file that is already processed is returned
         unchanged; one that is queued or processing is
         `processing_in_progress` (409).
       tags: [media]
@@ -2547,6 +2548,15 @@ components:
         hook: { $ref: "#/components/schemas/Hook" }
         voiceover: { $ref: "#/components/schemas/VoiceoverMix" }
         sign_off: { $ref: "#/components/schemas/SignOff" }
+        tighten:
+          type: boolean
+          description: |
+            Version 3: cut the pauses out of every segment (except split
+            screens), keeping a little either side of speech. Pauses are
+            found when a file is processed; a file processed before that is
+            `validation_failed` on `tighten` until it is reprocessed
+            (`POST .../process`). The montage gets shorter, and captions,
+            hook, voiceover and sign-off follow the cut timeline.
         source_asset_id: { type: string, format: uuid }
         start_ms: { type: integer, format: int64, minimum: 0 }
         end_ms: { type: integer, format: int64, description: Exclusive; 1 s to 10 min after `start_ms`. }
@@ -2759,6 +2769,15 @@ components:
               source_asset_id: { type: string, format: uuid }
               start_ms: { type: integer, format: int64, minimum: 0 }
               focus: { type: number, minimum: 0, maximum: 1 }
+        gaps:
+          type: array
+          maxItems: 60
+          readOnly: true
+          description: |
+            Pauses cut out of the segment (source time, in order), worked out
+            by the server when the composition has `tighten`; anything sent
+            is replaced. The segment plays its range less these.
+          items: { $ref: "#/components/schemas/TimeRange" }
 
     Hook:
       type: object

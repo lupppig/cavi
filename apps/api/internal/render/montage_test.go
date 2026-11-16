@@ -8,7 +8,9 @@ import (
 
 	"github.com/lupppig/cavi/apps/api/internal/ai"
 	"github.com/lupppig/cavi/apps/api/internal/authz"
+	"github.com/lupppig/cavi/apps/api/internal/ffmpeg"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
+	"github.com/lupppig/cavi/apps/api/internal/media"
 )
 
 func montageOf(segs ...Segment) Composition {
@@ -426,5 +428,89 @@ func TestSplitScreenFollowsTheBrief(t *testing.T) {
 	}
 	if len(ff.montages[0].Parts[0].Stack) != 1 {
 		t.Fatalf("rendered without the tile: %+v", ff.montages[0].Parts[0])
+	}
+}
+
+func TestGaps(t *testing.T) {
+	ps := []media.Pause{
+		{StartMS: 500, EndMS: 1500},      // starts the segment's range: cut from its start
+		{StartMS: 3000, EndMS: 3300},     // too short to cut
+		{StartMS: 5000, EndMS: 6000},     // cut, keeping a little either side
+		{StartMS: 9500, EndMS: 12_000},   // runs past the end: cut to the end
+		{StartMS: 20_000, EndMS: 21_000}, // outside
+	}
+	got := gaps(ps, 1000, 10_000)
+	want := []Range{{1000, 1380}, {5150, 5880}, {9650, 10_000}}
+	if len(got) != len(want) {
+		t.Fatalf("gaps = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("gaps = %+v, want %+v", got, want)
+		}
+	}
+	s := Segment{StartMS: 1000, EndMS: 10_000, Gaps: got}
+	if p := s.Pieces(); len(p) != 2 || p[0] != (Range{1380, 5150}) || p[1] != (Range{5880, 9650}) || s.PlayMS() != 3770+3770 {
+		t.Fatalf("pieces = %+v, plays %d", p, s.PlayMS())
+	}
+}
+
+func TestRenderTightenedMontage(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 60_000, true)
+	w.transcribe(org, src, [3]any{10_000, 12_000, "First thought"}, [3]any{14_000, 16_000, "second thought"})
+	c := montageOf(Segment{SourceAssetID: src, StartMS: 10_000, EndMS: 16_000, Focus: 0.5})
+	c.Tighten = true
+
+	// Pauses not found yet (processed before pause cutting).
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Tight", c, nil)
+	wantField(t, err, "composition.tighten")
+
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE media_assets SET pauses = '[[12000,14000],[30000,31000]]' WHERE id = ?`, src); err != nil {
+		t.Fatal(err)
+	}
+	// Gaps a client sends are replaced by the server's.
+	c.Segments[0].Gaps = []Range{{10_000, 15_000}}
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Tight", c, &CaptionOptions{Style: CaptionsBold, Mode: ModeWords})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seg := r.Composition.Segments[0]
+	if len(seg.Gaps) != 1 || seg.Gaps[0] != (Range{12_150, 13_880}) || r.Composition.LengthMS() != 6000-1730 {
+		t.Fatalf("gaps = %+v, length %d", seg.Gaps, r.Composition.LengthMS())
+	}
+	// "second" now starts 1.73 s earlier on the clip's timeline.
+	var second *CueWord
+	for _, q := range r.Composition.Captions.Cues {
+		for i, wd := range q.Words {
+			if wd.Text == "second" {
+				second = &q.Words[i]
+			}
+		}
+	}
+	if second == nil || second.StartMS != 4000-1730 {
+		t.Fatalf("second word at %+v, want %d ms", second, 4000-1730)
+	}
+
+	ff := &fakeFFmpeg{}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err != nil {
+		t.Fatal(err)
+	}
+	p := ff.montages[0].Parts[0]
+	if len(p.Keep) != 2 || p.Keep[0] != (ffmpeg.Span{From: 0, To: 2150 * time.Millisecond}) || p.Plays() != 4270*time.Millisecond {
+		t.Fatalf("part = %+v", p)
+	}
+	if ff.montages[0].Length() != 4270*time.Millisecond {
+		t.Fatalf("montage length %v", ff.montages[0].Length())
+	}
+
+	// Without tighten, gaps are cleared.
+	c.Tighten = false
+	r, err = w.svc.Create(w.ctx, ana.id, org, proj, "Loose", c, nil)
+	if err != nil || len(r.Composition.Segments[0].Gaps) != 0 || r.Composition.LengthMS() != 6000 {
+		t.Fatalf("untightened = %+v, %v", r.Composition.Segments, err)
 	}
 }

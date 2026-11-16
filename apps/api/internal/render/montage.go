@@ -25,6 +25,8 @@ const (
 	MinSegment      = 500 * time.Millisecond
 	MaxTreatments   = 20 // blur boxes or muted ranges per segment
 	MaxHookRunes    = 120
+	// MaxGaps is how many pauses can be cut from one segment.
+	MaxGaps = 60
 	MaxSignOffRunes = 80
 	// SignOffMS is how long a silent sign-off card shows; a spoken one
 	// shows while it's said, plus signOffTailMS.
@@ -70,6 +72,35 @@ type Segment struct {
 	// segment's own on top), each for the segment's length. Only the
 	// segment's own sound plays.
 	Tiles []Tile `json:"tiles,omitempty"`
+	// Gaps are pauses cut out of the segment (source time, ascending),
+	// worked out by the server when the composition asks to tighten.
+	Gaps []Range `json:"gaps,omitempty"`
+}
+
+// Pieces are the stretches of source the segment plays: its range less
+// its gaps.
+func (s Segment) Pieces() []Range {
+	out := []Range{}
+	from := s.StartMS
+	for _, g := range s.Gaps {
+		if g.StartMS > from {
+			out = append(out, Range{from, g.StartMS})
+		}
+		from = max(from, g.EndMS)
+	}
+	if s.EndMS > from {
+		out = append(out, Range{from, s.EndMS})
+	}
+	return out
+}
+
+// PlayMS is how long the segment plays, gaps cut.
+func (s Segment) PlayMS() int64 {
+	var n int64
+	for _, p := range s.Pieces() {
+		n += p.EndMS - p.StartMS
+	}
+	return n
 }
 
 // Tile is another scene in a split-screen segment.
@@ -142,7 +173,7 @@ func (c Composition) LengthMS() int64 {
 	}
 	var n int64
 	for _, s := range c.Segments {
-		n += s.EndMS - s.StartMS
+		n += s.PlayMS()
 	}
 	return n
 }
@@ -215,6 +246,22 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 			if math.IsNaN(t.Focus) || t.Focus < 0 || t.Focus > 1 {
 				return invalid(f+".focus", "Framing must be between 0 and 1.")
 			}
+		}
+		if len(s.Gaps) > MaxGaps {
+			return invalid(field+".gaps", fmt.Sprintf("A segment can have at most %d pauses cut.", MaxGaps))
+		}
+		if len(s.Gaps) > 0 && len(s.Tiles) > 0 {
+			return invalid(field+".gaps", "Pauses can’t be cut from a split screen.")
+		}
+		prev := s.StartMS
+		for j, g := range s.Gaps {
+			if g.StartMS < prev || g.EndMS <= g.StartMS || g.EndMS > s.EndMS {
+				return invalid(fmt.Sprintf("%s.gaps[%d]", field, j), "Cut pauses must be inside their segment, in order.")
+			}
+			prev = g.EndMS
+		}
+		if s.PlayMS() < MinSegment.Milliseconds() {
+			return invalid(field+".gaps", "Each segment must still play for at least half a second with its pauses cut.")
 		}
 		if len(s.Mute) > MaxTreatments || len(s.Blur) > MaxTreatments {
 			return invalid(field, fmt.Sprintf("A segment can have at most %d muted ranges and %d blur boxes.", MaxTreatments, MaxTreatments))
@@ -335,6 +382,11 @@ func PlanMontage(c Composition, srcs map[string]Source, inputs map[string]string
 			tx, ty, tw, th := region(panel, srcs[t.SourceAssetID], t.Focus)
 			p.Stack = append(p.Stack, ffmpeg.Tile{Input: inputs[t.SourceAssetID], Start: ms(t.StartMS), CropX: tx, CropY: ty, CropW: tw, CropH: th})
 		}
+		if len(s.Gaps) > 0 {
+			for _, k := range s.Pieces() {
+				p.Keep = append(p.Keep, ffmpeg.Span{From: ms(k.StartMS - s.StartMS), To: ms(k.EndMS - s.StartMS)})
+			}
+		}
 		for _, r := range s.Mute {
 			p.Mute = append(p.Mute, ffmpeg.Span{From: ms(r.StartMS - s.StartMS), To: ms(r.EndMS - s.StartMS)})
 		}
@@ -356,16 +408,18 @@ func MontageCaptions(segs []Segment, transcripts map[string][]ai.Segment, aspect
 	var out []Cue
 	var offset int64
 	for _, s := range segs {
-		for _, q := range BuildCues(transcripts[s.SourceAssetID], s.StartMS, s.EndMS, aspect, mode) {
-			q.StartMS += offset
-			q.EndMS += offset
-			for i := range q.Words {
-				q.Words[i].StartMS += offset
-				q.Words[i].EndMS += offset
+		for _, p := range s.Pieces() {
+			for _, q := range BuildCues(transcripts[s.SourceAssetID], p.StartMS, p.EndMS, aspect, mode) {
+				q.StartMS += offset
+				q.EndMS += offset
+				for i := range q.Words {
+					q.Words[i].StartMS += offset
+					q.Words[i].EndMS += offset
+				}
+				out = append(out, q)
 			}
-			out = append(out, q)
+			offset += p.EndMS - p.StartMS
 		}
-		offset += s.EndMS - s.StartMS
 	}
 	return out
 }
