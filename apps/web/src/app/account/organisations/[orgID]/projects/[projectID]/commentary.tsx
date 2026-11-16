@@ -134,7 +134,7 @@ export function CommentaryEditor({
 
   const anchors = Array.from({ length: segments + 1 }, (_, i) => i + 1);
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="min-w-0 space-y-2">
       <legend className="text-sm font-semibold">
         Commentary <span className="font-semibold text-muted">· your narration through the clip</span>
       </legend>
@@ -157,7 +157,7 @@ export function CommentaryEditor({
                   id={`${id}-a${l.key}`}
                   value={l.segment}
                   onChange={(e) => set(l.key, { segment: Number(e.target.value) })}
-                  className="min-h-11 border border-line bg-white px-2 text-sm font-semibold"
+                  className="min-h-11 max-w-full min-w-0 border border-line bg-white px-2 text-sm font-semibold"
                 >
                   {anchors.map((a) => (
                     <option key={a} value={a}>
