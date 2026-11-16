@@ -531,7 +531,8 @@ func channelResults(ctx context.Context, db bun.IDB, orgID string) ([]ai.Channel
 	}
 	var out []ai.ChannelVideo
 	for _, v := range stats {
-		if v.Views >= minViews {
+		// Views are live; the share watched arrives a day or two later.
+		if v.Views >= minViews && v.AvgViewPercentage > 0 {
 			out = append(out, ai.ChannelVideo{Title: v.Title, DurationMS: v.DurationMS, Views: v.Views,
 				AvgViewPercentage: v.AvgViewPercentage, SubscribersGained: v.SubscribersGained})
 		}

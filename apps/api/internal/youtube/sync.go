@@ -86,6 +86,8 @@ func (y *Syncer) Process(ctx context.Context, job jobs.Job) error {
 	err = y.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		for _, v := range videos {
 			m := metrics[v.ID]
+			// Views and likes are live; the rest arrives a day or two late.
+			m.Views, m.Likes = max(m.Views, v.Views), max(m.Likes, v.Likes)
 			if _, err := tx.ExecContext(ctx, `
 				INSERT INTO youtube_videos (organisation_id, video_id, title, published_at, duration_ms, views, watch_minutes,
 					avg_view_seconds, avg_view_percentage, subscribers_gained, likes, shares, render_id, updated_at)

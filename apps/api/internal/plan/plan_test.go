@@ -318,6 +318,7 @@ func TestPlansLearnFromTheChannel(t *testing.T) {
 	add("v1", "Held them", 1000, 61)
 	add("v2", "Lost them", 900, 12)
 	add("v3", "Too few views", 10, 99)
+	add("v5", "Analytics not in yet", 1200, 0)
 	if b := run(); b.Channel != nil {
 		t.Fatalf("two usable videos still sent: %+v", b.Channel)
 	}

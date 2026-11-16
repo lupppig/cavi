@@ -193,12 +193,15 @@ func (c *Client) MyChannel(ctx context.Context, access string) (Channel, error) 
 	return Channel{ID: it.ID, Title: it.Snippet.Title, Uploads: it.ContentDetails.RelatedPlaylists.Uploads}, nil
 }
 
-// Video is one upload.
+// Video is one upload, with its live view and like counts (the
+// Analytics API's numbers lag by a day or two; these don't).
 type Video struct {
 	ID          string
 	Title       string
 	PublishedAt time.Time
 	DurationMS  int64
+	Views       int64
+	Likes       int64
 }
 
 // MaxVideos is how many of the newest uploads are read.
@@ -248,14 +251,20 @@ func (c *Client) Uploads(ctx context.Context, access string, ch Channel) ([]Vide
 				ContentDetails struct {
 					Duration string `json:"duration"`
 				} `json:"contentDetails"`
+				Statistics struct {
+					ViewCount string `json:"viewCount"`
+					LikeCount string `json:"likeCount"`
+				} `json:"statistics"`
 			} `json:"items"`
 		}
-		if err := c.get(ctx, access, c.DataURL+"/videos?part=snippet,contentDetails&id="+url.QueryEscape(strings.Join(batch, ",")), &r); err != nil {
+		if err := c.get(ctx, access, c.DataURL+"/videos?part=snippet,contentDetails,statistics&id="+url.QueryEscape(strings.Join(batch, ",")), &r); err != nil {
 			return nil, err
 		}
 		for _, it := range r.Items {
+			views, _ := strconv.ParseInt(it.Statistics.ViewCount, 10, 64)
+			likes, _ := strconv.ParseInt(it.Statistics.LikeCount, 10, 64)
 			out = append(out, Video{ID: it.ID, Title: it.Snippet.Title, PublishedAt: it.Snippet.PublishedAt,
-				DurationMS: isoDuration(it.ContentDetails.Duration)})
+				DurationMS: isoDuration(it.ContentDetails.Duration), Views: views, Likes: likes})
 		}
 	}
 	return out, nil

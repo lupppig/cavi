@@ -94,9 +94,9 @@ func (f *fakeGoogle) server(t *testing.T) *httptest.Server {
 	}))
 	mux.HandleFunc("/data/videos", auth(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"items":[
-			{"id":"v1","snippet":{"title":"Marlon's First Day in Botswana 🇧🇼 Didn't Expect This! 👀","publishedAt":"2026-11-15T10:00:00Z"},"contentDetails":{"duration":"PT30S"}},
+			{"id":"v1","snippet":{"title":"Marlon's First Day in Botswana 🇧🇼 Didn't Expect This! 👀","publishedAt":"2026-11-15T10:00:00Z"},"contentDetails":{"duration":"PT30S"},"statistics":{"viewCount":"1253","likeCount":"41"}},
 			{"id":"v2","snippet":{"title":"Cartman Being an Absolute MENACE","publishedAt":"2026-10-23T10:00:00Z"},"contentDetails":{"duration":"PT13S"}},
-			{"id":"v3","snippet":{"title":"Old upload","publishedAt":"2026-01-01T10:00:00Z"},"contentDetails":{"duration":"PT1M13.5S"}}]}`))
+			{"id":"v3","snippet":{"title":"Old upload","publishedAt":"2026-01-01T10:00:00Z"},"contentDetails":{"duration":"PT1M13.5S"},"statistics":{"viewCount":"21"}}]}`))
 	}))
 	mux.HandleFunc("/analytics/reports", auth(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -312,10 +312,12 @@ func TestConnectSyncDisconnect(t *testing.T) {
 		t.Fatalf("videos = %+v, %v", vs, err)
 	}
 	v1 := vs[0]
-	if v1.VideoID != "v1" || v1.Views != 1188 || v1.AvgViewPercentage != 27 || v1.DurationMS != 30_000 || v1.RenderID != renderID || v1.ProjectID != projectID {
+	// Live views (1253) beat the lagging analytics (1188); the share
+	// watched comes from analytics.
+	if v1.VideoID != "v1" || v1.Views != 1253 || v1.Likes != 41 || v1.AvgViewPercentage != 27 || v1.DurationMS != 30_000 || v1.RenderID != renderID || v1.ProjectID != projectID {
 		t.Fatalf("v1 = %+v", v1)
 	}
-	if vs[2].VideoID != "v3" || vs[2].Views != 0 || vs[2].DurationMS != 73_500 {
+	if vs[2].VideoID != "v3" || vs[2].Views != 21 || vs[2].AvgViewPercentage != 0 || vs[2].DurationMS != 73_500 {
 		t.Fatalf("an upload without numbers = %+v", vs[2])
 	}
 	if c, _ := w.svc.Status(w.ctx, ana.id, org); c.SyncStatus != SyncIdle || c.SyncedAt.IsZero() || c.Videos != 3 {
