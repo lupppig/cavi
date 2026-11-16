@@ -17,9 +17,10 @@ CAVI does one thing for now: **clipping**. Live clipping is next.
 1. **Upload** a long video, or paste a YouTube, Twitch or Kick link. It goes to private storage; CAVI checks it, reads its length, size and sound, and finds the people in it for auto framing.
 2. **Transcribe** it. Every word is timed and each speaker is labelled.
 3. **Add the creator's brief.** Paste their guidelines as written. CAVI reads them into rules you can check and edit: moments to feature, moments that must never be used, and things to blur, mute or review. Every time in a rule must appear in the brief, so nothing is invented.
-4. **Find clips.** Highlights suggests stand-alone moments, ranked so the creator's priorities come first, each with a reason and how it connects to the campaign. Edit plans goes further and proposes finished short videos: which moments to join and in what order, a hook, and a voiceover script.
-5. **Edit.** Join moments from one or more videos, frame each for 9:16, 1:1, 4:5 or 16:9 by hand or let the camera follow the people in shot, open on a split screen of several scenes, blur licence plates or faces, mute uncleared music, add a hook, word-by-word or bouncing "pop" captions, an AI voiceover (captioned too), and a sign-off card ("Like and subscribe for more!") the narrator can say.
-6. **Render and download.** CAVI renders an MP4 and checks its size, length and sound before keeping it. Download it and post it.
+4. **Find clips.** Highlights suggests stand-alone moments, ranked so the creator's priorities come first, each with a reason and how it connects to the campaign. Edit plans goes further and proposes up to ten finished short videos, each opening cold on its strongest line: which moments to join and in what order, a hook that opens a question, and a voiceover script where one is needed.
+5. **Make them all at once, or one by one.** Make all renders every plan as a clip with short-form defaults (9:16, the camera following people, pop captions, pauses cut, the hook and a sign-off).
+6. **Edit.** Join moments from one or more videos, frame each for 9:16, 1:1, 4:5 or 16:9 by hand or let the camera follow the people in shot, open on a split screen of several scenes, blur licence plates or faces, mute uncleared music, cut the pauses, add a hook, word-by-word or bouncing "pop" captions, an AI voiceover (captioned too), and a sign-off card ("Like and subscribe for more!") the narrator can say.
+7. **Render and download.** CAVI renders an MP4 and checks its size, length and sound before keeping it. Download it and post it.
 
 The brief is enforced, not just suggested: a clip that includes a "never use" moment can't be rendered, and clips near anything else the brief flags are marked so someone checks them.
 
