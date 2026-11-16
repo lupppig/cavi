@@ -155,9 +155,14 @@ function PlanList({
 
   return (
     <>
+      {run.series && run.plans[0]?.series_title && (
+        <p className="mt-3 text-sm font-semibold">
+          Series: “{run.plans[0].series_title}” · {run.plans.length} parts
+        </p>
+      )}
       {canRender && run.plans.length > 1 && !batch && (
         <button type="button" onClick={() => setBatch(true)} className="btn btn-primary mt-3 min-h-11 px-3 text-sm">
-          Make all {run.plans.length} as clips
+          {run.series ? `Make all ${run.plans.length} parts` : `Make all ${run.plans.length} as clips`}
         </button>
       )}
       {batch && <BatchPanel project={project} plans={run.plans} onClose={() => setBatch(false)} />}
@@ -169,10 +174,10 @@ function PlanList({
             <li key={i} className="rounded-xl border border-line bg-surface-2 p-2.5">
               <div className="flex items-start gap-2.5">
                 <span
-                  aria-label={`Plan ${i + 1}`}
+                  aria-label={p.part ? `Part ${p.part}` : `Plan ${i + 1}`}
                   className="grid size-7 shrink-0 place-items-center rounded-full bg-accent-soft text-xs font-semibold text-accent-text"
                 >
-                  {i + 1}
+                  {p.part ? `P${p.part}` : i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold leading-snug break-words">{p.title}</p>
@@ -259,6 +264,7 @@ function RequestForm({
   const settings = useAIModelSettings(project.organisation_id);
   const model = settings.data?.find((s) => s.task === "plans")?.model;
   const [objective, setObjective] = useState(run?.objective ?? "");
+  const [series, setSeries] = useState(run?.series ?? false);
   const [length, setLength] = useState(() => {
     const i = lengths.findIndex((l) => l.min === run?.min_seconds && l.max === run?.max_seconds);
     return i >= 0 ? i : defaultLength;
@@ -269,7 +275,7 @@ function RequestForm({
       const { min, max } = lengths[length];
       const { data, error, response } = await client().POST("/api/v1/organisations/{orgID}/projects/{projectID}/plans", {
         params: { path: { orgID: project.organisation_id, projectID: project.id } },
-        body: { objective: objective.trim(), min_seconds: min, max_seconds: max },
+        body: { objective: objective.trim(), min_seconds: min, max_seconds: max, series },
       });
       if (!data) raise(error, response.status, "Could not start planning.");
       return data;
@@ -324,6 +330,16 @@ function RequestForm({
           ))}
         </div>
       </fieldset>
+      <label className="flex min-h-11 cursor-pointer items-start gap-2 text-sm font-semibold">
+        <input type="checkbox" checked={series} onChange={(e) => setSeries(e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[var(--ink)]" />
+        <span>
+          One story in parts (a series)
+          <span className="block text-xs text-muted">
+            Part 1, Part 2… each ending on a cliffhanger the next one answers, so viewers follow you for the rest. Each part keeps the
+            length above.
+          </span>
+        </span>
+      </label>
       <p className="text-xs font-semibold text-muted">
         Plans use your newest transcribed files (up to 5){brief.data?.status === "ready" ? " and follow the creator brief" : ""}. Moments the
         brief says never to use are left out.

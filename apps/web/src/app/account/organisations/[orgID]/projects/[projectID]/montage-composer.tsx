@@ -7,6 +7,7 @@ import { client, raise, type CaptionOptions, type Composition, type MontageSegme
 import { CaptionOptionsPicker, defaultCaptionOptions } from "./caption-options";
 import { shapes, stampTenths } from "./clips";
 import { FramingChoice } from "./framing";
+import { useLook, type SavedLook } from "./look";
 import { needsPauses, PrepareForPauses } from "./tighten";
 import { useProjectMedia } from "./media-section";
 import {
@@ -72,17 +73,31 @@ function toSegment(d: SegmentDraft): MontageSegment {
  * with its own framing, muted stretches and blurred areas, plus an opening
  * hook, captions and an optional voiceover. Renders with composition v3.
  */
-export function MontageComposer({
-  project,
-  initial,
-  canMakeVoiceover,
-  onClose,
-}: {
+export function MontageComposer(props: {
   project: Project;
   initial?: MontageInitial;
   /** editing.manage: may have a script spoken. */
   canMakeVoiceover: boolean;
   onClose: () => void;
+}) {
+  const look = useLook(props.project.organisation_id);
+  if (look.isPending) return <div className="h-40 animate-pulse bg-surface-2" />;
+  // Without the look (it failed to load), start from the defaults.
+  return <Composer {...props} look={look.data} />;
+}
+
+function Composer({
+  project,
+  initial,
+  canMakeVoiceover,
+  onClose,
+  look,
+}: {
+  project: Project;
+  initial?: MontageInitial;
+  canMakeVoiceover: boolean;
+  onClose: () => void;
+  look?: SavedLook;
 }) {
   const id = useId();
   const qc = useQueryClient();
@@ -95,12 +110,15 @@ export function MontageComposer({
   const [segments, setSegments] = useState<SegmentDraft[]>(() =>
     initial?.segments.length ? initial.segments.map(draftOf) : [draftOf({ assetID: "", startMS: 0, endMS: DEFAULT_SEGMENT_MS })],
   );
-  const [captions, setCaptions] = useState<CaptionOptions | null>(null);
-  const [auto, setAuto] = useState(false);
-  const [tighten, setTighten] = useState(true);
+  // New montages start from the organisation's look.
+  const [captions, setCaptions] = useState<CaptionOptions | null>(look?.captions ?? null);
+  const [auto, setAuto] = useState(look?.follow_people ?? false);
+  const [tighten, setTighten] = useState(look?.cut_pauses ?? true);
   const [voiceover, setVoiceover] = useState<VoiceoverChoice>({ id: null, start: "0.5", duck: 0.25 });
   const chosenVoiceover = useChosenVoiceover(project, voiceover.id);
-  const [signOff, setSignOff] = useState<SignOffChoice>(defaultSignOff);
+  const [signOff, setSignOff] = useState<SignOffChoice>(
+    look ? { on: !!look.sign_off, text: look.sign_off || defaultSignOff.text, voiceoverID: null } : defaultSignOff,
+  );
   const spokenSignOff = useChosenVoiceover(project, signOff.voiceoverID);
   const [problem, setProblem] = useState<string | null>(null);
 
