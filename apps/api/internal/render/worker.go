@@ -351,6 +351,11 @@ func (r *Renderer) montage(ctx context.Context, job jobs.Job, projectID, name st
 			return err
 		}
 	}
+	for _, b := range c.Commentary {
+		if err := voice(b.VoiceoverID, b.StartMS, b.DurationMS, b.Duck); err != nil {
+			return err
+		}
+	}
 	if so := c.SignOff; so != nil && so.VoiceoverID != "" {
 		from := c.SignOffStartMS()
 		if err := voice(so.VoiceoverID, from, c.LengthMS()-from, signOffDuck); err != nil {

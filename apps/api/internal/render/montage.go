@@ -30,6 +30,8 @@ const (
 	MaxSignOffRunes = 80
 	// MaxBadgeRunes is the longest badge ("PART 2/3").
 	MaxBadgeRunes = 24
+	// MaxCommentary is how many commentary beats a clip can have.
+	MaxCommentary = 8
 	// SignOffMS is how long a silent sign-off card shows; a spoken one
 	// shows while it's said, plus signOffTailMS.
 	SignOffMS     = 2500
@@ -138,6 +140,43 @@ type VoiceoverMix struct {
 	Duck float64 `json:"duck"`
 	// DurationMS is copied from the voiceover when the render is requested.
 	DurationMS int64 `json:"duration_ms"`
+	// Segment (commentary only) anchors the beat to the start of that
+	// segment (from 1), or, one past the last, to the end of the clip
+	// (before any sign-off). The server then sets StartMS on the final
+	// timeline, after pauses are cut. 0 uses StartMS as given.
+	Segment int `json:"segment,omitempty"`
+}
+
+// beatGap is the breath between narration a beat is moved after when its
+// anchor would overlap the narration before it.
+const beatGap = 300
+
+// placeCommentary sets the StartMS of beats anchored to segments, on the
+// montage's final timeline (after gaps), moving a beat later if it would
+// overlap the narration before it. Call it once durations are known.
+func (c *Composition) placeCommentary() {
+	starts := make([]int64, len(c.Segments)+1)
+	for i, s := range c.Segments {
+		starts[i+1] = starts[i] + s.PlayMS()
+	}
+	end := c.SignOffStartMS()
+	var prev int64 = -1
+	if v := c.Voiceover; v != nil {
+		prev = v.StartMS + v.DurationMS
+	}
+	for i := range c.Commentary {
+		b := &c.Commentary[i]
+		switch {
+		case b.Segment >= 1 && b.Segment <= len(c.Segments):
+			b.StartMS = starts[b.Segment-1]
+		case b.Segment == len(c.Segments)+1:
+			b.StartMS = max(0, end-b.DurationMS-beatGap)
+		}
+		if b.Segment > 0 && prev >= 0 && b.StartMS < prev+beatGap {
+			b.StartMS = prev + beatGap
+		}
+		prev = b.StartMS + b.DurationMS
+	}
 }
 
 // SignOff is the clip's ending: a card with Text over the last moments,
@@ -323,6 +362,36 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 				float64(v.DurationMS)/1000, float64(total)/1000))
 		}
 	}
+	for i, b := range c.Commentary {
+		if b.Segment < 0 || b.Segment > len(c.Segments)+1 {
+			return invalid(fmt.Sprintf("composition.commentary[%d].segment", i), "Anchor commentary to a segment of this clip, or its end.")
+		}
+	}
+	if len(c.Commentary) > MaxCommentary {
+		return invalid("composition.commentary", fmt.Sprintf("A clip can have at most %d commentary lines.", MaxCommentary))
+	}
+	// Narration doesn't overlap: the voiceover and each beat in turn.
+	var spoken [][2]int64
+	if v := c.Voiceover; v != nil {
+		spoken = append(spoken, [2]int64{v.StartMS, v.StartMS + v.DurationMS})
+	}
+	for i := range c.Commentary {
+		b := &c.Commentary[i]
+		field := fmt.Sprintf("composition.commentary[%d]", i)
+		if math.IsNaN(b.Duck) || b.Duck < 0 || b.Duck > 1 {
+			return invalid(field+".duck", "The clip’s own sound under commentary must be between 0 and 1.")
+		}
+		if b.StartMS < 0 || b.DurationMS <= 0 || b.StartMS+b.DurationMS > total {
+			return invalid(field+".start_ms", fmt.Sprintf("Commentary line %d (%.1f s) must fit inside the clip (%.1f s).",
+				i+1, float64(b.DurationMS)/1000, float64(total)/1000))
+		}
+		for _, s := range spoken {
+			if b.StartMS < s[1] && s[0] < b.StartMS+b.DurationMS {
+				return invalid(field+".start_ms", fmt.Sprintf("Commentary line %d overlaps other narration. Move it, or shorten what comes before.", i+1))
+			}
+		}
+		spoken = append(spoken, [2]int64{b.StartMS, b.StartMS + b.DurationMS})
+	}
 	if so := c.SignOff; so != nil {
 		so.Text = strings.Join(strings.Fields(so.Text), " ")
 		if so.Text == "" || !utf8.ValidString(so.Text) || utf8.RuneCountInString(so.Text) > MaxSignOffRunes {
@@ -339,6 +408,12 @@ func (c *Composition) ValidateMontage(srcs map[string]Source) error {
 		if v := c.Voiceover; v != nil && v.StartMS+v.DurationMS > from {
 			return invalid("composition.voiceover.start_ms", fmt.Sprintf(
 				"The voiceover runs into the sign-off, which starts at %.1f s. Start it earlier or make the clip longer.", float64(from)/1000))
+		}
+		for i, b := range c.Commentary {
+			if b.StartMS+b.DurationMS > from {
+				return invalid(fmt.Sprintf("composition.commentary[%d].start_ms", i), fmt.Sprintf(
+					"Commentary line %d runs into the sign-off, which starts at %.1f s.", i+1, float64(from)/1000))
+			}
 		}
 	}
 	first := c.Segments[0]

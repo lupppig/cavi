@@ -176,7 +176,7 @@ func (s *Service) Create(ctx context.Context, actorID, orgID, projectID, name st
 		}
 		return account.Audit(ctx, tx, orgID, actorID, "render.requested", "render", id,
 			map[string]any{"source_asset_id": c.SourceAssetID, "aspect": c.Aspect, "duration_ms": c.LengthMS(), "segments": max(1, len(c.Segments)),
-				"hook": c.Hook != nil, "framing": c.Framing, "tighten": c.Tighten, "voiceover": c.Voiceover != nil, "sign_off": c.SignOff != nil, "captions": captions != nil})
+				"hook": c.Hook != nil, "framing": c.Framing, "tighten": c.Tighten, "voiceover": c.Voiceover != nil, "commentary": len(c.Commentary), "sign_off": c.SignOff != nil, "captions": captions != nil})
 	})
 	if err != nil {
 		return Render{}, err
@@ -486,6 +486,15 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 			}
 			c.Voiceover.DurationMS = vo.DurationMS
 		}
+		beats := make([]voiceover.Ready, len(c.Commentary))
+		for i := range c.Commentary {
+			b, err := voiceover.Load(ctx, tx, orgID, projectID, c.Commentary[i].VoiceoverID)
+			if err != nil {
+				return invalid(fmt.Sprintf("composition.commentary[%d].voiceover_id", i), "Choose a finished voiceover from this project.")
+			}
+			c.Commentary[i].DurationMS = b.DurationMS
+			beats[i] = b
+		}
 		if so := c.SignOff; so != nil {
 			so.VoiceDurationMS = 0
 			if so.VoiceoverID != "" {
@@ -496,10 +505,12 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 				so.VoiceDurationMS = spoken.DurationMS
 			}
 		}
-		// Gaps first: captions follow the tightened timeline.
+		// Gaps first: captions and anchored commentary follow the
+		// tightened timeline.
 		if err := tighten(ctx, tx, orgID, c); err != nil {
 			return err
 		}
+		c.placeCommentary()
 		if captions != nil {
 			opts, err := captions.Normalize()
 			if err != nil {
@@ -519,6 +530,9 @@ func prepare(ctx context.Context, tx bun.Tx, orgID, projectID string, c *Composi
 			cues := MontageCaptions(c.Segments, transcripts, c.Aspect, opts.Mode)
 			if c.Voiceover != nil {
 				cues = WithVoiceover(cues, VoiceoverCues(vo.Script, vo.Words, vo.DurationMS, c.Voiceover.StartMS, c.Aspect, opts.Mode))
+			}
+			for i, b := range beats {
+				cues = WithVoiceover(cues, VoiceoverCues(b.Script, b.Words, b.DurationMS, c.Commentary[i].StartMS, c.Aspect, opts.Mode))
 			}
 			if c.SignOff != nil {
 				cues = BeforeSignOff(cues, c.SignOffStartMS())

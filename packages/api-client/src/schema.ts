@@ -1619,6 +1619,16 @@ export interface components {
             hook?: components["schemas"]["Hook"];
             voiceover?: components["schemas"]["VoiceoverMix"];
             sign_off?: components["schemas"]["SignOff"];
+            /**
+             * @description Version 3. Narration through the clip: ready voiceovers at points
+             *     on the timeline (or anchored to segments), in order, not
+             *     overlapping each other, the voiceover or the sign-off. The clip's
+             *     own sound is lowered to each beat's `duck` while it plays, and
+             *     each is captioned in place of the dialogue under it. Commentary
+             *     in the channel's own words is what makes clips of other people's
+             *     footage original work.
+             */
+            commentary?: components["schemas"]["VoiceoverMix"][];
             /** @description Version 3. A small label at the top left until the sign-off, for a series ("PART 2/3"). */
             badge?: string;
             /**
@@ -1783,6 +1793,14 @@ export interface components {
              * @description Copied from the voiceover when the render is requested.
              */
             readonly duration_ms?: number;
+            /**
+             * @description Commentary only: anchor the beat to the start of this segment
+             *     (from 1), or, one past the last segment, to the end of the clip
+             *     before any sign-off. The server sets `start_ms` on the final
+             *     timeline (after pauses are cut), moving a beat later if it would
+             *     overlap the narration before it. 0 or absent uses `start_ms`.
+             */
+            segment?: number;
         };
         /**
          * @description The clip's ending (montages only): a card with `text` over the last

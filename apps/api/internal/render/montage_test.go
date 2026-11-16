@@ -521,3 +521,100 @@ func TestRenderTightenedMontage(t *testing.T) {
 		t.Fatalf("untightened = %+v, %v", r.Composition.Segments, err)
 	}
 }
+
+func TestRenderMontageWithCommentary(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 60_000, true)
+	w.transcribe(org, src, [3]any{10_000, 30_000, "People talk the whole way through this stretch of the vlog"})
+	intro, mid, late := w.readyVoiceover(org, proj, 3000), w.readyVoiceover(org, proj, 2500), w.readyVoiceover(org, proj, 2000)
+	c := montageOf(Segment{SourceAssetID: src, StartMS: 10_000, EndMS: 30_000, Focus: 0.5})
+	c.SignOff = &SignOff{Text: "Follow for more"}
+
+	// Beats can't overlap each other.
+	c.Commentary = []VoiceoverMix{{VoiceoverID: intro, StartMS: 0, Duck: 0.2}, {VoiceoverID: mid, StartMS: 2000, Duck: 0.2}}
+	_, err := w.svc.Create(w.ctx, ana.id, org, proj, "Overlap", c, nil)
+	wantField(t, err, "composition.commentary[1].start_ms")
+	// Nor run into the sign-off (from 17.5 s).
+	c.Commentary = []VoiceoverMix{{VoiceoverID: late, StartMS: 16_000, Duck: 0.2}}
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Into sign-off", c, nil)
+	wantField(t, err, "composition.commentary[0].start_ms")
+
+	c.Commentary = []VoiceoverMix{
+		{VoiceoverID: intro, StartMS: 0, Duck: 0.2},
+		{VoiceoverID: mid, StartMS: 8000, Duck: 0.15},
+		{VoiceoverID: late, StartMS: 15_000, Duck: 0.2},
+	}
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Commentary", c, &CaptionOptions{Style: CaptionsBold})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.Composition.Commentary
+	if len(got) != 3 || got[0].DurationMS != 3000 || got[1].DurationMS != 2500 || got[2].DurationMS != 2000 {
+		t.Fatalf("commentary = %+v", got)
+	}
+	// Each beat is captioned, replacing the dialogue under it.
+	var voiced int
+	for _, q := range r.Composition.Captions.Cues {
+		if q.Speaker == "Voiceover" {
+			voiced++
+			if !(q.StartMS >= 0 && q.EndMS <= 3000 || q.StartMS >= 8000 && q.EndMS <= 10_500 || q.StartMS >= 15_000 && q.EndMS <= 17_000) {
+				t.Fatalf("commentary cue outside its beat: %+v", q)
+			}
+		} else if q.StartMS < 3000 || (q.StartMS < 10_500 && q.EndMS > 8000) {
+			t.Fatalf("dialogue cue under commentary: %+v", q)
+		}
+	}
+	if voiced < 3 {
+		t.Fatalf("%d commentary cues", voiced)
+	}
+	ff := &fakeFFmpeg{}
+	if err := w.renderer(ff).Process(w.ctx, w.job(r.ID)); err != nil {
+		t.Fatal(err)
+	}
+	vs := ff.montages[0].Voices
+	if len(vs) != 3 || vs[1].At != 8*time.Second || vs[1].Length != 2500*time.Millisecond || vs[1].Duck != 0.15 {
+		t.Fatalf("voices = %+v", vs)
+	}
+}
+
+func TestAnchoredCommentary(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	src := w.video(org, proj, "video", 1920, 1080, 60_000, true)
+	a, b, c3, end := w.readyVoiceover(org, proj, 3000), w.readyVoiceover(org, proj, 2000), w.readyVoiceover(org, proj, 1000), w.readyVoiceover(org, proj, 2000)
+	if _, err := w.db.ExecContext(w.ctx, `UPDATE media_assets SET pauses = '[[12000,14000]]' WHERE id = ?`, src); err != nil {
+		t.Fatal(err)
+	}
+	c := montageOf(
+		Segment{SourceAssetID: src, StartMS: 10_000, EndMS: 16_000, Focus: 0.5}, // 6 s, 4.27 s with the pause cut
+		Segment{SourceAssetID: src, StartMS: 30_000, EndMS: 31_000, Focus: 0.5}, // 1 s
+		Segment{SourceAssetID: src, StartMS: 40_000, EndMS: 50_000, Focus: 0.5}, // 10 s
+	)
+	c.Tighten = true
+	c.SignOff = &SignOff{Text: "Follow for more"}
+	c.Commentary = []VoiceoverMix{
+		{VoiceoverID: a, Segment: 1, Duck: 0.2},
+		{VoiceoverID: b, Segment: 2, Duck: 0.2}, // segment 2 starts at 4.27 s
+		{VoiceoverID: c3, Segment: 3, Duck: 0.2}, // 5.27 s, but b runs to 6.27 s: moved to 6.57 s
+		{VoiceoverID: end, Segment: 4, Duck: 0.2}, // the end: before the sign-off at 15.27 - 2.5 = 12.77 s
+	}
+	r, err := w.svc.Create(w.ctx, ana.id, org, proj, "Anchored", c, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := r.Composition.Commentary
+	want := []int64{0, 4270, 6570, 12_770 - 2000 - 300}
+	for i, b := range got {
+		if b.StartMS != want[i] {
+			t.Fatalf("beat %d at %d ms, want %d: %+v", i, b.StartMS, want[i], got)
+		}
+	}
+	c.Commentary = []VoiceoverMix{{VoiceoverID: a, Segment: 9, Duck: 0.2}}
+	_, err = w.svc.Create(w.ctx, ana.id, org, proj, "Bad anchor", c, nil)
+	wantField(t, err, "composition.commentary[0].segment")
+}

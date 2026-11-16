@@ -2796,6 +2796,18 @@ components:
         hook: { $ref: "#/components/schemas/Hook" }
         voiceover: { $ref: "#/components/schemas/VoiceoverMix" }
         sign_off: { $ref: "#/components/schemas/SignOff" }
+        commentary:
+          type: array
+          maxItems: 8
+          description: |
+            Version 3. Narration through the clip: ready voiceovers at points
+            on the timeline (or anchored to segments), in order, not
+            overlapping each other, the voiceover or the sign-off. The clip's
+            own sound is lowered to each beat's `duck` while it plays, and
+            each is captioned in place of the dialogue under it. Commentary
+            in the channel's own words is what makes clips of other people's
+            footage original work.
+          items: { $ref: "#/components/schemas/VoiceoverMix" }
         badge:
           type: string
           maxLength: 24
@@ -2959,6 +2971,15 @@ components:
         start_ms: { type: integer, format: int64, minimum: 0, description: Clip time. }
         duck: { type: number, minimum: 0, maximum: 1, description: "The clip's own sound level while the voiceover plays (0.25 is a typical duck)." }
         duration_ms: { type: integer, format: int64, readOnly: true, description: Copied from the voiceover when the render is requested. }
+        segment:
+          type: integer
+          minimum: 0
+          description: |
+            Commentary only: anchor the beat to the start of this segment
+            (from 1), or, one past the last segment, to the end of the clip
+            before any sign-off. The server sets `start_ms` on the final
+            timeline (after pauses are cut), moving a beat later if it would
+            overlap the narration before it. 0 or absent uses `start_ms`.
 
     SignOff:
       type: object
