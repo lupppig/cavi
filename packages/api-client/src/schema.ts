@@ -911,6 +911,121 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/youtube": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The connected YouTube channel
+         * @description Anyone in the organisation can read it. `available` is false when
+         *     this server can't connect channels; `connected` is false when none
+         *     is connected.
+         */
+        get: operations["getYouTubeConnection"];
+        put?: never;
+        post?: never;
+        /**
+         * Disconnect the channel
+         * @description Requires `organisation.manage`. Removes the channel and its synced numbers and asks Google to revoke access.
+         */
+        delete: operations["disconnectYouTube"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/youtube/connect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start connecting a channel
+         * @description Requires `organisation.manage`. Returns Google's consent page;
+         *     send the browser there. CAVI asks for read-only access to the
+         *     channel and its analytics. Google sends the browser back to
+         *     `/api/v1/youtube/callback`, which returns it to the organisation's
+         *     page with `?youtube=connected` or `?youtube=failed`, and queues
+         *     the first sync.
+         */
+        post: operations["connectYouTube"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/youtube/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Read the channel's numbers again
+         * @description Requires `editing.manage`. Queues a sync; `sync_in_progress` (409) if one is queued or running.
+         */
+        post: operations["syncYouTube"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/youtube/videos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The channel's uploads and their numbers
+         * @description As of the last sync, newest first (the newest 200 uploads). Each is
+         *     matched to the CAVI clip it came from where the title and length
+         *     say so. YouTube's numbers lag by a day or two.
+         */
+        get: operations["listYouTubeVideos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/youtube/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Google's return from connecting a channel
+         * @description Browser navigation from Google's consent page (the OAuth redirect
+         *     URI). Finishes connecting a request the signed-in person started in
+         *     the last 10 minutes and redirects to the organisation's page.
+         */
+        get: operations["youtubeCallback"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/ai-models": {
         parameters: {
             query?: never;
@@ -1757,6 +1872,50 @@ export interface components {
             text: string;
             /** Format: int64 */
             end_ms: number;
+        };
+        YouTubeConnection: {
+            available: boolean;
+            connected: boolean;
+            channel_id: string | null;
+            channel_title: string | null;
+            /** Format: date-time */
+            connected_at: string | null;
+            connected_by: string | null;
+            /** @enum {string|null} */
+            sync_status: "idle" | "queued" | "running" | "failed" | null;
+            /** @description Why the last sync stopped */
+            sync_error: string | null;
+            /** Format: date-time */
+            synced_at: string | null;
+            videos: number;
+        };
+        YouTubeVideo: {
+            video_id: string;
+            title: string;
+            /** Format: date-time */
+            published_at: string | null;
+            /** Format: int64 */
+            duration_ms: number;
+            /** Format: int64 */
+            views: number;
+            watch_minutes: number;
+            avg_view_seconds: number;
+            /** @description Average share of the video watched (0-100; can exceed 100 with replays). */
+            avg_view_percentage: number;
+            /** Format: int64 */
+            subscribers_gained: number;
+            /** Format: int64 */
+            likes: number;
+            /** Format: int64 */
+            shares: number;
+            /** @description The CAVI clip it was made from, when matched. */
+            clip: {
+                /** Format: uuid */
+                render_id: string;
+                /** Format: uuid */
+                project_id: string;
+                name: string;
+            } | null;
         };
         ClipLook: {
             /** @description Caption choices (speaker colours aside); null for no captions. */
@@ -3609,6 +3768,167 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    getYouTubeConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The connection. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YouTubeConnection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    disconnectYouTube: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    connectYouTube: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Where to send the browser. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        url: string;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    syncYouTube: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sync queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["YouTubeConnection"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    listYouTubeVideos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The uploads. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["YouTubeVideo"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    youtubeCallback: {
+        parameters: {
+            query: {
+                state: string;
+                code?: string;
+                error?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Back to the web app. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

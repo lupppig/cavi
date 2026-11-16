@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -45,6 +46,37 @@ type Config struct {
 	// Storage is S3-compatible object storage for media (R2 in production,
 	// SeaweedFS locally). Empty Endpoint disables media (development only).
 	Storage Storage
+
+	// YouTube connects channels for analytics (optional).
+	YouTube YouTube
+}
+
+// YouTube is the Google OAuth client channels are connected with, and the
+// key their tokens are encrypted with at rest. All empty disables it.
+type YouTube struct {
+	ClientID     string
+	ClientSecret string
+	// TokenKey is 32 bytes (CAVI_TOKEN_KEY, base64).
+	TokenKey []byte
+}
+
+// Enabled reports whether channels can be connected.
+func (y YouTube) Enabled() bool { return y.ClientID != "" }
+
+func loadYouTube(getenv func(string) string) (YouTube, error) {
+	y := YouTube{ClientID: getenv("YOUTUBE_CLIENT_ID"), ClientSecret: getenv("YOUTUBE_CLIENT_SECRET")}
+	if y.ClientID == "" && y.ClientSecret == "" {
+		return y, nil
+	}
+	if y.ClientID == "" || y.ClientSecret == "" {
+		return y, errors.New("YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET must both be set")
+	}
+	key, err := base64.StdEncoding.DecodeString(getenv("CAVI_TOKEN_KEY"))
+	if err != nil || len(key) != 32 {
+		return y, errors.New("CAVI_TOKEN_KEY must be 32 bytes, base64-encoded, to connect YouTube (openssl rand -base64 32)")
+	}
+	y.TokenKey = key
+	return y, nil
 }
 
 // Storage configures object storage.
@@ -101,6 +133,12 @@ func Load(getenv func(string) string) (Config, error) {
 	if cfg.DatabaseURL == "" {
 		errs = append(errs, errors.New("CAVI_DATABASE_URL is required"))
 	}
+
+	yt, err := loadYouTube(getenv)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	cfg.YouTube = yt
 
 	if raw := getenv("CAVI_SHUTDOWN_TIMEOUT"); raw != "" {
 		d, err := time.ParseDuration(raw)
@@ -173,6 +211,8 @@ type Worker struct {
 	GeminiAPIKey string
 	// ElevenLabsAPIKey enables ElevenLabs voices for voiceovers.
 	ElevenLabsAPIKey string
+	// YouTube syncs connected channels' analytics (optional).
+	YouTube YouTube
 }
 
 // LoadWorker reads worker configuration. Storage and NATS are required in
@@ -204,6 +244,11 @@ func LoadWorker(getenv func(string) string) (Worker, error) {
 	} else {
 		errs = append(errs, validateStorage(Config{Env: w.Env, Storage: w.Storage})...)
 	}
+	yt, err := loadYouTube(getenv)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	w.YouTube = yt
 	if raw := getenv("CAVI_WORKER_CONCURRENCY"); raw != "" {
 		n, err := strconv.Atoi(raw)
 		if err != nil || n < 1 || n > 64 {

@@ -72,6 +72,9 @@ services:
       # From apps/api/.env via make media-worker; empty disables transcription.
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      YOUTUBE_CLIENT_ID: ${YOUTUBE_CLIENT_ID:-}
+      YOUTUBE_CLIENT_SECRET: ${YOUTUBE_CLIENT_SECRET:-}
+      CAVI_TOKEN_KEY: ${CAVI_TOKEN_KEY:-}
     depends_on:
       postgres: { condition: service_healthy }
       storage: { condition: service_healthy }

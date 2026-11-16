@@ -30,6 +30,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/render"
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 	"github.com/lupppig/cavi/apps/api/internal/voiceover"
+	"github.com/lupppig/cavi/apps/api/internal/youtube"
 )
 
 func main() {
@@ -89,6 +90,12 @@ func run() error {
 		jobs.NewWorker(db, bus, jobs.KindMediaImport,
 			media.NewImporter(db, store, media.YTDLP{Bin: "yt-dlp"}, logger), logger,
 			jobs.WorkerOptions{Concurrency: 2, Lease: 75 * time.Minute}),
+	}
+	if cfg.YouTube.Enabled() {
+		// Reading a channel's numbers is a handful of API calls.
+		workers = append(workers, jobs.NewWorker(db, bus, jobs.KindYouTubeSync,
+			youtube.NewSyncer(db, youtube.NewClient(cfg.YouTube.ClientID, cfg.YouTube.ClientSecret, ""), cfg.YouTube.TokenKey, logger), logger,
+			jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute}))
 	}
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		logger.Warn("imports from links disabled: yt-dlp isn't installed; imports will fail (it is in the media worker image)")

@@ -28,6 +28,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/storage"
 	"github.com/lupppig/cavi/apps/api/internal/voiceover"
 	"github.com/lupppig/cavi/apps/api/internal/waitlist"
+	"github.com/lupppig/cavi/apps/api/internal/youtube"
 )
 
 func main() {
@@ -80,6 +81,7 @@ func run() error {
 	var briefService httpapi.BriefService
 	var voiceoverService httpapi.VoiceoverService
 	var planService httpapi.PlanService
+	var relayWake func()
 	if cfg.StorageEnabled() {
 		st := cfg.Storage
 		store := storage.NewS3(storage.S3Config{
@@ -107,12 +109,25 @@ func run() error {
 			briefs.OnJobQueued(relay.Wake)
 			voiceovers.OnJobQueued(relay.Wake)
 			plans.OnJobQueued(relay.Wake)
+			relayWake = relay.Wake
 			go relay.Run(ctx)
 		} else {
 			logger.Warn("job delivery disabled: CAVI_NATS_URL is not set; media and renders will wait in the queue")
 		}
 	} else {
 		logger.Warn("media disabled: CAVI_STORAGE_ENDPOINT is not set")
+	}
+
+	var youtubeService httpapi.YouTubeService
+	if cfg.YouTube.Enabled() {
+		yt := youtube.NewService(db, youtube.NewClient(cfg.YouTube.ClientID, cfg.YouTube.ClientSecret,
+			cfg.PublicAPIURL+"/api/v1/youtube/callback"), cfg.YouTube.TokenKey, logger)
+		if relayWake != nil {
+			yt.OnJobQueued(relayWake)
+		}
+		youtubeService = yt
+	} else {
+		logger.Info("YouTube disabled: YOUTUBE_CLIENT_ID is not set")
 	}
 
 	router, err := httpapi.NewRouter(httpapi.Options{
@@ -128,6 +143,8 @@ func run() error {
 		Voiceovers:     voiceoverService,
 		Plans:          planService,
 		AISettings:     ai.NewSettingsService(db),
+		YouTube:        youtubeService,
+		WebURL:         cfg.WebURL,
 		AllowedOrigins: cfg.AllowedOrigins,
 		TrustedProxies: cfg.TrustedProxies,
 		Debug:          cfg.Env == config.EnvDevelopment,

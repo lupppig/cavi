@@ -13,18 +13,22 @@ import (
 
 // Options are the dependencies needed to build the HTTP router.
 type Options struct {
-	Logger         *slog.Logger
-	DB             Pinger
-	Waitlist       WaitlistService
-	Auth           *AuthOptions
-	Organisations  OrganisationService
-	Projects       ProjectService
-	Media          MediaService
-	Renders        RenderService
-	Briefs         BriefService
-	Voiceovers     VoiceoverService
-	Plans          PlanService
-	AISettings     AISettingsService
+	Logger        *slog.Logger
+	DB            Pinger
+	Waitlist      WaitlistService
+	Auth          *AuthOptions
+	Organisations OrganisationService
+	Projects      ProjectService
+	Media         MediaService
+	Renders       RenderService
+	Briefs        BriefService
+	Voiceovers    VoiceoverService
+	Plans         PlanService
+	AISettings    AISettingsService
+	// YouTube connects channels; nil when not configured.
+	YouTube YouTubeService
+	// WebURL is the frontend, where people return after connecting YouTube.
+	WebURL         string
 	AllowedOrigins []string
 	// TrustedProxies lists proxy IPs or CIDRs whose X-Forwarded-For header
 	// is trusted when determining the client IP. Empty trusts none.
@@ -168,6 +172,15 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	rend.DELETE("/:renderID", renders.delete)
 	// The camera path is computed by the render service.
 	med.GET("/:assetID/framing/path", requireService(opts.Renders != nil), renders.framingPath)
+
+	yt := youtubeHandler{svc: opts.YouTube, webURL: opts.WebURL, orgHandler: orgs}
+	signedIn.GET("/organisations/:orgID/youtube", yt.status)
+	ytGroup := signedIn.Group("/organisations/:orgID/youtube", requireService(opts.YouTube != nil))
+	ytGroup.POST("/connect", yt.connect)
+	ytGroup.DELETE("", yt.disconnect)
+	ytGroup.POST("/sync", yt.sync)
+	ytGroup.GET("/videos", yt.videos)
+	signedIn.GET("/youtube/callback", requireService(opts.YouTube != nil), yt.callback)
 
 	lookGroup := signedIn.Group("/organisations/:orgID/clip-look", requireService(opts.Renders != nil))
 	lookGroup.GET("", renders.look)

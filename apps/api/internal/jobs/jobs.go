@@ -39,6 +39,7 @@ const (
 	KindPlansCreate     = "plans.create"
 	KindMediaFraming    = "media.framing"
 	KindMediaImport     = "media.import"
+	KindYouTubeSync     = "youtube.sync"
 )
 
 // Message is what travels over NATS. It is versioned so workers can

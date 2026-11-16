@@ -1813,6 +1813,183 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/youtube:
+    get:
+      operationId: getYouTubeConnection
+      summary: The connected YouTube channel
+      description: |
+        Anyone in the organisation can read it. `available` is false when
+        this server can't connect channels; `connected` is false when none
+        is connected.
+      tags: [youtube]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: The connection.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YouTubeConnection"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      operationId: disconnectYouTube
+      summary: Disconnect the channel
+      description: Requires `organisation.manage`. Removes the channel and its synced numbers and asks Google to revoke access.
+      tags: [youtube]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "204":
+          description: Disconnected.
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/youtube/connect:
+    post:
+      operationId: connectYouTube
+      summary: Start connecting a channel
+      description: |
+        Requires `organisation.manage`. Returns Google's consent page;
+        send the browser there. CAVI asks for read-only access to the
+        channel and its analytics. Google sends the browser back to
+        `/api/v1/youtube/callback`, which returns it to the organisation's
+        page with `?youtube=connected` or `?youtube=failed`, and queues
+        the first sync.
+      tags: [youtube]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: Where to send the browser.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url: { type: string }
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/youtube/sync:
+    post:
+      operationId: syncYouTube
+      summary: Read the channel's numbers again
+      description: Requires `editing.manage`. Queues a sync; `sync_in_progress` (409) if one is queued or running.
+      tags: [youtube]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "202":
+          description: Sync queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/YouTubeConnection"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/youtube/videos:
+    get:
+      operationId: listYouTubeVideos
+      summary: The channel's uploads and their numbers
+      description: |
+        As of the last sync, newest first (the newest 200 uploads). Each is
+        matched to the CAVI clip it came from where the title and length
+        say so. YouTube's numbers lag by a day or two.
+      tags: [youtube]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+      responses:
+        "200":
+          description: The uploads.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/YouTubeVideo" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/youtube/callback:
+    get:
+      operationId: youtubeCallback
+      summary: Google's return from connecting a channel
+      description: |
+        Browser navigation from Google's consent page (the OAuth redirect
+        URI). Finishes connecting a request the signed-in person started in
+        the last 10 minutes and redirects to the organisation's page.
+      tags: [youtube]
+      security:
+        - sessionCookie: []
+      parameters:
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: code, in: query, required: false, schema: { type: string } }
+        - { name: error, in: query, required: false, schema: { type: string } }
+      responses:
+        "302":
+          description: Back to the web app.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/ai-models:
     get:
       operationId: listAIModelSettings
@@ -2872,6 +3049,47 @@ components:
       properties:
         text: { type: string, minLength: 1, maxLength: 120 }
         end_ms: { type: integer, format: int64, minimum: 500 }
+
+    YouTubeConnection:
+      type: object
+      required: [available, connected, channel_id, channel_title, connected_at, connected_by, sync_status, sync_error, synced_at, videos]
+      properties:
+        available: { type: boolean }
+        connected: { type: boolean }
+        channel_id: { type: [string, "null"] }
+        channel_title: { type: [string, "null"] }
+        connected_at: { type: [string, "null"], format: date-time }
+        connected_by: { type: [string, "null"] }
+        sync_status: { type: [string, "null"], enum: [idle, queued, running, failed, null] }
+        sync_error: { type: [string, "null"], description: Why the last sync stopped, for the user. }
+        synced_at: { type: [string, "null"], format: date-time }
+        videos: { type: integer }
+
+    YouTubeVideo:
+      type: object
+      required: [video_id, title, published_at, duration_ms, views, watch_minutes, avg_view_seconds, avg_view_percentage, subscribers_gained, likes, shares, clip]
+      properties:
+        video_id: { type: string }
+        title: { type: string }
+        published_at: { type: [string, "null"], format: date-time }
+        duration_ms: { type: integer, format: int64 }
+        views: { type: integer, format: int64 }
+        watch_minutes: { type: number }
+        avg_view_seconds: { type: number }
+        avg_view_percentage: { type: number, description: Average share of the video watched (0-100; can exceed 100 with replays). }
+        subscribers_gained: { type: integer, format: int64 }
+        likes: { type: integer, format: int64 }
+        shares: { type: integer, format: int64 }
+        clip:
+          description: The CAVI clip it was made from, when matched.
+          oneOf:
+            - type: object
+              required: [render_id, project_id, name]
+              properties:
+                render_id: { type: string, format: uuid }
+                project_id: { type: string, format: uuid }
+                name: { type: string }
+            - type: "null"
 
     ClipLook:
       type: object
