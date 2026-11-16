@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -22,6 +23,7 @@ import (
 	"github.com/lupppig/cavi/apps/api/internal/brief"
 	"github.com/lupppig/cavi/apps/api/internal/jobs"
 	"github.com/lupppig/cavi/apps/api/internal/project"
+	"github.com/lupppig/cavi/apps/api/internal/youtube"
 )
 
 // Statuses.
@@ -94,7 +96,7 @@ type Run struct {
 	Objective     string
 	MinMS, MaxMS  int64
 	// Series: the plans are the parts of one series.
-	Series bool
+	Series        bool
 	MediaAssetIDs []string
 	UsedBrief     bool
 	Error         string
@@ -389,6 +391,9 @@ func (p *Planner) Process(ctx context.Context, job jobs.Job) error {
 		return jobs.Permanent(fmt.Errorf("%w: model %s/%s is no longer supported", ai.ErrPermanent, provider, modelID))
 	}
 	brf := ai.PlanBrief{Objective: objective, MinMS: minMS, MaxMS: maxMS, Series: series}
+	if brf.Channel, err = channelResults(ctx, p.db, job.OrganisationID); err != nil {
+		return err
+	}
 	if len(campaign) > 0 {
 		var snap snapshot
 		if err := json.Unmarshal(campaign, &snap); err != nil {
@@ -508,4 +513,35 @@ func (p *Planner) Failed(ctx context.Context, job jobs.Job, err error) error {
 		UPDATE plan_runs SET status = 'failed', error = ?, updated_at = now()
 		WHERE id = ? AND organisation_id = ? AND status IN ('queued', 'running')`, msg, job.SubjectID, job.OrganisationID)
 	return dbErr
+}
+
+// Channel results the planner learns from: uploads with at least
+// minViews views, the best held first, at most maxChannelVideos.
+const (
+	minViews         = 50
+	maxChannelVideos = 12
+)
+
+// channelResults is how the organisation's connected channel's uploads
+// did, for the planner; nil without a channel or enough views.
+func channelResults(ctx context.Context, db bun.IDB, orgID string) ([]ai.ChannelVideo, error) {
+	stats, err := youtube.Stats(ctx, db, orgID)
+	if err != nil {
+		return nil, err
+	}
+	var out []ai.ChannelVideo
+	for _, v := range stats {
+		if v.Views >= minViews {
+			out = append(out, ai.ChannelVideo{Title: v.Title, DurationMS: v.DurationMS, Views: v.Views,
+				AvgViewPercentage: v.AvgViewPercentage, SubscribersGained: v.SubscribersGained})
+		}
+	}
+	if len(out) < ai.MinChannelVideos {
+		return nil, nil
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].AvgViewPercentage > out[j].AvgViewPercentage })
+	if len(out) > maxChannelVideos {
+		out = out[:maxChannelVideos]
+	}
+	return out, nil
 }

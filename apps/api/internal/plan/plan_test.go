@@ -290,3 +290,40 @@ func TestSeriesPlans(t *testing.T) {
 		t.Fatalf("series = %+v", got)
 	}
 }
+
+func TestPlansLearnFromTheChannel(t *testing.T) {
+	w := newWorld(t)
+	ana := w.user("Ana")
+	org := w.team(ana, nil)
+	proj := w.project(ana, org)
+	w.transcribed(org, proj, "talk.mp4", 20)
+	add := func(id, title string, views int64, pct float64) {
+		if _, err := w.db.ExecContext(w.ctx, `
+			INSERT INTO youtube_videos (organisation_id, video_id, title, duration_ms, views, avg_view_percentage) VALUES (?, ?, ?, 30000, ?, ?)`,
+			org, id, title, views, pct); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run := func() ai.PlanBrief {
+		r, err := w.svc.Request(w.ctx, ana.id, org, proj, Request{MinSeconds: 15, MaxSeconds: 45})
+		if err != nil {
+			t.Fatal(err)
+		}
+		fp := &fakePlanner{plans: []ai.Plan{{Title: "T", Hook: "h", Reason: "r", Segments: []ai.PlanSegment{{File: 0, FirstSegment: 0, LastSegment: 1}}}}}
+		if err := w.planner(fp).Process(w.ctx, w.job(r.ID)); err != nil {
+			t.Fatal(err)
+		}
+		return fp.calls[0]
+	}
+	add("v1", "Held them", 1000, 61)
+	add("v2", "Lost them", 900, 12)
+	add("v3", "Too few views", 10, 99)
+	if b := run(); b.Channel != nil {
+		t.Fatalf("two usable videos still sent: %+v", b.Channel)
+	}
+	add("v4", "Middling", 300, 35)
+	b := run()
+	if len(b.Channel) != 3 || b.Channel[0].Title != "Held them" || b.Channel[2].Title != "Lost them" {
+		t.Fatalf("channel = %+v", b.Channel)
+	}
+}

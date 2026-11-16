@@ -610,6 +610,9 @@ func (g *Gemini) Plans(ctx context.Context, model Model, files []PlanFile, brief
 	if brief.Series {
 		prompt = strings.Replace(prompt, "\nTranscripts:\n", fmt.Sprintf(seriesSection, MaxSeriesParts)+"\nTranscripts:\n", 1)
 	}
+	if ch := channelSection(brief.Channel); ch != "" {
+		prompt = strings.Replace(prompt, "\nTranscripts:\n", ch+"\nTranscripts:\n", 1)
+	}
 	text, usage, err := g.generate(ctx, model, []*genai.Part{genai.NewPartFromText(prompt)}, plansSchema, 0.4)
 	if err != nil {
 		return nil, usage, err
