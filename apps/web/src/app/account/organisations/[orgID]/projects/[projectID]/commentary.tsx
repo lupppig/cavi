@@ -1,9 +1,10 @@
 "use client";
 
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Banner } from "@/components/account/account-header";
 import { client, raise, useAIModelSettings, type Project, type Voiceover, type VoiceStyle } from "@/lib/queries";
+import { sendFile } from "@/lib/upload";
 import { stampTenths } from "./clips";
 import { busy, useVoices } from "./voiceover-picker";
 
@@ -140,7 +141,8 @@ export function CommentaryEditor({
       </legend>
       <p className="text-xs font-semibold text-muted">
         Short lines in your own words: set up the moment, explain, give your take, end with a takeaway. The clip’s sound dips while each
-        plays. Commentary is what makes a clip of someone else’s video your own work.
+        plays. Commentary is what makes a clip of someone else’s video your own work, and recording it in your own voice is the strongest
+        sign of that.
       </p>
       {voiceAll.isError && <Banner>{voiceAll.error.message}</Banner>}
       <ol className="space-y-2">
@@ -177,6 +179,14 @@ export function CommentaryEditor({
                 aria-label={`Commentary line ${i + 1}`}
                 className="block w-full border border-line bg-white px-3 py-2 text-base font-medium"
               />
+              {canMake && (
+                <RecordButton
+                  project={project}
+                  text={l.text}
+                  busy={voiceAll.isPending}
+                  onRecorded={(rv) => set(l.key, { voiceoverID: rv.id, spokenText: l.text.trim() })}
+                />
+              )}
               <p className="text-xs font-semibold text-muted" role="status">
                 {!l.voiceoverID
                   ? "Not voiced yet"
@@ -185,7 +195,7 @@ export function CommentaryEditor({
                     : !v || busy(v)
                       ? "Speaking…"
                       : v.status === "ready"
-                        ? `Voiced · ${stampTenths(v.duration_ms ?? 0)}`
+                        ? `${v.provider === "recording" ? "Your voice" : "Voiced"} · ${stampTenths(v.duration_ms ?? 0)}`
                         : (v.error ?? "Couldn’t be spoken")}
               </p>
             </li>
@@ -251,6 +261,7 @@ export function OriginalityCheck({
   captions,
   hook,
   tightened,
+  ownVoice = 0,
 }: {
   totalMS: number;
   narratedMS: number;
@@ -258,6 +269,8 @@ export function OriginalityCheck({
   captions: boolean;
   hook: boolean;
   tightened: boolean;
+  /** Lines recorded in the creator's own voice. */
+  ownVoice?: number;
 }) {
   const share = totalMS > 0 ? Math.min(1, narratedMS / totalMS) : 0;
   const checks = [
@@ -266,6 +279,13 @@ export function OriginalityCheck({
     { ok: captions, label: captions ? "Captions" : "Add captions" },
     { ok: hook, label: hook ? "An opening hook" : "Add a hook" },
     { ok: tightened, label: tightened ? "Pauses cut" : "Cut the pauses" },
+    {
+      ok: lines > 0 && ownVoice >= lines,
+      label:
+        lines > 0 && ownVoice >= lines
+          ? "In your own voice"
+          : "Record the lines in your own voice (stronger than an AI voice)",
+    },
   ];
   const strong = checks[0].ok && checks[1].ok;
   const passed = checks.filter((c) => c.ok).length;
@@ -285,5 +305,126 @@ export function OriginalityCheck({
         A guide to YouTube’s reused-content rules, not a promise: YouTube decides, and looks at your whole channel.
       </p>
     </section>
+  );
+}
+
+/** The longest take: the API refuses recordings over a minute. */
+const MAX_TAKE_MS = 60_000;
+
+/** The best format this browser records audio in. */
+function recordingType() {
+  for (const t of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"]) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return "";
+}
+
+/** Uploads a take as a voiceover of text in the creator's own voice. */
+async function uploadTake(project: Project, text: string, take: Blob): Promise<Voiceover> {
+  const path = { orgID: project.organisation_id, projectID: project.id };
+  const { data, error, response } = await client().POST("/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/recordings", {
+    params: { path },
+    body: { script: text, content_type: take.type || "audio/webm", size_bytes: take.size },
+  });
+  if (!data) raise(error, response.status, "Could not upload the recording.");
+  await sendFile(data.upload, take, () => {}, new AbortController().signal);
+  const done = await client().POST("/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}/complete", {
+    params: { path: { ...path, voiceoverID: data.voiceover.id } },
+  });
+  if (!done.data) raise(done.error, done.response.status, "Could not finish uploading the recording.");
+  return done.data;
+}
+
+/**
+ * Records one commentary line with the microphone, in the creator's own
+ * voice: start, read the line, stop. The take is uploaded and becomes the
+ * line's voiceover once processed (silence trimmed, words timed).
+ */
+export function RecordButton({
+  project,
+  text,
+  busy: disabled,
+  onRecorded,
+}: {
+  project: Project;
+  text: string;
+  busy?: boolean;
+  onRecorded: (v: Voiceover) => void;
+}) {
+  const [state, setState] = useState<"idle" | "recording" | "uploading">("idle");
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const rec = useRef<MediaRecorder | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timer.current) clearInterval(timer.current);
+      rec.current?.stream.getTracks().forEach((t) => t.stop());
+    },
+    [],
+  );
+
+  async function start() {
+    setError(null);
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError("This browser can’t record audio. Try Chrome, Edge, Firefox or Safari.");
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    } catch {
+      setError("Allow the microphone to record. Check your browser’s site permissions.");
+      return;
+    }
+    const type = recordingType();
+    const r = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+    const chunks: Blob[] = [];
+    r.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+    r.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      if (timer.current) clearInterval(timer.current);
+      setState("uploading");
+      try {
+        const v = await uploadTake(project, text.trim(), new Blob(chunks, { type: r.mimeType || type || "audio/webm" }));
+        onRecorded(v);
+        setState("idle");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not upload the recording.");
+        setState("idle");
+      }
+    };
+    rec.current = r;
+    r.start();
+    const began = Date.now();
+    setElapsed(0);
+    setState("recording");
+    timer.current = setInterval(() => {
+      const ms = Date.now() - began;
+      setElapsed(ms);
+      if (ms >= MAX_TAKE_MS && r.state === "recording") r.stop();
+    }, 200);
+  }
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {state === "recording" ? (
+        <button type="button" onClick={() => rec.current?.stop()} className="btn btn-primary min-h-11 px-3 text-sm" aria-live="polite">
+          <span aria-hidden="true" className="mr-1.5 inline-block size-2 animate-pulse rounded-full bg-surface" />
+          Stop · {stampTenths(elapsed)}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={start}
+          disabled={disabled || state === "uploading" || !text.trim()}
+          className="btn btn-secondary min-h-11 px-3 text-sm disabled:opacity-60"
+        >
+          {state === "uploading" ? "Uploading…" : "● Record in your voice"}
+        </button>
+      )}
+      {error && <span className="text-xs font-semibold text-ink">{error}</span>}
+    </span>
   );
 }

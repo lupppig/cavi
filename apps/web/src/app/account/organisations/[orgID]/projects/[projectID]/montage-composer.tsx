@@ -407,6 +407,7 @@ function Composer({
         captions={!!captions}
         hook={!!hook.trim()}
         tightened={tighten}
+        ownVoice={voicedLines.filter((v, i) => v?.status === "ready" && v.provider === "recording" && lines[i]?.spokenText === lines[i]?.text.trim()).length}
       />
 
       <VoiceoverPicker
