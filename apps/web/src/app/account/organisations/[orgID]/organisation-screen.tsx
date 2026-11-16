@@ -25,6 +25,7 @@ import {
   type Role,
 } from "@/lib/queries";
 import { AIModels } from "./ai-models-section";
+import { Channel } from "./channel-section";
 import { Projects } from "./projects-section";
 
 const field = "field";
@@ -70,6 +71,7 @@ function OrganisationView({ org }: { org: Organisation }) {
   const tabs = orgTabs.filter(
     (t) =>
       t.tab === "projects" ||
+      t.tab === "channel" ||
       (t.tab === "people" && can(org, "organisation.members.read")) ||
       (t.tab === "settings" && can(org, "organisation.manage")),
   );
@@ -114,6 +116,7 @@ function OrganisationView({ org }: { org: Organisation }) {
           <Projects org={org} />
         </>
       )}
+      {tab === "channel" && <Channel org={org} />}
       {tab === "people" && (
         <>
           <Members org={org} />

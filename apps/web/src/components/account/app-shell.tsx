@@ -10,6 +10,7 @@ import { client, displayName, initials, raise, useMe, type Me } from "@/lib/quer
 /** Organisation sections, shown under the current organisation. */
 export const orgTabs = [
   { tab: "projects", label: "Projects" },
+  { tab: "channel", label: "Channel" },
   { tab: "people", label: "People" },
   { tab: "settings", label: "Settings" },
 ] as const;
