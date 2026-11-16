@@ -59,6 +59,8 @@ type assetResponse struct {
 	// why importing stopped.
 	SourceURL   *string `json:"source_url"`
 	ImportError *string `json:"import_error"`
+	// PausesFound: clips from the file can cut its pauses.
+	PausesFound bool `json:"pauses_found"`
 }
 
 type processingResponse struct {
@@ -127,6 +129,7 @@ func toAssetResponse(a media.Asset) assetResponse {
 	}
 	r.ThumbnailURL = ptr(a.ThumbnailURL)
 	r.SourceURL, r.ImportError = ptr(a.SourceURL), ptr(a.ImportError)
+	r.PausesFound = a.PausesFound
 	r.Processing = processingResponse{Status: a.ProcessingStatus, Error: ptr(a.ProcessingError)}
 	if a.FramingStatus != "" {
 		r.Framing = &processingResponse{Status: a.FramingStatus, Error: ptr(a.FramingError)}

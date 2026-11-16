@@ -116,6 +116,9 @@ type Asset struct {
 	// why importing it stopped.
 	SourceURL   string
 	ImportError string
+	// PausesFound says the pauses in its sound have been found, so clips
+	// from it can cut them.
+	PausesFound bool
 
 	thumbnailKey string
 }
@@ -256,7 +259,8 @@ const assetColumns = `
 	m.processing_status, coalesce(m.processing_error, ''), coalesce(m.container, ''), coalesce(m.duration_ms, 0),
 	coalesce(m.width, 0), coalesce(m.height, 0), coalesce(m.frame_rate, 0)::float8, coalesce(m.video_codec, ''),
 	coalesce(m.audio_codec, ''), coalesce(m.audio_channels, 0), coalesce(m.sample_rate, 0), coalesce(m.thumbnail_key, ''),
-	coalesce(m.framing_status, ''), coalesce(m.framing_error, ''), coalesce(m.source_url, ''), coalesce(m.import_error, '')`
+	coalesce(m.framing_status, ''), coalesce(m.framing_error, ''), coalesce(m.source_url, ''), coalesce(m.import_error, ''),
+	m.pauses IS NOT NULL`
 
 const assetFrom = `
 	FROM media_assets m LEFT JOIN users u ON u.id = m.uploaded_by_user_id`
@@ -271,7 +275,7 @@ func scanAsset(row scanner) (Asset, string, error) {
 		&a.ProcessingStatus, &a.ProcessingError, &a.Container, &a.DurationMS,
 		&a.Width, &a.Height, &a.FrameRate, &a.VideoCodec,
 		&a.AudioCodec, &a.AudioChannels, &a.SampleRate, &a.thumbnailKey,
-		&a.FramingStatus, &a.FramingError, &a.SourceURL, &a.ImportError)
+		&a.FramingStatus, &a.FramingError, &a.SourceURL, &a.ImportError, &a.PausesFound)
 	return a, key, err
 }
 

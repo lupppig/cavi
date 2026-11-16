@@ -1183,6 +1183,12 @@ export interface components {
             source_url: string | null;
             /** @description Why importing stopped, for the user; null otherwise. */
             import_error: string | null;
+            /**
+             * @description The pauses in the file's sound have been found, so montages from
+             *     it can cut them (`tighten`). False for files processed before
+             *     pause cutting (reprocess them) and files without sound.
+             */
+            pauses_found: boolean;
             uploaded_by: components["schemas"]["UserRef"] | null;
             /** Format: date-time */
             created_at: string;

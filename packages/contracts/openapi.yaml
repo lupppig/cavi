@@ -2192,7 +2192,7 @@ components:
 
     MediaAsset:
       type: object
-      required: [id, project_id, filename, kind, content_type, size_bytes, status, uploaded_by, created_at, uploaded_at, can_delete, url, url_expires_at, thumbnail_url, processing, metadata, framing, source_url, import_error]
+      required: [id, project_id, filename, kind, content_type, size_bytes, status, uploaded_by, created_at, uploaded_at, can_delete, url, url_expires_at, thumbnail_url, processing, metadata, framing, source_url, import_error, pauses_found]
       properties:
         id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
@@ -2215,6 +2215,12 @@ components:
         import_error:
           description: Why importing stopped, for the user; null otherwise.
           type: [string, "null"]
+        pauses_found:
+          type: boolean
+          description: |
+            The pauses in the file's sound have been found, so montages from
+            it can cut them (`tighten`). False for files processed before
+            pause cutting (reprocess them) and files without sound.
         uploaded_by:
           oneOf:
             - $ref: "#/components/schemas/UserRef"
