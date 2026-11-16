@@ -9,6 +9,7 @@ import { useLook, useSaveLook, type SavedLook } from "./look";
 import { framingReady } from "./framing";
 import { useProjectMedia } from "./media-section";
 import { MAX_SIGN_OFF } from "./sign-off-picker";
+import { COMMENTARY_DUCK, speak, waitFor } from "./commentary";
 import { needsPauses, PrepareForPauses } from "./tighten";
 
 /** How long the hook shows in a batch clip. */
@@ -17,7 +18,7 @@ const HOOK_MS = 3000;
 /** Captions when the look has none: word by word in capitals, popping in. */
 const popCaptions: CaptionOptions = { ...defaultCaptionOptions, style: "pop", mode: "words", uppercase: true };
 
-type Outcome = { state: "waiting" | "sending" | "queued" | "failed"; error?: string };
+type Outcome = { state: "waiting" | "voicing" | "sending" | "queued" | "failed"; error?: string };
 
 /**
  * Turns many plans into clips at once, with the settings short-form
@@ -61,6 +62,9 @@ function Batch({
   const [tighten, setTighten] = useState(look?.cut_pauses ?? true);
   const [signOff, setSignOff] = useState(look?.sign_off ?? "Follow for more!");
   const [badge, setBadge] = useState(look?.series_badge ?? true);
+  const lines = plans.reduce((n, p, i) => n + (chosen[i] ? p.commentary.length : 0), 0);
+  const chars = plans.reduce((n, p, i) => n + (chosen[i] ? p.commentary.reduce((m, c) => m + c.text.length, 0) : 0), 0);
+  const [narrate, setNarrate] = useState(true);
   const [outcomes, setOutcomes] = useState<Outcome[]>(() => plans.map(() => ({ state: "waiting" })));
   const count = chosen.filter(Boolean).length;
   const set = (i: number, o: Outcome) => setOutcomes((os) => os.map((x, j) => (j === i ? o : x)));
@@ -69,6 +73,22 @@ function Batch({
     mutationFn: async () => {
       for (const [i, plan] of plans.entries()) {
         if (!chosen[i]) continue;
+        // Voice the plan's commentary first: every line, then wait for them.
+        let commentary: { voiceover_id: string; segment: number; start_ms: number; duck: number }[] = [];
+        if (narrate && plan.commentary.length > 0) {
+          set(i, { state: "voicing" });
+          try {
+            const started = [];
+            for (const c of plan.commentary) started.push({ segment: c.segment, v: await speak(project, c.text, "", "natural") });
+            const done = await Promise.all(started.map(async (s) => ({ segment: s.segment, v: await waitFor(project, s.v.id) })));
+            const failed = done.find((d) => d.v.status !== "ready");
+            if (failed) throw new Error(failed.v.error ?? "A commentary line couldn’t be spoken.");
+            commentary = done.map((d) => ({ voiceover_id: d.v.id, segment: d.segment, start_ms: 0, duck: COMMENTARY_DUCK }));
+          } catch (e) {
+            set(i, { state: "failed", error: e instanceof Error ? e.message : "The commentary couldn’t be spoken." });
+            continue;
+          }
+        }
         set(i, { state: "sending" });
         const segs = plan.segments.map((s) => ({ source_asset_id: s.source_asset_id, start_ms: s.start_ms, end_ms: s.end_ms, focus: 0.5 }));
         const composition: Composition = {
@@ -82,6 +102,7 @@ function Batch({
           ...(follow && canFollow ? { framing: "auto" as const } : {}),
           ...(tighten && unprepared.length === 0 ? { tighten: true } : {}),
           ...(plan.hook ? { hook: { text: plan.hook, end_ms: Math.min(HOOK_MS, plan.duration_ms) } } : {}),
+          ...(commentary.length ? { commentary } : {}),
           ...(series && badge && plan.part ? { badge: `PART ${plan.part}/${plans.length}` } : {}),
           ...(signOffFor(plan) ? { sign_off: { text: signOffFor(plan) } } : {}),
         };
@@ -133,6 +154,18 @@ function Batch({
           <input type="checkbox" checked={captions} onChange={(e) => setCaptions(e.target.checked)} className="size-5 accent-[var(--ink)]" />
           Captions ({captionStyle.style === "pop" ? "pop, word by word" : captionStyle.style}, from the transcripts)
         </label>
+        {lines > 0 && (
+          <label className="flex min-h-11 cursor-pointer items-start gap-2 text-sm font-semibold">
+            <input type="checkbox" checked={narrate} onChange={(e) => setNarrate(e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[var(--ink)]" />
+            <span>
+              Narrate the commentary ({lines} lines, {chars} characters of your voice model)
+              <span className="block text-xs text-muted">
+                Commentary through each clip is what makes it your own work for YouTube’s reused-content review. Keep this page open while
+                the lines are voiced.
+              </span>
+            </span>
+          </label>
+        )}
         <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm font-semibold">
           <input type="checkbox" checked={tighten} onChange={(e) => setTighten(e.target.checked)} className="size-5 accent-[var(--ink)]" />
           Cut pauses
@@ -172,7 +205,7 @@ function Batch({
                   <span className="font-semibold break-words">{p.title}</span>
                   {o.state !== "waiting" && (
                     <span className={`block text-xs font-semibold ${o.state === "failed" ? "text-ink" : "text-muted"}`} role="status">
-                      {o.state === "sending" ? "Starting…" : o.state === "queued" ? "Rendering — see Montages below" : o.error}
+                      {o.state === "voicing" ? "Voicing the commentary…" : o.state === "sending" ? "Starting…" : o.state === "queued" ? "Rendering — see Montages below" : o.error}
                     </span>
                   )}
                 </span>

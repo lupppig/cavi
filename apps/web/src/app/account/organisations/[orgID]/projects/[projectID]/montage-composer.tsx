@@ -6,6 +6,7 @@ import { Banner } from "@/components/account/account-header";
 import { client, raise, type CaptionOptions, type Composition, type MontageSegment, type Project } from "@/lib/queries";
 import { CaptionOptionsPicker, defaultCaptionOptions } from "./caption-options";
 import { shapes, stampTenths } from "./clips";
+import { CommentaryEditor, commentaryProblem, COMMENTARY_DUCK, draftLines, OriginalityCheck, useLineVoiceovers, type CommentaryLine, type LineDraft } from "./commentary";
 import { FramingChoice } from "./framing";
 import { useLook, type SavedLook } from "./look";
 import { needsPauses, PrepareForPauses } from "./tighten";
@@ -32,6 +33,8 @@ export type MontageInitial = {
   hook: string;
   script: string;
   segments: { assetID: string; startMS: number; endMS: number }[];
+  /** Narration lines, anchored to segments (from the plan). */
+  commentary?: CommentaryLine[];
 };
 
 const draftOf = (s: { assetID: string; startMS: number; endMS: number }): SegmentDraft => ({
@@ -121,6 +124,8 @@ function Composer({
   );
   const spokenSignOff = useChosenVoiceover(project, signOff.voiceoverID);
   const [problem, setProblem] = useState<string | null>(null);
+  const [lines, setLines] = useState<LineDraft[]>(() => draftLines(initial?.commentary ?? []));
+  const voicedLines = useLineVoiceovers(project, lines).map((q) => q.data);
 
   // A new montage starts on the first video once the files load.
   const withDefault = (d: SegmentDraft) => (d.assetID || !files[0] ? d : { ...d, assetID: files[0].id });
@@ -181,6 +186,8 @@ function Composer({
       const ms = Math.round(Number(hookSeconds) * 1000);
       if (!Number.isFinite(ms) || ms < 500 || ms > total) return `Show the hook for between 0.5 and ${(total / 1000).toFixed(1)} seconds.`;
     }
+    const lineProblem = commentaryProblem(lines, voicedLines);
+    if (lineProblem) return lineProblem;
     const voProblem = voiceoverProblem(chosenVoiceover, voiceover, total);
     if (voProblem) return voProblem;
     const voEnd = voiceover.id && chosenVoiceover?.duration_ms ? Math.round(Number(voiceover.start) * 1000) + chosenVoiceover.duration_ms : null;
@@ -205,6 +212,9 @@ function Composer({
         focus: first.focus,
         ...(auto ? { framing: "auto" as const } : {}),
         ...(tighten ? { tighten: true } : {}),
+        ...(lines.length
+          ? { commentary: lines.map((l) => ({ voiceover_id: l.voiceoverID!, segment: l.segment, start_ms: 0, duck: COMMENTARY_DUCK })) }
+          : {}),
         segments: segs,
         ...(hook.trim() ? { hook: { text: hook.trim(), end_ms: Math.round(Number(hookSeconds) * 1000) } } : {}),
         ...(voiceover.id
@@ -384,6 +394,20 @@ function Composer({
           </>
         )}
       </fieldset>
+
+      <CommentaryEditor project={project} segments={drafts.length} value={lines} onChange={setLines} canMake={canMakeVoiceover} />
+
+      <OriginalityCheck
+        totalMS={total}
+        narratedMS={
+          voicedLines.reduce((n, v, i) => n + (v?.status === "ready" && lines[i]?.spokenText === lines[i]?.text.trim() ? (v.duration_ms ?? 0) : 0), 0) +
+          (voiceover.id && chosenVoiceover?.duration_ms ? chosenVoiceover.duration_ms : 0)
+        }
+        lines={lines.length}
+        captions={!!captions}
+        hook={!!hook.trim()}
+        tightened={tighten}
+      />
 
       <VoiceoverPicker
         project={project}

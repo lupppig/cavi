@@ -64,6 +64,7 @@ export function PlansSection({ project, canEdit, canRender }: { project: Project
         name: plan.title,
         hook: plan.hook,
         script: plan.voiceover_script,
+        commentary: plan.commentary,
         segments: plan.segments.map((s) => ({ assetID: s.source_asset_id, startMS: s.start_ms, endMS: s.end_ms })),
       },
     });
@@ -188,6 +189,15 @@ function PlanList({
                     <p className="mt-1 text-sm font-medium break-words">
                       <span className="font-semibold">On screen: </span>“{p.hook}”
                     </p>
+                  )}
+                  {p.commentary.length > 0 && (
+                    <ol className="mt-1 space-y-0.5 text-sm font-medium break-words">
+                      {p.commentary.map((c) => (
+                        <li key={c.segment}>
+                          <span className="font-semibold">{c.segment > p.segments.length ? "At the end: " : `Segment ${c.segment}: `}</span>“{c.text}”
+                        </li>
+                      ))}
+                    </ol>
                   )}
                   {p.voiceover_script && (
                     <p className="mt-1 text-sm font-medium break-words">
