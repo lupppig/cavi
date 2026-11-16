@@ -1550,6 +1550,98 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/recordings:
+    post:
+      operationId: createRecording
+      summary: Start a recording in your own voice
+      description: |
+        Requires `editing.manage`. Records `script` (what the person will
+        say, for captions) as `uploading` and returns a signed instruction
+        for the browser to upload the audio (WebM, Ogg, MP4, MP3 or WAV,
+        under 10 MB). Then call `complete`. The media worker decodes it,
+        trims silence at both ends, checks it lasts 0.4 to 60 s and isn't
+        silent, and times its words; it is then a ready voiceover like any
+        other (provider `recording`, model label "Your voice").
+        Recordings never completed are removed after a day.
+      tags: [voiceovers]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [script, content_type, size_bytes]
+              additionalProperties: false
+              properties:
+                script: { type: string, maxLength: 1200 }
+                content_type: { type: string }
+                size_bytes: { type: integer, format: int64, minimum: 1, maximum: 10485760 }
+      responses:
+        "201":
+          description: Recording started.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [voiceover, upload]
+                properties:
+                  voiceover: { $ref: "#/components/schemas/Voiceover" }
+                  upload: { $ref: "#/components/schemas/UploadInstruction" }
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
+  /api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}/complete:
+    post:
+      operationId: completeRecording
+      summary: Finish uploading a recording
+      description: |
+        The person recording calls this after uploading: it checks the
+        audio arrived and queues processing (`upload_incomplete`, 409, if
+        not). Completing a processed recording returns it unchanged.
+      tags: [voiceovers]
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/OrgID"
+        - $ref: "#/components/parameters/ProjectID"
+        - { name: voiceoverID, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "202":
+          description: Processing queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Voiceover"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}:
     get:
       operationId: getVoiceover
@@ -2575,16 +2667,19 @@ components:
       required: [asset, upload]
       properties:
         asset: { $ref: "#/components/schemas/MediaAsset" }
-        upload:
+        upload: { $ref: "#/components/schemas/UploadInstruction" }
+
+    UploadInstruction:
+      type: object
+      description: How the browser sends the file straight to storage.
+      required: [url, method, headers, expires_at]
+      properties:
+        url: { type: string }
+        method: { type: string, enum: [PUT] }
+        headers:
           type: object
-          required: [url, method, headers, expires_at]
-          properties:
-            url: { type: string }
-            method: { type: string, enum: [PUT] }
-            headers:
-              type: object
-              additionalProperties: { type: string }
-            expires_at: { type: string, format: date-time }
+          additionalProperties: { type: string }
+        expires_at: { type: string, format: date-time }
 
     Transcript:
       type: object
@@ -2952,7 +3047,7 @@ components:
         script: { type: string }
         voice: { type: string }
         style: { $ref: "#/components/schemas/VoiceStyle" }
-        status: { type: string, enum: [queued, running, ready, failed] }
+        status: { type: string, enum: [uploading, queued, running, ready, failed], description: "`uploading`: a recording the browser is still sending." }
         provider: { type: string }
         model: { type: string }
         model_label: { type: string }

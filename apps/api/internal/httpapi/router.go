@@ -160,6 +160,8 @@ func NewRouter(opts Options) (*gin.Engine, error) {
 	vog := proj.Group("/:projectID/voiceovers", requireService(opts.Voiceovers != nil))
 	vog.GET("", vo.list)
 	vog.POST("", vo.create)
+	vog.POST("/recordings", vo.createRecording)
+	vog.POST("/:voiceoverID/complete", vo.completeRecording)
 	vog.GET("/:voiceoverID", vo.get)
 	vog.DELETE("/:voiceoverID", vo.delete)
 	signedIn.GET("/voices", voices)

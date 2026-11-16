@@ -489,3 +489,19 @@ func (r *Runner) Loudness(ctx context.Context, in string, fps int, timeout time.
 	}
 	return levels, nil
 }
+
+// Voice decodes a voice recording (a signed URL or a local file CAVI made)
+// to mono 16-bit PCM at rate, with silence trimmed from both ends (quieter
+// than -45 dB, keeping a tenth of a second).
+func (r *Runner) Voice(ctx context.Context, in string, rate int, timeout time.Duration) ([]byte, error) {
+	trim := "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.1"
+	args := append([]string{"-v", "error", "-nostdin"}, input(in)...)
+	args = append(args, "-map", "0:a:0", "-vn",
+		"-af", trim+",areverse,"+trim+",areverse",
+		"-ac", "1", "-ar", strconv.Itoa(rate), "-f", "s16le", "pipe:1")
+	out, err := r.runFor(ctx, timeout, in, r.FFmpeg, args...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}

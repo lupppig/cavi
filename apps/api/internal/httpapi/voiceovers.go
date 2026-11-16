@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"errors"
+	"github.com/lupppig/cavi/apps/api/internal/storage"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +19,8 @@ type VoiceoverService interface {
 	List(ctx context.Context, actorID, orgID, projectID string) ([]voiceover.Voiceover, error)
 	Get(ctx context.Context, actorID, orgID, projectID, id string) (voiceover.Voiceover, error)
 	Delete(ctx context.Context, actorID, orgID, projectID, id string) error
+	CreateRecording(ctx context.Context, actorID, orgID, projectID, script, contentType string, size int64) (voiceover.Voiceover, storage.Upload, error)
+	CompleteRecording(ctx context.Context, actorID, orgID, projectID, id string) (voiceover.Voiceover, error)
 }
 
 type voiceoverHandler struct {
@@ -123,4 +127,46 @@ func voices(c *gin.Context) {
 		out[i] = voiceResponse{Provider: v.Provider, ID: v.ID, Label: v.Label, Styles: ai.StylesFor(v.Provider)}
 	}
 	c.JSON(http.StatusOK, listResponse[voiceResponse]{Data: out})
+}
+
+type createRecordingRequest struct {
+	Script      string `json:"script"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
+type recordingUploadResponse struct {
+	Voiceover voiceoverResponse `json:"voiceover"`
+	Upload    uploadInstruction `json:"upload"`
+}
+
+// createRecording starts a recording in the creator's own voice: the
+// browser then uploads the audio and calls complete.
+func (h voiceoverHandler) createRecording(c *gin.Context) {
+	var req createRecordingRequest
+	if !decodeJSON(c, &req) {
+		return
+	}
+	v, up, err := h.svc.CreateRecording(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), req.Script, req.ContentType, req.SizeBytes)
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusCreated, recordingUploadResponse{Voiceover: toVoiceoverResponse(v),
+		Upload: uploadInstruction{URL: up.URL, Method: up.Method, Headers: up.Headers, ExpiresAt: ts(up.ExpiresAt)}})
+}
+
+func (h voiceoverHandler) completeRecording(c *gin.Context) {
+	v, err := h.svc.CompleteRecording(c.Request.Context(), actor(c), c.Param("orgID"), c.Param("projectID"), c.Param("voiceoverID"))
+	if errors.Is(err, voiceover.ErrNotReceived) {
+		writeError(c, http.StatusConflict, CodeUploadIncomplete, "We haven’t received the recording yet. Try again.")
+		return
+	}
+	if err != nil {
+		h.fail(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusAccepted, toVoiceoverResponse(v))
 }

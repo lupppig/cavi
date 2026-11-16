@@ -810,6 +810,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/recordings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a recording in your own voice
+         * @description Requires `editing.manage`. Records `script` (what the person will
+         *     say, for captions) as `uploading` and returns a signed instruction
+         *     for the browser to upload the audio (WebM, Ogg, MP4, MP3 or WAV,
+         *     under 10 MB). Then call `complete`. The media worker decodes it,
+         *     trims silence at both ends, checks it lasts 0.4 to 60 s and isn't
+         *     silent, and times its words; it is then a ready voiceover like any
+         *     other (provider `recording`, model label "Your voice").
+         *     Recordings never completed are removed after a day.
+         */
+        post: operations["createRecording"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish uploading a recording
+         * @description The person recording calls this after uploading: it checks the
+         *     audio arrived and queues processing (`upload_incomplete`, 409, if
+         *     not). Completing a processed recording returns it unchanged.
+         */
+        post: operations["completeRecording"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}": {
         parameters: {
             query?: never;
@@ -1410,16 +1459,18 @@ export interface components {
         };
         MediaUpload: {
             asset: components["schemas"]["MediaAsset"];
-            upload: {
-                url: string;
-                /** @enum {string} */
-                method: "PUT";
-                headers: {
-                    [key: string]: string;
-                };
-                /** Format: date-time */
-                expires_at: string;
+            upload: components["schemas"]["UploadInstruction"];
+        };
+        /** @description How the browser sends the file straight to storage. */
+        UploadInstruction: {
+            url: string;
+            /** @enum {string} */
+            method: "PUT";
+            headers: {
+                [key: string]: string;
             };
+            /** Format: date-time */
+            expires_at: string;
         };
         Transcript: {
             /** Format: uuid */
@@ -1761,8 +1812,11 @@ export interface components {
             script: string;
             voice: string;
             style: components["schemas"]["VoiceStyle"];
-            /** @enum {string} */
-            status: "queued" | "running" | "ready" | "failed";
+            /**
+             * @description `uploading`: a recording the browser is still sending.
+             * @enum {string}
+             */
+            status: "uploading" | "queued" | "running" | "ready" | "failed";
             provider: string;
             model: string;
             model_label: string;
@@ -3561,6 +3615,78 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    createRecording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    script: string;
+                    content_type: string;
+                    /** Format: int64 */
+                    size_bytes: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Recording started. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        voiceover: components["schemas"]["Voiceover"];
+                        upload: components["schemas"]["UploadInstruction"];
+                    };
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["ValidationFailed"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+        };
+    };
+    completeRecording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgID: components["parameters"]["OrgID"];
+                projectID: components["parameters"]["ProjectID"];
+                voiceoverID: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Processing queued. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Voiceover"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             500: components["responses"]["InternalError"];
             503: components["responses"]["ServiceUnavailable"];
         };

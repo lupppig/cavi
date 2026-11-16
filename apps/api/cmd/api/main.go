@@ -94,7 +94,7 @@ func run() error {
 		voiceovers := voiceover.NewService(db, store)
 		plans := plan.NewService(db)
 		mediaService, renderService, briefService, voiceoverService, planService = svc, renders, briefs, voiceovers, plans
-		go sweepMedia(ctx, logger, svc)
+		go sweepMedia(ctx, logger, svc, voiceovers)
 
 		// Jobs are always recorded; with NATS they are also delivered.
 		if cfg.NATSURL != "" {
@@ -211,7 +211,7 @@ func sweepExpiredSessions(ctx context.Context, logger *slog.Logger, store *sessi
 
 // sweepMedia removes abandoned uploads and deletes queued storage objects
 // every minute until ctx ends.
-func sweepMedia(ctx context.Context, logger *slog.Logger, svc *media.Service) {
+func sweepMedia(ctx context.Context, logger *slog.Logger, svc *media.Service, voiceovers *voiceover.Service) {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -219,6 +219,12 @@ func sweepMedia(ctx context.Context, logger *slog.Logger, svc *media.Service) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Abandoned recordings first: their objects are then deleted below.
+			if n, err := voiceovers.Sweep(ctx); err != nil {
+				logger.Warn("recording sweep failed", slog.String("error", err.Error()))
+			} else if n > 0 {
+				logger.Info("recording sweep", slog.Int64("abandoned_recordings", n))
+			}
 			abandoned, deleted, err := svc.Sweep(ctx)
 			if err != nil {
 				logger.Warn("media sweep failed", slog.String("error", err.Error()))

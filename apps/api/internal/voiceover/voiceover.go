@@ -161,6 +161,8 @@ func (s *Service) scan(ctx context.Context, row interface{ Scan(...any) error },
 	v.ModelLabel = v.Model
 	if m, ok := ai.Lookup(ai.TaskVoiceover, v.Provider, v.Model); ok {
 		v.ModelLabel = m.Label
+	} else if v.Provider == ProviderRecording {
+		v.ModelLabel = "Your voice"
 	}
 	if v.Status == StatusReady && key != "" {
 		url, exp, err := s.store.PresignDownload(ctx, key, downloadURLTTL)
@@ -196,7 +198,8 @@ func (s *Service) List(ctx context.Context, actorID, orgID, projectID string) ([
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT`+columns+` FROM voiceovers v
-		WHERE v.project_id = ? AND v.organisation_id = ? ORDER BY v.created_at DESC, v.id DESC LIMIT ?`, projectID, orgID, maxList)
+		WHERE v.project_id = ? AND v.organisation_id = ? AND v.status <> 'uploading'
+		ORDER BY v.created_at DESC, v.id DESC LIMIT ?`, projectID, orgID, maxList)
 	if err != nil {
 		return nil, fmt.Errorf("list voiceovers: %w", err)
 	}

@@ -136,6 +136,9 @@ func run() error {
 			jobs.NewWorker(db, bus, jobs.KindPlansCreate,
 				plan.NewPlanner(db, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 10 * time.Minute, RetryDelay: providerRetry}),
+			jobs.NewWorker(db, bus, jobs.KindVoiceRecording,
+				voiceover.NewRecorder(db, store, ff, gemini, logger), logger,
+				jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute, RetryDelay: providerRetry}),
 			jobs.NewWorker(db, bus, jobs.KindVoiceoverSpeak,
 				voiceover.NewNarrator(db, store, narrators, gemini, logger), logger,
 				jobs.WorkerOptions{Concurrency: 1, Lease: 5 * time.Minute, RetryDelay: providerRetry}))

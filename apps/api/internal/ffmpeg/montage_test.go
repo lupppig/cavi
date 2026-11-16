@@ -422,3 +422,29 @@ func TestRealKeep(t *testing.T) {
 		}
 	}
 }
+
+// TestRealVoice decodes a browser-style recording (Opus in WebM) with a
+// second of silence either end: the silence is trimmed to about 0.1 s.
+func TestRealVoice(t *testing.T) {
+	r := New()
+	if err := r.Available(); err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "take.webm")
+	gen := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=300:sample_rate=48000:duration=4",
+		"-af", "volume=enable='lt(t,1)+gt(t,3)':volume=0", "-c:a", "libopus", src)
+	if out, err := gen.CombinedOutput(); err != nil {
+		t.Fatalf("generate: %v %s", err, out)
+	}
+	srv := httptest.NewServer(http.FileServer(http.Dir(dir)))
+	defer srv.Close()
+	pcm, err := r.Voice(context.Background(), srv.URL+"/take.webm", 24000, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := time.Duration(len(pcm)/2) * time.Second / 24000
+	if got < 2*time.Second || got > 2500*time.Millisecond {
+		t.Fatalf("trimmed recording is %v, want about 2.2 s", got)
+	}
+}

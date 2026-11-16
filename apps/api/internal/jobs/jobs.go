@@ -40,6 +40,7 @@ const (
 	KindMediaFraming    = "media.framing"
 	KindMediaImport     = "media.import"
 	KindYouTubeSync     = "youtube.sync"
+	KindVoiceRecording  = "voiceover.recording"
 )
 
 // Message is what travels over NATS. It is versioned so workers can
