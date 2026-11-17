@@ -28,7 +28,9 @@ export function useLineVoiceovers(project: Project, lines: LineDraft[]) {
   const qc = useQueryClient();
   return useQueries({
     queries: lines.map((l) => ({
-      queryKey: ["project", project.id, "voiceovers", l.voiceoverID],
+      // Lines not voiced yet get their own (disabled) key, so they don't
+      // count as duplicates of each other.
+      queryKey: l.voiceoverID ? ["project", project.id, "voiceovers", l.voiceoverID] : ["commentary-line", l.key],
       enabled: !!l.voiceoverID,
       queryFn: async (): Promise<Voiceover> => {
         const { data, error, response } = await client().GET("/api/v1/organisations/{orgID}/projects/{projectID}/voiceovers/{voiceoverID}", {

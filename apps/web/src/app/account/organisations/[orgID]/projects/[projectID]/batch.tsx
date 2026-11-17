@@ -10,7 +10,9 @@ import { framingReady } from "./framing";
 import { useProjectMedia } from "./media-section";
 import { MAX_SIGN_OFF } from "./sign-off-picker";
 import { COMMENTARY_DUCK, speak, waitFor } from "./commentary";
+import { useMontages } from "./montages-list";
 import { needsPauses, PrepareForPauses } from "./tighten";
+import { variant } from "./variety";
 
 /** How long the hook shows in a batch clip. */
 const HOOK_MS = 3000;
@@ -65,6 +67,11 @@ function Batch({
   const lines = plans.reduce((n, p, i) => n + (chosen[i] ? p.commentary.length : 0), 0);
   const chars = plans.reduce((n, p, i) => n + (chosen[i] ? p.commentary.reduce((m, c) => m + c.text.length, 0) : 0), 0);
   const [narrate, setNarrate] = useState(true);
+  const [vary, setVary] = useState(true);
+  // Rotations carry on from the clips already made in this project.
+  const made = useMontages(project).montages.length;
+  const look_ = (i: number) =>
+    vary ? variant(i, made, captions ? captionStyle : null, signOff.trim()) : { captions: captions ? captionStyle : null, hookMS: HOOK_MS, signOff: signOff.trim(), describe: "" };
   const [outcomes, setOutcomes] = useState<Outcome[]>(() => plans.map(() => ({ state: "waiting" })));
   const count = chosen.filter(Boolean).length;
   const set = (i: number, o: Outcome) => setOutcomes((os) => os.map((x, j) => (j === i ? o : x)));
@@ -101,14 +108,14 @@ function Batch({
           segments: segs,
           ...(follow && canFollow ? { framing: "auto" as const } : {}),
           ...(tighten && unprepared.length === 0 ? { tighten: true } : {}),
-          ...(plan.hook ? { hook: { text: plan.hook, end_ms: Math.min(HOOK_MS, plan.duration_ms) } } : {}),
+          ...(plan.hook ? { hook: { text: plan.hook, end_ms: Math.min(look_(i).hookMS, plan.duration_ms) } } : {}),
           ...(commentary.length ? { commentary } : {}),
           ...(series && badge && plan.part ? { badge: `PART ${plan.part}/${plans.length}` } : {}),
-          ...(signOffFor(plan) ? { sign_off: { text: signOffFor(plan) } } : {}),
+          ...(signOffFor(plan, i) ? { sign_off: { text: signOffFor(plan, i) } } : {}),
         };
         const { data, error, response } = await client().POST("/api/v1/organisations/{orgID}/projects/{projectID}/renders", {
           params: { path: { orgID: project.organisation_id, projectID: project.id } },
-          body: { name: plan.title.slice(0, 120), composition, ...(captions ? { captions: captionStyle } : {}) },
+          body: { name: plan.title.slice(0, 120), composition, ...(look_(i).captions ? { captions: look_(i).captions! } : {}) },
         });
         if (data) set(i, { state: "queued" });
         else {
@@ -123,9 +130,9 @@ function Batch({
     onSettled: () => qc.invalidateQueries({ queryKey: ["project", project.id, "renders"] }),
   });
   // A series' parts point to the next one; the last signs off as usual.
-  function signOffFor(plan: EditPlan) {
+  function signOffFor(plan: EditPlan, i: number) {
     if (series && plan.part && plan.part < plans.length) return `Follow for Part ${plan.part + 1}`;
-    return signOff.trim();
+    return look_(i).signOff;
   }
   const started = run.isPending || run.isSuccess;
   const queued = outcomes.filter((o) => o.state === "queued").length;
@@ -177,6 +184,16 @@ function Batch({
             PART 1/{plans.length} badge on each part
           </label>
         )}
+        <label className="flex min-h-11 cursor-pointer items-start gap-2 text-sm font-semibold">
+          <input type="checkbox" checked={vary} onChange={(e) => setVary(e.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[var(--ink)]" />
+          <span>
+            Vary the details from clip to clip
+            <span className="block text-xs text-muted">
+              Highlight colour, caption position, hook timing and sign-off wording change within your look, so uploads don’t look
+              mass-produced.
+            </span>
+          </span>
+        </label>
         <label htmlFor={`${id}-signoff`} className="block pt-1 text-xs font-semibold">
           Sign-off card <span className="text-muted">· empty for none{series ? "; earlier parts say “Follow for Part 2” and so on" : ""}</span>
         </label>
@@ -203,6 +220,9 @@ function Batch({
                 />
                 <span className="min-w-0">
                   <span className="font-semibold break-words">{p.title}</span>
+                  {vary && chosen[i] && o.state === "waiting" && look_(i).describe && (
+                    <span className="block text-xs font-semibold text-muted">{look_(i).describe}</span>
+                  )}
                   {o.state !== "waiting" && (
                     <span className={`block text-xs font-semibold ${o.state === "failed" ? "text-ink" : "text-muted"}`} role="status">
                       {o.state === "voicing" ? "Voicing the commentary…" : o.state === "sending" ? "Starting…" : o.state === "queued" ? "Rendering — see Montages below" : o.error}
